@@ -28,7 +28,7 @@ from . import addon, gpu, store
 from .panels import imread
 from .textless import _save
 
-DOWNLOAD = addon.Download(store.DATA_ROOT / "addons" / "boxes", {
+DOWNLOAD = addon.Download(store.ADDONS_DIR / "boxes", {
     "model.onnx": ("deepghs/anime_censor_detection", "0cf62fd6b28213b40ae0c0055f92e7ae6a96bdc2",
                    "censor_detect_v1.0_s/model.onnx", 44586353,
                    "2c2524824d7d320c5619a0a73702a2e2186f619067c823d211e94f7cfe489cba"),

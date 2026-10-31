@@ -29,7 +29,7 @@ import onnxruntime as ort
 
 from . import gpu, panels, store
 
-ADDON_DIR = store.DATA_ROOT / "addons" / "charscan"
+ADDON_DIR = store.ADDONS_DIR / "charscan"
 STATE_FILE = ADDON_DIR / "installed.json"
 URL = "https://huggingface.co/{repo}/resolve/{rev}/{path}"
 # local name: (repository, pinned revision, file, bytes, sha256)

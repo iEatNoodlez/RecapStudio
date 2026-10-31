@@ -1,7 +1,9 @@
 ; Recap Studio's installer (Inno Setup 6), compiled by packaging\build.ps1 from dist\Recap Studio:
 ;   ISCC /DAppVersion=1.0.0 "/DAppDir=<dist\Recap Studio>" "/DOutputDir=<dist>" packaging\installer.iss
-; It installs for the current user, with no admin rights, into %LOCALAPPDATA%\Programs\Recap Studio, where the app
-; can keep its data and models folders next to itself as the portable copy does.
+; It installs into Program Files for everyone (admin rights), or, if you choose "for me only" at the start, into
+; %LOCALAPPDATA%\Programs without them. The app never writes to its own folder: settings go in %APPDATA%,
+; models and add-ons in %LOCALAPPDATA%, projects in Documents\Recap Studio (recap\paths.py), so updates and
+; uninstalling never touch them. An update keeps the way it was installed (UsePreviousPrivileges).
 
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
@@ -22,9 +24,10 @@ AppPublisher=Recap Studio
 AppPublisherURL=https://github.com/iEatNoodlez/RecapStudio
 AppSupportURL=https://github.com/iEatNoodlez/RecapStudio/issues
 AppUpdatesURL=https://github.com/iEatNoodlez/RecapStudio/releases
-DefaultDirName={localappdata}\Programs\Recap Studio
+DefaultDirName={autopf}\Recap Studio
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
@@ -41,8 +44,7 @@ SolidCompression=yes
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [InstallDelete]
-; a clean copy of the program on every install (an update drops files a newer version no longer has); the data
-; and models folders are never touched
+; a clean copy of the program on every install (an update drops files a newer version no longer has)
 Type: filesandordirs; Name: "{app}\python"
 Type: filesandordirs; Name: "{app}\recap"
 Type: filesandordirs; Name: "{app}\.claude\skills\recap-studio-narration"
@@ -55,16 +57,16 @@ Name: "{autoprograms}\Recap Studio"; Filename: "{app}\Recap Studio.exe"
 Name: "{autodesktop}\Recap Studio"; Filename: "{app}\Recap Studio.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Recap Studio.exe"; Description: "{cm:LaunchProgram,Recap Studio}"; Flags: nowait postinstall skipifsilent
+; (as you, not as administrator, even after an install for everyone)
+Filename: "{app}\Recap Studio.exe"; Description: "{cm:LaunchProgram,Recap Studio}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 ; an update from inside the app runs this setup with /SILENT /update=1: start the app again afterwards
-Filename: "{app}\Recap Studio.exe"; Flags: nowait; Check: IsUpdate
+Filename: "{app}\Recap Studio.exe"; Flags: nowait runasoriginaluser; Check: IsUpdate
 
 [UninstallDelete]
-; what the app compiles and adds to its own program folders; your projects (data) and models stay
+; what Python adds to the program folders; settings, models and projects are elsewhere and stay
 Type: filesandordirs; Name: "{app}\python"
 Type: filesandordirs; Name: "{app}\recap"
 Type: filesandordirs; Name: "{app}\.claude"
-Type: filesandordirs; Name: "{app}\data\updates"
 
 [Code]
 function IsUpdate: Boolean;

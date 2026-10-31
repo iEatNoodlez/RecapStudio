@@ -32,6 +32,7 @@
       <div class="menu-wrap">
         <button id="project-menu" class="ghost icon-btn" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" title="More">⋯</button>
         <div id="project-menu-list" class="menu" role="menu" hidden>
+          <button role="menuitem" id="show-folder" title="Open this project's folder in File Explorer">Show in folder</button>
           <button role="menuitem" id="save-file" title="Save the whole project as one file (.recap), to keep or open on another computer">Save as file…</button>
           <button role="menuitem" id="clear-pages" class="danger">Remove all chapters</button>
           <button role="menuitem" id="delete-project" class="danger">Delete project</button>
@@ -416,6 +417,21 @@
           <button type="button" id="magi-remove" class="ghost small danger">Remove Magi</button>
         </div>
         <div id="magi-error" class="error"></div>
+      </fieldset>
+      <fieldset id="storage-box">
+        <legend>Projects folder</legend>
+        <span class="hint">Each project is saved in its own folder, named after it, in:</span>
+        <code id="projects-path" class="path"></code>
+        <span id="projects-synced" class="hint warn" hidden></span>
+        <span class="storage-actions">
+          <button type="button" id="projects-change" class="ghost small">Change…</button>
+          <button type="button" id="projects-show" class="link-btn">Show in File Explorer</button>
+        </span>
+        <div id="projects-moving" hidden>
+          <span id="projects-move-msg"></span>
+          <div class="bar"><div id="projects-move-bar"></div></div>
+        </div>
+        <span id="storage-other" class="hint adv"></span>
       </fieldset>
       <fieldset id="update-box">
         <legend>Updates</legend>

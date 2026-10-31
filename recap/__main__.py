@@ -30,9 +30,9 @@ def _free_port() -> int:
 def _log_to_file_without_console():
     # pythonw.exe has no stdout/stderr, which breaks uvicorn's logging setup
     if sys.stdout is None or sys.stderr is None:
-        from .store import ROOT
-        (ROOT / "data").mkdir(exist_ok=True)
-        log = open(ROOT / "data" / "app.log", "a", buffering=1, encoding="utf-8")
+        from .paths import DATA
+        DATA.mkdir(parents=True, exist_ok=True)
+        log = open(DATA / "app.log", "a", buffering=1, encoding="utf-8")
         sys.stdout = sys.stdout or log
         sys.stderr = sys.stderr or log
 
@@ -62,6 +62,8 @@ def main():
     ap.add_argument("--no-window", action="store_true", help="only the server, with no window or browser")
     ap.add_argument("--port", type=int, default=0)
     args = ap.parse_args()
+    from .store import move_old_layout
+    move_old_layout()  # an installed copy that kept its data beside itself: before anything reads its settings
 
     port = args.port or _free_port()
     config = uvicorn.Config("recap.server:app", host="127.0.0.1", port=port, log_level="warning")

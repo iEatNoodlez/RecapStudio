@@ -190,6 +190,7 @@ function fillSelects() {
 
 document.querySelectorAll(".open-global").forEach((b) => b.addEventListener("click", () => {
   renderGlobal();
+  loadStorage();
   $("#global-dialog").showModal();
 }));
 
@@ -2545,8 +2546,13 @@ async function renderSetup() {
 
 async function setupComputer(body) {
   const v = await api("/api/addons/voice");
+  const st = await loadStorage();
   body.append(
     el("p", {}, "Recap Studio turns comic and webtoon chapters into narrated recap videos. A few choices first; you can change any of them later in Settings."),
+    el("span", { class: "field-head" }, "Your projects"),
+    setupLine(!st.synced, `Saved in ${st.projects}, each in a folder named after it.` +
+      (st.synced ? ` ${st.synced} syncs that folder: recaps run to several GB each, so pick another unless you want them uploaded.` : "") + " ",
+      el("button", { type: "button", class: "link-btn", onclick: async () => { await changeProjectsFolder(); renderSetup(); } }, "Change…")),
     el("span", { class: "field-head" }, "This computer"),
     v.installed ? setupLine(true, `Voice model ready (${plural(env.voices.length, "voice")}).`)
       : setupLine(false, "The voice model isn't downloaded yet. It reads the narration aloud.", voiceDownload(v)),
@@ -2773,6 +2779,79 @@ $("#setup-next").addEventListener("click", async () => {
 $("#setup-back").addEventListener("click", () => { setupPage = Math.max(0, setupPage - 1); renderSetup(); });
 $("#setup-skip").addEventListener("click", finishSetup);
 $("#rerun-setup").addEventListener("click", () => { $("#global-dialog").close(); openSetup(0); });
+
+// ---- where projects are saved (Settings → Projects folder, first-run setup; store.move_projects) ----
+let storage = null;
+
+async function loadStorage() {
+  try { storage = await api("/api/storage"); } catch { return null; }
+  renderStorage();
+  return storage;
+}
+
+function renderStorage() {
+  if (!storage) return;
+  $("#projects-path").textContent = storage.projects;
+  $("#projects-synced").hidden = !storage.synced;
+  $("#projects-synced").textContent = storage.synced
+    ? `${storage.synced} syncs this folder, so every project is uploaded as it grows (several GB per recap).` : "";
+  const m = storage.move, moving = m.state === "moving";
+  $("#projects-moving").hidden = !moving;
+  $("#projects-move-msg").textContent = moving ? `${m.message} (${m.done} of ${m.total})` : "";
+  $("#projects-move-bar").style.width = `${Math.round(100 * m.done / Math.max(1, m.total))}%`;
+  $("#projects-change").disabled = moving;
+  $("#storage-other").textContent = `Settings and API keys: ${storage.data}. Voice model: ${storage.models}. ` +
+    `Add-ons: ${storage.addons}.`;
+}
+
+async function pickFolder(start) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_folder) return window.pywebview.api.pick_folder();
+  return window.prompt("The full path of the folder:", start || "");  // (in a browser, there's no folder picker)
+}
+
+async function changeProjectsFolder() {
+  const folder = await pickFolder(storage && storage.projects);
+  if (!folder) return;
+  let checked;
+  try { checked = await api("/api/storage/check", { method: "POST", json: { folder } }); }
+  catch (e) { return notify(e.message, "Can't use that folder"); }
+  const synced = checked.synced ? `\n\n${checked.synced} syncs that folder, so projects there are uploaded as they grow ` +
+    "(several GB per recap)." : "";
+  const n = (await api("/api/projects")).length;
+  let move = true;
+  if (n) {
+    const pick = await choose(`Move your projects to ${checked.folder}?`,
+      `${plural(n, "project")} move there, each in its own folder. On the same drive that's instant; to another drive ` +
+      "they're copied first, and the old copies are removed once every one has arrived." + synced +
+      "\n\nOr switch without moving them: projects left in the old folder don't show until you switch back.",
+      [{ value: "switch", label: "Switch without moving" }, { value: "move", label: "Move them", primary: true }]);
+    if (!pick) return;
+    move = pick === "move";
+  } else if (synced && !await ask(`Save projects in ${checked.folder}?`, synced.trim(), { ok: "Use it anyway" })) return;
+  try { storage = await api("/api/storage/projects", { method: "POST", json: { folder: checked.folder, move } }); }
+  catch (e) { return notify(e.message, "The projects weren't moved"); }
+  renderStorage();
+  while (storage.move.state === "moving") {
+    await new Promise((r) => setTimeout(r, 700));
+    await loadStorage();
+  }
+  if (storage.move.state === "error") notify(storage.move.error, "The projects weren't moved");
+  const list = await api("/api/projects");
+  if (current && !list.some((p) => p.id === current.id)) {  // (left behind in the old folder)
+    current = null;
+    clearInterval(polling);
+    localStorage.removeItem("last");
+    render();
+  } else if (current) await openProject(current.id);
+  loadProjects();
+}
+
+$("#projects-change").addEventListener("click", changeProjectsFolder);
+$("#projects-show").addEventListener("click", () => api("/api/storage/show", { method: "POST" }));
+$("#show-folder").addEventListener("click", () => {
+  setMenu(false);
+  api(`/api/projects/${current.id}/show-folder`, { method: "POST" }).catch((e) => notify(e.message));
+});
 
 // ---- updates from GitHub (updates.py): a button in the sidebar when a newer release is out, Settings → Updates ----
 let appUpdate = null, updatePoll = null;

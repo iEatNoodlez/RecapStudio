@@ -39,7 +39,8 @@ async def _fresh_page(request, call_next):
 
 @app.on_event("startup")
 def _startup():
-    store.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    store.move_old_layout()  # an installed copy that kept its data beside itself (__main__ does it first)
+    store.name_folders()     # folders still named by project id take their project's name
     pipeline.start_worker()
 
 
@@ -71,8 +72,60 @@ def get_project(pid: str):
 
 @app.patch("/api/projects/{pid}")
 def rename_project(pid: str, name: str = Body(..., embed=True)):
+    """The project's folder takes the new name too, unless a job is using it (then on the next start)."""
     _project(pid)
-    return store.update(pid, lambda p: p.update(name=name.strip() or p["name"]))
+    p = store.update(pid, lambda p: p.update(name=name.strip() or p["name"]))
+    job = pipeline.latest_for(pid)
+    if not (job and job["status"] in pipeline.ACTIVE):
+        store.rename_folder(pid)
+    return p
+
+
+@app.post("/api/projects/{pid}/show-folder")
+def show_project_folder(pid: str):
+    _project(pid)
+    os.startfile(store.project_dir(pid))
+    return {"ok": True}
+
+
+# ---- where projects are saved (Settings → Projects folder) ----
+
+@app.get("/api/storage")
+def storage():
+    root = store.projects_root()
+    return {"projects": str(root), "default": str(store.paths.DEFAULT_PROJECTS), "synced": store.paths.synced(root),
+            "data": str(store.DATA_ROOT), "models": str(store.MODELS_DIR), "addons": str(store.ADDONS_DIR),
+            "installed": store.paths.INSTALLED, "move": store.MOVE}
+
+
+@app.post("/api/storage/show")
+def storage_show():
+    root = store.projects_root()
+    root.mkdir(parents=True, exist_ok=True)
+    os.startfile(root)
+    return {"ok": True}
+
+
+@app.post("/api/storage/check")
+def storage_check(folder: str = Body(..., embed=True)):
+    """Whether projects can go in this folder, and whether a cloud service syncs it (before choosing it)."""
+    try:
+        path = store.check_folder(folder)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"folder": str(path), "synced": store.paths.synced(path)}
+
+
+@app.post("/api/storage/projects")
+def storage_projects(folder: str = Body(..., embed=True), move: bool = Body(True, embed=True)):
+    """Use another projects folder, moving the projects there (move) or leaving them where they are."""
+    if any(j["status"] in pipeline.ACTIVE for j in pipeline.jobs.values()):
+        raise HTTPException(409, "A job is running. Let it finish, or cancel it, before moving the projects.")
+    try:
+        store.move_projects(folder, move)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return storage()
 
 
 @app.delete("/api/projects/{pid}")

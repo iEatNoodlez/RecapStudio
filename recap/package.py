@@ -103,19 +103,20 @@ def open_file(path: str | Path) -> dict:
         _check(z)
         p = json.loads(z.read("project.json"))
         pid = uuid.uuid4().hex[:12]
-        final = store.project_dir(pid)
-        tmp = final.with_name(pid + ".part")
+        names = {x["name"] for x in store.list_all()}
+        name, n = p.get("name") or path.stem, 2
+        while name in names:  # beside a project of the same name (e.g. the one it was saved from)
+            name, n = f"{p.get('name') or path.stem} ({n})", n + 1
+        final = store.new_folder(pid, name)  # named after the project
+        tmp = final.with_name(final.name + ".part")
         shutil.rmtree(tmp, ignore_errors=True)
         try:
             z.extractall(tmp)
             (tmp / MANIFEST).unlink(missing_ok=True)
             for sub in ("pages", "panels", "audio", "output"):
                 (tmp / sub).mkdir(exist_ok=True)
-            names = {x["name"] for x in store.list_all()}
-            name, n = p.get("name") or path.stem, 2
-            while name in names:  # beside a project of the same name (e.g. the one it was saved from)
-                name, n = f"{p.get('name') or path.stem} ({n})", n + 1
-            p.update(id=pid, name=name, updated=time.time(), output=None)
+            p = {"id": pid, **{k: v for k, v in p.items() if k != "id"}}  # (the id first: store finds it there)
+            p.update(name=name, updated=time.time(), output=None)
             (tmp / "project.json").write_text(json.dumps(p, indent=1, ensure_ascii=False), encoding="utf-8")
             tmp.rename(final)
         finally:

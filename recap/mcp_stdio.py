@@ -17,9 +17,9 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
-from recap import mcp  # noqa: E402  (imports nothing else from the app)
+from recap import mcp, paths  # noqa: E402  (they import nothing else from the app)
 
-DATA = Path(os.environ.get("RECAP_DATA") or APP / "data")
+DATA = paths.DATA  # where the running app writes app.json
 _out = threading.Lock()
 
 

@@ -14,7 +14,7 @@ from . import addon, gpu, store
 
 # RapidOCR's English recognition model (PP-OCRv3, Apache 2.0), from its author's repository;
 # downloaded on request into data\addons\ocr_en, never shipped
-ENGLISH = addon.Download(store.DATA_ROOT / "addons" / "ocr_en", {
+ENGLISH = addon.Download(store.ADDONS_DIR / "ocr_en", {
     "en_rec.onnx": ("SWHL/RapidOCR", "1cfba2e90fc938db55889873735088de210cc173",
                     "PP-OCRv3/en_PP-OCRv3_rec_infer.onnx", 8_967_018,
                     "ef7abd8bd3629ae57ea2c28b425c1bd258a871b93fd2fe7c433946ade9b5d9ea"),

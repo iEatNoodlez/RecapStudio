@@ -22,7 +22,7 @@ from . import addon, store
 from .tts import SAMPLE_RATE
 
 MODEL = "vosk-model-small-en-us-0.15"
-DOWNLOAD = addon.Download(store.DATA_ROOT / "addons" / "vosk", {
+DOWNLOAD = addon.Download(store.ADDONS_DIR / "vosk", {
     f"{MODEL}.zip": ("", "", f"{MODEL}.zip", 41205931,
                      "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498"),
 }, url="https://alphacephei.com/vosk/models/{path}", unzip=True)

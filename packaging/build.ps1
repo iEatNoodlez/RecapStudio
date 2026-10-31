@@ -82,6 +82,10 @@ if ($failed) { throw "Couldn't zip the app." }
 
 if ($SkipInstaller) { Write-Host "Done (no installer: -SkipInstaller)."; exit 0 }
 Write-Host "== Installer"
+# Installed in Program Files, Python can't save its compiled packages there, so it would compile them again on
+# every start: compile them now, for the installer only (the zip went without, for its shorter paths). They're
+# at most 165 characters below the app's folder, well within Windows' limit under C:\Program Files.
+& $py -m compileall -q -j 0 (Join-Path $app "python\Lib\site-packages") | Out-Null
 $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 foreach ($p in "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
                "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") {

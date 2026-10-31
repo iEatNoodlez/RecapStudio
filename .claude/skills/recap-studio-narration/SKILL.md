@@ -31,8 +31,8 @@ Reading `recap/claude.py`, `recap/pipeline.py` (`_api_chapter`), `recap/script.p
 
 ## Before you start
 
-1. **Find the project.** `list_projects`, then `project_status` (`open_app` if the app isn't open). Data lives
-   in `App\data\projects\<id>\project.json`, which you can read while the app runs.
+1. **Find the project.** `list_projects`, then `project_status` (`open_app` if the app isn't open). Both give
+   the project's folder (named after the project); its `project.json` can be read while the app runs.
 2. **Check what the chapters have.** Text should be read (step 2, Read text: `project_status` counts it), so
    agents get OCR text along with the pictures; `run_steps` with `ocr` reads it. Characters should be named
    (Prompt & characters): the system prompt gives agents the character list, with aliases and descriptions.

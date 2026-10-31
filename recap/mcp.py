@@ -196,7 +196,7 @@ def tool_list_projects():
 
 
 def tool_project_status(project):
-    from . import pipeline, scenes
+    from . import pipeline, scenes, store
     p = _project(project)
     s = p["settings"]
     groups = scenes.groups(p["panels"])
@@ -214,8 +214,8 @@ def tool_project_status(project):
         if flagged:  # YouTube-safe: lines that may go too far (Check wording in the app)
             chapters[-1]["check wording"] = [f"{w['why']}: {w['line']}" for w in flagged]
     job = pipeline.public(pipeline.latest_for(p["id"]))
-    return {"id": p["id"], "name": p["name"], "script writer": s.get("llm_provider"),
-            "youtube_safe": bool(s.get("youtube_safe")), "characters": [c["name"] for c in p["characters"]],
+    return {"id": p["id"], "name": p["name"], "folder": str(store.project_dir(p["id"])),
+            "script writer": s.get("llm_provider"), "youtube_safe": bool(s.get("youtube_safe")), "characters": [c["name"] for c in p["characters"]],
             "chapters": chapters,
             "job": {k: job.get(k) for k in ("id", "status", "step", "message", "error")} if job else None}
 

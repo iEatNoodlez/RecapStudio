@@ -27,7 +27,7 @@ import numpy as np
 
 from . import gpu, panels, store
 
-ADDON_DIR = store.DATA_ROOT / "addons" / "magi"
+ADDON_DIR = store.ADDONS_DIR / "magi"
 ENV_DIR = ADDON_DIR / "env"
 HF_DIR = ADDON_DIR / "hf"
 STATE_FILE = ADDON_DIR / "installed.json"
