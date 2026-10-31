@@ -35,6 +35,7 @@ SERVER = "recap-studio"   # the MCP server's name: its tools are mcp__recap-stud
 MODEL_ID = "claude-code"  # what claude.ask is told the model is (the agents' model is the setting below)
 MODELS = [("opus", "Opus"), ("sonnet", "Sonnet")]  # Claude Code's names for the latest of each
 NAMES = "character names"  # the "chapter" the naming agent asks for
+TITLE = "youtube title"  # and the title's
 # the narration skill: inside the app's folder when installed or cloned from GitHub, next to it in the dev setup
 SKILL = next((d for d in (store.ROOT / ".claude" / "skills" / "recap-studio-narration",
                           store.ROOT.parent / ".claude" / "skills" / "recap-studio-narration") if d.is_dir()),
@@ -769,20 +770,22 @@ def write_script(job, p):
         raise RuntimeError(note)
 
 
-class NameAsker:
-    """naming.suggest's ask(instructions, blocks) for Suggest names with Claude Code: one agent answers every part."""
+class Asker:
+    """ask(instructions, blocks) for a request that isn't a chapter's, with Claude Code: one agent answers every
+    part, as its brief says (naming.suggest's Suggest names, youtube.suggest's title)."""
 
-    def __init__(self, job, project):
-        self.run = Run(job, project, launch=True, kind="names")
-        self.ch = Chapter({"id": "names", "name": NAMES})
-        self.run.chapters[NAMES] = self.ch
-        self.run.ready(NAMES_BRIEF.format(series=project["name"].strip(), server=SERVER, chapter=NAMES))
-        self.api = _stand_in(lambda params: self.run.ask(self.ch, params, _check_names))
+    def __init__(self, job, project, kind, chapter, brief, schema, check):
+        self.schema = schema
+        self.run = Run(job, project, launch=True, kind=kind)
+        self.ch = Chapter({"id": kind, "name": chapter})
+        self.run.chapters[chapter] = self.ch
+        self.run.ready(brief.format(series=project["name"].strip(), server=SERVER, chapter=chapter))
+        self.api = _stand_in(lambda params: self.run.ask(self.ch, params, check))
         self.ch.state = "writing"
         self.run._launch(self.ch)
 
     def __call__(self, instructions, blocks) -> dict:
-        return claude.ask(MODEL_ID, instructions, blocks, _names_schema(), api=self.api)
+        return claude.ask(MODEL_ID, instructions, blocks, self.schema, api=self.api)
 
     def close(self, ok: bool):
         self.ch.state = "done" if ok else "failed"
@@ -791,6 +794,15 @@ class NameAsker:
         t.start()
         self.run.collectors.append(t)
         self.run.close()
+
+
+def NameAsker(job, project) -> Asker:
+    return Asker(job, project, "names", NAMES, NAMES_BRIEF, _names_schema(), _check_names)
+
+
+def TitleAsker(job, project) -> Asker:
+    from . import youtube
+    return Asker(job, project, "title", TITLE, TITLE_BRIEF, youtube.SCHEMA, youtube.problem)
 
 
 def _names_schema():
@@ -828,6 +840,26 @@ checked at once: SAVED, or FIX with what to correct.
 3. Call next_request again: there may be another part.
 
 Follow the instructions exactly; never invent a name the text doesn't give. Don't do anything else in the app.
+"""
+
+TITLE_BRIEF = """You suggest the YouTube title and thumbnail for Recap Studio's narrated recap of the comic "{series}". \
+Recap Studio is the user's app that turns comics into narrated recap videos. It hands you its request through its \
+MCP tools (server "{server}"):
+
+1. Call next_request with chapter "{chapter}". It answers with one of:
+   - NEXT <request>: the request to answer. It names the files to read.
+   - FIX <request> and a problem: your answer wasn't taken. Correct it and submit again.
+   - WAITING: nothing yet; call it again.
+   - CHAPTER DONE: it's saved. Give a one-line report and stop.
+   - CHAPTER FAILED or STOPPED: stop, and report what it said.
+2. Answer the request: read prompt.md and the instructions (system.md) it names, and EVERY picture sheet, in \
+parallel. Each sheet holds numbered pictures to choose the thumbnail from. If a sheet doesn't show as a picture \
+(for example "[media removed]"), don't answer from the text alone: stop and report PICTURES MISSING.
+   Then call submit_answer with the request and your answer, a JSON object in the shape prompt.md gives. It's \
+checked at once: SAVED, or FIX with what to correct.
+3. Call next_request again until CHAPTER DONE.
+
+Follow the instructions exactly. Don't do anything else in the app.
 """
 
 

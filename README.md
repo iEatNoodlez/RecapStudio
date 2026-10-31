@@ -75,11 +75,13 @@ the time it takes beside it. Below are tabs: **Chapters**, **Script** (the scene
 **Characters** and **Video** (the player, its files, the project's video settings and YouTube-safe). Showing the
 project's folder, saving the project as a file, removing all chapters and deleting the project are in the **⋯** menu.
 
-**New project**: type a name at the top left and press **Create**. Three questions follow, starting from your last
-project's answers: what kind of comic it is (webtoon, manga, a left-to-right comic, or not sure); how its video
-looks (landscape or portrait, automatic, pan and zoom or stills, resolution and frame rate, with how long an hour of
-it takes to make on this computer); and whether it's YouTube-safe. The video settings are the project's own from
-then on: its **Video** tab changes them. (Until 0.1.1 they were app-wide; each project made before keeps the
+**New project**: type a name at the top left and press **Create**. Four pages of questions follow, starting from your
+last project's answers: what kind of comic it is (webtoon, manga, a left-to-right comic, or not sure); its
+characters (whether Make the recap finds them, in the first 5 chapters or all, and whether you check the suggested
+names or trust them: see Scan for characters); how its video looks (landscape or portrait, automatic, pan and zoom
+or stills, resolution and frame rate, with how long an hour of it takes to make on this computer); and YouTube
+(whether a title and thumbnail are suggested after the script, and whether it's YouTube-safe). The video settings
+are the project's own from then on: its **Video** tab changes them, and its **Project settings** the characters. (Until 0.1.1 they were app-wide; each project made before keeps the
 choices it was made with.) The encoder is the one app-wide video setting (Settings → Video).
 
 **Advanced mode** (the switch at the bottom of the sidebar, remembered) shows everything else: the step buttons,
@@ -282,6 +284,10 @@ When writing with Claude or another online service, the job pauses by itself ins
 
 A paused job lives in the running app: closing the app ends it. Finished chapters are kept (hover a chapter's stats in the list to see which model wrote it), so tick the rest and run again.
 
+### YouTube title and thumbnail
+
+After the script, the main button has your script writer suggest a YouTube title (on by default; New project, or the **Video** tab → YouTube, turns it off). The writer gets the chapter summaries, the character list and 24 numbered pictures spread over the story, and answers with a clickbait title in the style of manhwa recap channels (under 90 characters, true to the story, without the ending), three others, a few words for the thumbnail and which picture to use. Recap Studio draws the thumbnail, 1280×720, into the project's `output\thumbnail.jpg`: the picture over a blurred, darkened copy of itself, with the words in big outlined letters beside it (or under it, for a wide picture), the last line yellow. The **Video** tab → YouTube shows both: edit the title (Copy copies it), click another title to use it, change the words and **Redraw**, click another of the pictures to redraw with it, or **Suggest again**. With Claude Code, one agent answers, as for Suggest names. The writer is told never to pick a picture with nudity, and in a YouTube-safe project pictures with black boxes aren't offered and the title stays clean. It's suggested once; the main button doesn't replace it later.
+
 ### Prompt and characters
 
 The **Prompt** tab (advanced mode) and the **Characters** tab control how the script is written, per project:
@@ -315,7 +321,7 @@ A thin piece (one line of lettering: a title, "To be continued") is read with a 
 
 Once the scan models are installed, **Characters** also appears as a step of its own, after Read text (the steps are renumbered: 1 Detect panels, 2 Read text, 3 Characters, 4 Write script, …). It opens the scan, or the review when groups are still waiting for names.
 
-The main button finds the characters too, before the script, so the narrator knows who is who. In a project that's never been scanned and has no named characters, it scans the first five chapters it's about to write and suggests names with your script writer, then pauses with the review open. Add or ignore each character and the script is written straight after; **Resume** writes it without them. It pauses like this once per scan, also for groups left from a scan you started yourself (to scan more chapters, use **Scan again…**). Write script on its own reminds you instead when the character list is empty or scanned groups are unnamed, with **Write anyway**, which isn't asked again for that project until that changes. Without the scan models the step bar is as before, and the main button's job notes that characters weren't looked for.
+The main button finds the characters too, before the script, so the narrator knows who is who. In a project that's never been scanned and has no named characters, it scans the first five chapters it's about to write and suggests names with your script writer, then pauses with the review open. Add or ignore each character and the script is written straight after; **Resume** writes it without them. It pauses like this once per scan, also for groups left from a scan you started yourself (to scan more chapters, use **Scan again…**). Each project chooses (New project, or Project settings → Characters): whether the main button looks for the characters at all, whether it scans the first 5 chapters it writes or all of them, and whether it waits for you to check the names or **trusts** them. Trusting adds the suggestions as **Add all suggested** does (extras ignored, groups without a name left for the review) and writes the script straight away, so look the Characters tab over afterwards. Write script on its own reminds you instead when the character list is empty or scanned groups are unnamed, with **Write anyway**, which isn't asked again for that project until that changes. Without the scan models the step bar is as before, and the main button's job notes that characters weren't looked for.
 
 - The first time, it offers to download its models (about 586 MB into `data\addons\charscan`, not part of the app): DeepGHS's anime person and head detectors (MIT) and CCIP (OpenRAIL), and SmilingWolf's WD tagger v3 (Apache 2.0). All allow commercial use. Each file is pinned to a version and checked against its checksum. Settings → Character scan models can remove them.
 - Pick the chapters: the ticked ones, the first five, or all. It runs as a normal job (Pause and Cancel work) at roughly 0.05 s per panel on a GPU; Chapters 1–3 of a webtoon (320 panels) took about 20 seconds.

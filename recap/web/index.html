@@ -172,6 +172,22 @@
           <div><button type="button" id="find-boxes" class="ghost small adv">Find boxes now</button>
             <button type="button" class="ghost small boxes-open">See the boxes…</button>
             <span id="boxes-count" class="muted"></span></div>
+          <label class="check"><input data-key="suggest_title" type="checkbox"> Suggest a title and thumbnail when the script is written</label>
+          <span class="hint">Your script writer reads the story and picks a clickbait title, a few others, the thumbnail's words and its picture; the thumbnail is drawn at 1280×720 into the output folder.</span>
+          <div id="yt-out" class="yt-out" hidden>
+            <a id="yt-thumb-link" target="_blank" title="Open the thumbnail"><img id="yt-thumb" alt="Thumbnail"></a>
+            <div class="yt-side">
+              <label>Title <span id="yt-count" class="muted"></span>
+                <span class="yt-row"><input id="yt-title" maxlength="100"><button type="button" id="yt-copy" class="ghost small">Copy</button></span></label>
+              <div id="yt-alts" class="yt-alts"></div>
+              <label>Thumbnail words
+                <span class="yt-row"><input id="yt-text" maxlength="60"><button type="button" id="yt-redraw" class="ghost small">Redraw</button></span></label>
+              <span class="field-head">Picture <span class="hint">Click another to redraw with it.</span></span>
+              <div id="yt-pics" class="yt-pics"></div>
+              <span id="yt-by" class="hint"></span>
+            </div>
+          </div>
+          <div><button type="button" id="yt-suggest" class="ghost small">Suggest a title and thumbnail</button></div>
         </fieldset>
       </div>
     </section>
@@ -211,6 +227,15 @@
           <input data-key="min_panel_frac" type="number" step="0.01" min="0.01" max="0.9"></label>
         <label>Webtoon video (when Settings → Video → Style is Automatic)
           <select data-key="webtoon_video"><option value="scroll">Scroll down the whole chapter (narration follows the scroll)</option><option value="scenes">Show scenes one at a time</option></select></label>
+      </fieldset>
+      <fieldset>
+        <legend>Characters</legend>
+        <label class="check"><input data-key="find_characters" type="checkbox"> Find the characters before the script (Make the recap)</label>
+        <label>Scan
+          <select data-key="characters_chapters"><option value="first">The first 5 chapters it writes (quicker: the main cast shows up early)</option><option value="all">Every chapter it writes (finds everyone, takes longer)</option></select></label>
+        <label>Suggested names
+          <select data-key="characters_review"><option value="review">Let me check them (it waits for you)</option><option value="trust">Trust them (added as suggested, no waiting)</option></select></label>
+        <span class="hint">In a project that hasn't been scanned yet and has no named characters, Make the recap scans for the characters after reading the text, and your script writer suggests their names. Needs the character scan (the Characters tab).</span>
       </fieldset>
       <fieldset>
         <legend>The scan group's pages</legend>

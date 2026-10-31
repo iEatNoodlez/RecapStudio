@@ -239,10 +239,11 @@ def _sheet(d, groups) -> str:
 
 # ---- asking, and reading the answer --------------------------------------------------
 
-def _ask(s, instructions, blocks) -> dict:
+def _ask(s, instructions, blocks, schema=SCHEMA, name="recap_names") -> dict:
+    """The script's writer asked for an answer in this shape (also youtube.py's title)."""
     provider = s.get("llm_provider", "ollama")
     if provider == "claude":
-        return claude.ask(s.get("claude_model") or "claude-haiku-5-5", instructions, blocks, SCHEMA, max_tokens=16000)
+        return claude.ask(s.get("claude_model") or "claude-haiku-5-5", instructions, blocks, schema, max_tokens=16000)
     if provider in cloud.PROVIDERS:
         info = cloud.PROVIDERS[provider]
         model = s.get(f"{provider}_model") or info["default_model"]
@@ -250,11 +251,11 @@ def _ask(s, instructions, blocks) -> dict:
             raise RuntimeError(f"Choose a {info['name']} model in Settings → Script first.")
         if not cloud.has_key(provider):
             raise RuntimeError(f"Add your {info['name']} key in Settings → Script first.")
-        return cloud.ask(provider, model, instructions, blocks, SCHEMA, "recap_names")
-    return _ask_ollama(s, instructions, blocks)
+        return cloud.ask(provider, model, instructions, blocks, schema, name)
+    return _ask_ollama(s, instructions, blocks, schema)
 
 
-def _ask_ollama(s, instructions, blocks) -> dict:
+def _ask_ollama(s, instructions, blocks, schema) -> dict:
     """The local model: everything in one message (as script.narrate_batch does), pictures when it reads them."""
     url, model = s["ollama_url"], s["ollama_model"]
     if not model:
@@ -270,7 +271,7 @@ def _ask_ollama(s, instructions, blocks) -> dict:
     msg = {"role": "user", "content": instructions + "\n\n" + "\n\n".join(texts)}
     if vision:
         msg["images"] = [b["source"]["data"] for b in blocks if b["type"] == "image"]
-    body = {"model": model, "messages": [msg], "stream": False, "format": SCHEMA,
+    body = {"model": model, "messages": [msg], "stream": False, "format": schema,
             "options": {"temperature": 0.2, "num_ctx": 32768}}
     if "thinking" in caps:
         body["think"] = False

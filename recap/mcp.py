@@ -27,7 +27,7 @@ INSTRUCTIONS = (
     "panels), ocr (Read text), script (Write script), audio (Voice), video (Render video); scan and names find "
     "and name the characters. If the app is closed, open_app starts it.")
 
-STEPS = ["panels", "ocr", "characters", "script", "audio", "video", "scan", "names", "credits", "boxes", "editors"]
+STEPS = ["panels", "ocr", "characters", "script", "title", "audio", "video", "scan", "names", "credits", "boxes", "editors"]
 
 
 def _tool(name, description, props=None, required=()):
@@ -46,10 +46,11 @@ TOOLS = [
           "for a YouTube-safe project any lines flagged by the wording check. Also its characters and the latest "
           "job.", {"project": _PROJECT}, ["project"]),
     _tool("run_steps", "Run app steps on a project, as its buttons do: panels, ocr, characters (Make the "
-          "recap's: in a project never scanned, finds and names the characters, then waits while scanned "
-          "characters wait for the user's review), script, audio, video, scan (find the characters), names "
-          "(suggest names for the scan's groups, with the script writer), credits, boxes, editors. Only work not "
-          "done yet is done, unless redo. One job at a time per project; check it with job_status.",
+          "recap's: in a project never scanned, finds and names the characters, then, as the project's settings "
+          "say, waits for the user's review or adds the suggested names), script, title (a YouTube title and "
+          "thumbnail, once the script is written), audio, video, scan (find the characters), names (suggest "
+          "names for the scan's groups, with the script writer), credits, boxes, editors. Only work not done yet "
+          "is done, unless redo. One job at a time per project; check it with job_status.",
           {"project": _PROJECT, "steps": {"type": "array", "items": {"type": "string", "enum": STEPS}},
            "chapters": _CHAPTERS, "redo": {"type": "boolean", "description": "Redo work already done."}},
           ["project", "steps"]),
@@ -217,6 +218,7 @@ def tool_project_status(project):
     job = pipeline.public(pipeline.latest_for(p["id"]))
     return {"id": p["id"], "name": p["name"], "folder": str(store.project_dir(p["id"])),
             "script writer": s.get("llm_provider"), "youtube_safe": bool(s.get("youtube_safe")), "characters": [c["name"] for c in p["characters"]],
+            "youtube title": (p.get("youtube") or {}).get("title"),
             "chapters": chapters,
             "job": {k: job.get(k) for k in ("id", "status", "step", "message", "error")} if job else None}
 

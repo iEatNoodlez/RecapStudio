@@ -17,14 +17,16 @@ import soundfile as sf
 import anthropic
 
 from . import (charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, naming, ocr,
-               online_voices, panels, scenes, package, script, store, textless, tts, video, voiceover, wording)
+               online_voices, panels, scenes, package, script, store, textless, tts, video, voiceover, wording,
+               youtube)
 
-STEPS = ["panels", "ocr", "characters", "script", "audio", "video"]
+STEPS = ["panels", "ocr", "characters", "script", "title", "audio", "video"]
 STEP_LABELS = {
     "panels": "Detecting panels",
     "ocr": "Reading text",
     "characters": "Finding characters",
     "script": "Writing script",
+    "title": "Suggesting a title",
     "audio": "Generating voice",
     "video": "Rendering video",
     "scan": "Scanning for characters",
@@ -1517,11 +1519,19 @@ def _to_write(project, chapters, missing=True) -> list[str]:
 
 
 def characters_to_scan(project, chapters, missing=True) -> list[str]:
-    """What Finding characters scans: in a project never scanned and with no named characters, the first
-    chapters whose script is about to be written. Nothing otherwise (Scan again is in the Characters tab)."""
-    if project.get("scan") or any((c.get("name") or "").strip() for c in project["characters"]):
+    """What Finding characters scans: in a project never scanned and with no named characters, the chapters
+    whose script is about to be written (the first SCAN_FIRST, or all as its settings say). Nothing otherwise
+    (Scan again is in the Characters tab), or when it's turned off."""
+    s = project["settings"]
+    if (not s.get("find_characters", True) or project.get("scan")
+            or any((c.get("name") or "").strip() for c in project["characters"])):
         return []
-    return _to_write(project, chapters, missing)[:SCAN_FIRST]
+    todo = _to_write(project, chapters, missing)
+    return todo if s.get("characters_chapters") == "all" else todo[:SCAN_FIRST]
+
+
+def _add_note(job, note: str):
+    job["note"] = ". ".join(x for x in (job.get("note"), note) if x)
 
 
 def _open_groups(project) -> int:
@@ -1531,19 +1541,22 @@ def _open_groups(project) -> int:
 
 
 def run_characters(job):
-    """Before the script: scan a project that's never been scanned (characters_to_scan) and suggest names, then
-    wait while the scan has characters to review, once per scan, until each is added or ignored (Resume
-    writes the script without them)."""
+    """Before the script: scan a project that's never been scanned (characters_to_scan) and suggest names. Then,
+    as the project's settings say, wait while the scan has characters to review, once per scan, until each is
+    added or ignored (Resume writes the script without them); or trust the suggestions and go on."""
     pid = job["project"]
     p = store.load(pid)
     missing = job["mode"] == "missing"
+    if not p["settings"].get("find_characters", True):
+        return _nothing_to_do(job, "turned off in the project's settings")
     if not _to_write(p, job["chapters"], missing):
         return _nothing_to_do(job, "every chapter has its script")
     chapters = characters_to_scan(p, job["chapters"], missing)
     if chapters and not charscan.installed():
-        job["note"] = ". ".join(x for x in (job.get("note"), "Characters weren't looked for: download the "
-                                "character scan (the Characters tab) and Make the recap finds them first") if x)
+        _add_note(job, "Characters weren't looked for: download the character scan (the Characters tab) and Make "
+                       "the recap finds them first")
         return _nothing_to_do(job, "the character scan isn't downloaded")
+    trust = p["settings"].get("characters_review") == "trust"
     if chapters:
         started, paused = time.time(), job.get("paused_for", 0.0)
         _scan(job, p, chapters)
@@ -1557,8 +1570,39 @@ def run_characters(job):
                 raise
             except Exception as e:  # the review works without suggestions
                 traceback.print_exc()
-                job["note"] = ". ".join(x for x in (job.get("note"), f"Names weren't suggested ({e})") if x)
-    _characters_hold(job)
+                _add_note(job, f"Names weren't suggested ({e})")
+        if trust:
+            added = _trust_names(pid)
+            _add_note(job, f"Added {added} character{'s' if added != 1 else ''} as suggested (check them in the "
+                           "Characters tab)" if added else "No names were suggested to add")
+    if not trust:
+        _characters_hold(job)
+
+
+def _trust_names(pid) -> int:
+    """The suggestions taken as they are, as Add all suggested does: each named group, biggest first, becomes a
+    character or joins the one with its name (or the listed one it was matched to); extras are ignored, and
+    groups without a name stay for the review. The scan isn't waited for after. Returns characters added."""
+    from . import server  # (loaded by then: it runs the jobs)
+    p = store.load(pid)
+    before = len(p["characters"])
+    listed = {c["id"]: c["name"] for c in p["characters"]}
+    items = []
+    for g in sorted((g for g in p["scan"]["groups"] if g["status"] == "open" and g.get("suggestion")),
+                    key=lambda g: -g["size"]):
+        sug = g["suggestion"]
+        if sug.get("extra"):
+            server.scan_ignore(pid, g["id"])
+        elif sug.get("name") or sug.get("character") in listed:
+            items.append({"group": g["id"], "name": sug.get("name") or listed[sug["character"]],
+                          **{k: sug.get(k) or "" for k in ("gender", "aliases", "description")}})
+    if items:
+        server.scan_add_named(pid, items)
+
+    def apply(q):
+        q["scan"]["held"] = True
+    store.update(pid, apply)
+    return len(store.load(pid)["characters"]) - before
 
 
 def _characters_hold(job):
@@ -1619,7 +1663,46 @@ def _suggest_names(job, p) -> tuple[int, int, str]:
     return sum(1 for x in found.values() if x["name"] or x["character"]), len(found), label
 
 
+def run_title(job):
+    """After the script (Make the recap, when the project's settings say so; or Suggest again in the Video tab):
+    the writer suggests a YouTube title and the thumbnail's words and picture, and the thumbnail is drawn
+    (youtube.py). In Make the recap a failure is only noted: the recap goes on without one."""
+    pid = job["project"]
+    p = store.load(pid)
+    alone = job["steps"] == ["title"]
+    if not alone and not p["settings"].get("suggest_title", True):
+        return _nothing_to_do(job, "turned off in the project's settings")
+    if job["mode"] == "missing" and p.get("youtube"):
+        return _nothing_to_do(job, "one was suggested already (Suggest again in the Video tab)")
+    try:
+        found = _suggest_title(job, p)
+    except (Cancelled, InterruptedError):
+        raise
+    except Exception as e:
+        if alone:
+            raise
+        traceback.print_exc()
+        return _add_note(job, f"No title was suggested ({e})")
+    file = youtube.draw(p, next(x for x in p["panels"] if x["id"] == found["panel"]), found["text"])
+    store.update(pid, lambda q: q.update(youtube={**found, "file": file, "created": time.time()}))
+
+
+def _suggest_title(job, p) -> dict:
+    job["message"] = f"Suggesting a title with {naming.writer_label(p['settings'])}"
+    if p["settings"].get("llm_provider") != "claude_code":
+        return youtube.suggest(p)
+    from . import claude_code
+    ask = claude_code.TitleAsker(job, p)  # one Claude Code agent answers
+    try:
+        found = youtube.suggest(p, ask=ask)
+    except BaseException:
+        ask.close(ok=False)
+        raise
+    ask.close(ok=True)
+    return found
+
+
 RUNNERS = {"panels": run_panels, "ocr": run_ocr, "characters": run_characters, "script": run_script,
-           "audio": run_audio, "video": run_video,
+           "title": run_title, "audio": run_audio, "video": run_video,
            "scan": run_scan, "editors": run_editors, "voiceover": run_voiceover, "package": run_package,
            "credits": run_credits, "names": run_names, "boxes": run_boxes}

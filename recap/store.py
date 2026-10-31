@@ -28,6 +28,14 @@ DEFAULT_SETTINGS = {
     "leave_out_credits": True,       # leave out the scan group's credits, notices and ads at chapters' ends (credits.py)
     # YouTube-safe: milder sex scenes in the script (script.YOUTUBE) and black boxes over nudity in the video (cover.py)
     "youtube_safe": False,
+    # Make the recap, before the script (pipeline.run_characters): scan a project never scanned for its characters,
+    # in its "first" five chapters to write or "all", and have the writer suggest names, then "review" them (it
+    # waits) or "trust" them (added as suggested)
+    "find_characters": True,
+    "characters_chapters": "first",
+    "characters_review": "review",
+    # and after it, a YouTube title and thumbnail (youtube.py)
+    "suggest_title": True,
     # script
     "ollama_url": "http://localhost:11434",
     "ollama_model": "",
@@ -112,7 +120,8 @@ VIDEO_KEYS = (
     "editor_transition",
 )
 # what the New project dialog sets, besides those
-NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "webtoon_video", "youtube_safe"}
+NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "webtoon_video", "youtube_safe", "find_characters",
+                                     "characters_chapters", "characters_review", "suggest_title"}
 GLOBAL_FILE = DATA_ROOT / "settings.json"
 
 DEFAULT_PROMPT = {

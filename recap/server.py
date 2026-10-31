@@ -19,7 +19,7 @@ import anthropic
 
 from . import (charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu, importer, magi,
                mcp, ocr, online_voices, package, panels, pipeline, scenes, script, store, tts, updates, video,
-               voiceover)
+               voiceover, youtube)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -1294,6 +1294,33 @@ def open_folder(pid: str):
     _project(pid)
     os.startfile(store.project_dir(pid) / "output")
     return {"ok": True}
+
+
+# ---- the YouTube title and thumbnail (youtube.py; suggested by pipeline.run_title) ----------------
+
+@app.patch("/api/projects/{pid}/youtube")
+def edit_title(pid: str, title: str = Body(..., embed=True)):
+    if not _project(pid).get("youtube"):
+        raise HTTPException(404, "No title has been suggested yet")
+    return store.update(pid, lambda p: p["youtube"].update(title=title.strip()[:100]))
+
+
+@app.post("/api/projects/{pid}/youtube/thumbnail")
+def redraw_thumbnail(pid: str, text: str = Body(..., embed=True), panel: str | None = Body(None, embed=True)):
+    """Draw the thumbnail again: with other words, or another of the pictures it was chosen from."""
+    p = _project(pid)
+    yt = p.get("youtube")
+    if not yt:
+        raise HTTPException(404, "No title has been suggested yet")
+    x = next((x for x in p["panels"] if x["id"] == (panel or yt["panel"])), None)
+    if x is None:
+        raise HTTPException(409, "That picture is gone (panels were detected again): suggest again")
+    try:
+        file = youtube.draw(p, x, text)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return store.update(pid, lambda q: q["youtube"].update(text=text.strip()[:60], panel=x["id"], file=file,
+                                                          created=time.time()))
 
 
 # ---- files -----------------------------------------------------------------

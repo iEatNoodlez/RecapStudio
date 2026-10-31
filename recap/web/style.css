@@ -238,6 +238,19 @@ dialog::backdrop { background: rgba(0, 0, 0, .5); }
 .output-parts:empty { display: none; }
 .output-parts button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .editors-out { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+/* the YouTube title and thumbnail (Video tab) */
+.yt-out { display: flex; flex-direction: column; gap: 10px; margin: 6px 0; }  /* (the YouTube box is a narrow column) */
+#yt-thumb { width: 100%; max-width: 480px; aspect-ratio: 16 / 9; display: block; border-radius: 6px; border: 1px solid var(--line); }
+.yt-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.yt-row { display: flex; gap: 6px; }
+.yt-row input { flex: 1; min-width: 0; }
+.yt-alts { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.yt-alts:empty { display: none; }
+.yt-alts button { text-align: left; white-space: normal; }
+.yt-pics { display: flex; flex-wrap: wrap; gap: 4px; }
+.yt-pics img { width: 52px; height: 52px; object-fit: cover; border-radius: 4px; cursor: pointer; opacity: .7; outline: 2px solid transparent; }
+.yt-pics img:hover { opacity: 1; }
+.yt-pics img.on { opacity: 1; outline-color: var(--accent); }
 
 .panels-head h2 { font-size: 16px; margin: 10px 0; }
 .panels { display: flex; flex-direction: column; gap: 8px; }

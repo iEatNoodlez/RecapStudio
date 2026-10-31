@@ -31,6 +31,7 @@ DEFAULTS = {
     "join": 0.022,        # per second of video, joining the chapters into one file (5 h 37 min in about 7 min 25 s,
                           # mostly encoding the narration on one CPU thread)
     "names": 2.2,         # per scan group, suggesting names (Claude Opus 5.5: 30 groups in 65 s)
+    "title": 45.0,        # a YouTube title and thumbnail: one request (a guess until it has run)
 }
 # video frames per second, by encoder and resolution (two scrolling chapters, 2 drawing processes)
 VIDEO_FPS = {("gpu", 1080): 255, ("gpu", 720): 471, ("gpu", 480): 608, ("gpu", 360): 673,
@@ -39,7 +40,7 @@ STILLS_SPEEDUP = 1.3      # stills are drawn once per scene
 CHARS_PER_SECOND = 17.5   # the voice at speed 1.0, measured over 3,843 lines
 # before a chapter has a script: about one narration line per three panels, ~179 characters each
 LINES_PER_PANEL, CHARS_PER_LINE = 0.32, 179
-UNITS = {"panels": "page", "ocr": "panel", "scan": "panel", "characters": "panel", "audio": "narration line", "video": "frame"}
+UNITS = {"panels": "page", "ocr": "panel", "scan": "panel", "characters": "panel", "title": "request", "audio": "narration line", "video": "frame"}
 
 
 def _speeds() -> dict:
@@ -66,6 +67,8 @@ def key(step: str, settings: dict) -> str:
         return f"{step}:{_device(settings)}"
     if step == "characters":  # its scan (the names request isn't counted)
         return f"scan:{_device(settings)}"
+    if step == "title":
+        return "title"
     if step == "script":
         provider = settings.get("llm_provider", "ollama")
         if provider == "ollama":
@@ -134,6 +137,8 @@ def work(step: str, project: dict, chapters: list[str] | None, missing: bool,
     if step == "characters":  # Make the recap's scan, in a project never scanned
         scan = set(pipeline.characters_to_scan(project, chapters, missing))
         return sum(1 for x in panels if x["chapter"] in scan), "panel"
+    if step == "title":  # one request after the script, when the project's settings ask for it (pipeline.run_title)
+        return (1 if s.get("suggest_title", True) and not (missing and project.get("youtube")) else 0), "request"
     if step == "script":
         groups = [g for g in scenes.groups(project["panels"]) if g[0]["chapter"] in chosen]
         todo = [g for g in groups if not (missing and pipeline.script_done(g[0]))]

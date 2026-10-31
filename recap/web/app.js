@@ -37,6 +37,10 @@ function el(tag, attrs = {}, ...kids) {
 
 const fileUrl = (rel, v = current.panels_rev || 0) => `/files/${current.id}/${rel}?v=${v}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+// Whether a field in box is being typed in or chosen from, which redrawing it would undo (so the redraw waits). A
+// focused button or tick box doesn't count: a dialog gives focus back to the button that opened it (Remove chapter).
+const editingIn = (box) => box.contains(document.activeElement)
+  && document.activeElement.matches("textarea, select, input:not([type=checkbox]):not([type=radio])");
 
 // In-app replacement for confirm()/alert(). choices: [{value, label, primary?, danger?}];
 // resolves to the chosen value, or null for Cancel / Escape. A question asked while another is open
@@ -123,9 +127,9 @@ async function openProject(id) {
   if (current.job && ACTIVE.includes(current.job.status)) poll();
 }
 
-// ---- New project: a few questions first (the kind of comic, how its video looks, YouTube-safe); the video settings
-// are the project's own from then on (its Video tab) ----
-const NEW_PAGES = ["comic", "video", "content"];
+// ---- New project: a few questions first (the kind of comic, its characters, how its video looks, YouTube); the
+// video settings are the project's own from then on (its Video tab), the rest in its Project settings ----
+const NEW_PAGES = ["comic", "characters", "video", "content"];
 const KINDS = [
   ["webtoon", "Webtoon", "One long vertical strip per chapter, read top to bottom.", { layout: "webtoon", reading_direction: "ltr" }],
   ["manga", "Manga", "Pages, read right to left.", { layout: "pages", reading_direction: "rtl" }],
@@ -155,7 +159,7 @@ $("#new-project").addEventListener("submit", async (e) => {
 
 function renderNew() {
   const page = NEW_PAGES[newPage], s = newSettings;
-  $("#new-title").textContent = { comic: "New project", video: "How its video looks", content: "YouTube" }[page];
+  $("#new-title").textContent = { comic: "New project", characters: "Characters", video: "How its video looks", content: "YouTube" }[page];
   $("#new-stepno").textContent = `Step ${newPage + 1} of ${NEW_PAGES.length}`;
   $("#new-back").hidden = newPage === 0;
   $("#new-next").textContent = page === "content" ? "Create project" : "Next";
@@ -166,11 +170,29 @@ function renderNew() {
     body.append(el("label", {}, "Name ", name), el("span", { class: "field-head" }, "What kind of comic is it?"),
       choiceList("new-kind", KINDS, kindOf(s), (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }));
     setTimeout(() => name.focus(), 0);
+  } else if (page === "characters") {
+    body.append(
+      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.find_characters,
+        onchange: (e) => { s.find_characters = e.target.checked; renderNew(); } }), " Find the characters automatically"),
+      el("span", { class: "hint" }, "After the text is read, Make the recap scans the chapters for the characters and your script " +
+        "writer suggests their names, so the narration can say who is who."),
+      scanReady() ? "" : el("span", { class: "hint warn" }, `This needs the character scan (about ${(env && env.charscan && env.charscan.download_mb) || 586} MB), ` +
+        "not downloaded yet: the Characters tab → Find characters… gets it. Until then Make the recap goes on without it."));
+    if (s.find_characters) {
+      body.append(el("span", { class: "field-head" }, "Which chapters to scan"),
+        choiceList("new-scan", [["first", "The first 5", "Quicker. The main cast usually shows up early."],
+          ["all", "All of them", "Finds everyone, side characters too. Takes longer."]], s.characters_chapters,
+        (v) => { s.characters_chapters = v; renderNew(); }),
+        el("span", { class: "field-head" }, "The suggested names"),
+        choiceList("new-review", [["review", "Let me check them", "Make the recap waits with the names filled in. Add or change them, and it writes the script."],
+          ["trust", "Trust them", "They're added as suggested and the script is written straight away. Look them over in the Characters tab afterwards."]],
+        s.characters_review, (v) => { s.characters_review = v; renderNew(); }));
+    }
   } else if (page === "video") {
     const line = el("p", { class: "muted" });
     const speed = async () => {
       const q = new URLSearchParams({ resolution: s.resolution, fps: s.fps, video_style: s.video_style, video_encoder: globals.video_encoder });
-      try { line.textContent = `An hour of this video takes about ${aboutTime((await api(`/api/video-speed?${q}`)).seconds_per_hour)} to make on this computer.`; }
+      try { line.textContent = `An hour of this video takes ${aboutTime((await api(`/api/video-speed?${q}`)).seconds_per_hour)} to make on this computer.`; }
       catch { line.textContent = ""; }
     };
     const select = (key, options) => {
@@ -196,6 +218,10 @@ function renderNew() {
   } else {
     const kind = KINDS.find((k) => k[0] === kindOf(s))[1];
     body.append(
+      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.suggest_title,
+        onchange: (e) => { s.suggest_title = e.target.checked; renderNew(); } }), " Suggest a title and thumbnail when the script is written"),
+      el("span", { class: "hint" }, "Your script writer picks a clickbait title (and a few others), the thumbnail's words and its picture; " +
+        "Recap Studio draws the thumbnail. Both are in the Video tab, to change or suggest again."),
       el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.youtube_safe,
         onchange: (e) => { s.youtube_safe = e.target.checked; } }), " YouTube-safe, for an age-restricted video"),
       el("span", { class: "hint" }, "For adult comics going on YouTube: sex scenes are written the way an R-rated film shows them, " +
@@ -204,8 +230,11 @@ function renderNew() {
       el("span", { class: "field-head" }, "Summary"),
       el("ul", { class: "setup-summary" },
         el("li", {}, `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "kind of comic told from the pages" : kind.toLowerCase()}`),
-        el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}`)),
-      el("p", { class: "muted" }, "Any of this can change later: the video in the project's Video tab, the kind of comic in its Project settings (advanced mode)."));
+        el("li", {}, !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
+          (s.characters_review === "trust" ? "names added as suggested" : "names checked by you")),
+        el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}`),
+        el("li", {}, s.suggest_title ? "A title and thumbnail suggested after the script" : "No title or thumbnail suggested")),
+      el("p", { class: "muted" }, "Any of this can change later: the video and title in the project's Video tab, the kind of comic and the characters in its Project settings (advanced mode)."));
   }
   $("#new-body").replaceChildren(body);
 }
@@ -1346,7 +1375,7 @@ $("#add-char").addEventListener("click", () => {
 
 function renderPrompt(force = false) {
   // don't replace fields while the user is typing in them (polling re-renders every 1.5s)
-  if (!force && ($("#prompt").contains(document.activeElement) || $("#characters-page").contains(document.activeElement))) return;
+  if (!force && (editingIn($("#prompt")) || editingIn($("#characters-page")))) return;
   const s = current.settings;
   $("#p-persona").value = s.persona || "";
   $("#p-note").value = s.note || "";
@@ -1539,7 +1568,7 @@ function renderChapters() {
   $("#chapters-box").hidden = current.chapters.length === 0;
   $("#chapter-count").textContent = current.chapters.length ? `${current.chapters.length}` : "";
   const busy = current.job && ACTIVE.includes(current.job.status);
-  if (!box.contains(document.activeElement)) {
+  if (!editingIn(box)) {
     const stats = chapterStats();
     box.replaceChildren(...current.chapters.map((c, i) => {
       const s = stats[c.id];
@@ -1702,14 +1731,14 @@ async function loadEstimate(force = false) {
 
 function renderEstimate() {
   if (!estimate) return;
-  const names = { panels: "Detect panels", ocr: "Read text", characters: "Find characters", script: "Write script", audio: "Voice", video: "Render video" };
+  const names = { panels: "Detect panels", ocr: "Read text", characters: "Find characters", script: "Write script", title: "Suggest a title", audio: "Voice", video: "Render video" };
   const all = estimate.run_all;
   const parts = Object.entries(names).filter(([s]) => all[s] && all[s].seconds > 0)
     .map(([s, name]) => `${name} ${aboutTime(all[s].seconds).replace("about ", "")}`);
   $("#estimate").textContent = parts.length
     ? `All of it: ${aboutTime(all.total)} (${parts.join(" · ")}). Hover a step for its own estimate.`
     : "Everything in these chapters is done. Render video makes the video again.";
-  const todo = { panels: "find the panels", ocr: "read the text", characters: "find the characters", script: "write the script", audio: "voice it", video: "render the video" };
+  const todo = { panels: "find the panels", ocr: "read the text", characters: "find the characters", script: "write the script", title: "suggest a title", audio: "voice it", video: "render the video" };
   const left = Object.keys(todo).filter((s) => all[s] && all[s].seconds > 0);
   const what = left.map((s) => todo[s]);
   $("#go-note").textContent = left.some((s) => s !== "video")
@@ -1812,10 +1841,11 @@ async function runStep(step) {
 }
 
 // The main button: Run all (it picks up where things left off and never redoes finished work), or Add chapters.
-// Its Finding characters step scans a project never scanned, then waits for the review before the script.
+// Its Finding characters step scans a project never scanned (then waits for the review, or trusts the names, as the
+// project says) before the script; after it, a YouTube title and thumbnail when the project asks for them.
 $("#go").addEventListener("click", async () => {
   if (!current.chapters.length) return $("#import-folder").click();
-  runSteps(["panels", "ocr", "characters", "script", "audio", "video"], null, "missing");
+  runSteps(["panels", "ocr", "characters", "script", "title", "audio", "video"], null, "missing");
 });
 
 document.querySelectorAll(".steps button[data-steps]").forEach((b) =>
@@ -1894,6 +1924,63 @@ function renderJob() {
   $("#job-characters").hidden = $("#review-wait").hidden = !waitingForCharacters();
   box.classList.toggle("paused", j.status === "paused");
 }
+
+// ---- the YouTube title and thumbnail (Video tab): suggested after the script (youtube.py), or with Suggest ----
+function renderYouTube() {
+  const yt = current.youtube;
+  $("#yt-out").hidden = !yt;
+  $("#yt-suggest").textContent = yt ? "Suggest again" : "Suggest a title and thumbnail";
+  $("#yt-suggest").disabled = !!(current.job && ACTIVE.includes(current.job.status));
+  if (!yt) return;
+  const src = fileUrl(yt.file, Math.round(yt.created || 0));
+  $("#yt-thumb").src = src;
+  $("#yt-thumb-link").href = src;
+  if (document.activeElement !== $("#yt-title")) $("#yt-title").value = yt.title;
+  $("#yt-count").textContent = `${$("#yt-title").value.length}/100`;
+  if (document.activeElement !== $("#yt-text")) $("#yt-text").value = yt.text;
+  $("#yt-alts").replaceChildren(...(yt.alternatives || []).filter((a) => a !== yt.title).map((a) =>
+    el("button", { type: "button", class: "ghost small", title: "Use this title", onclick: () => saveTitle(a) }, a)));
+  const byId = new Map(current.panels.map((x) => [x.id, x]));
+  $("#yt-pics").replaceChildren(...(yt.candidates || []).map((id) => byId.get(id)).filter(Boolean).map((x) =>
+    el("img", { src: fileUrl(`panels/${x.file}`), class: x.id === yt.panel ? "on" : "", title: "Use this picture",
+      onclick: () => redrawThumb(x.id) })));
+  $("#yt-by").textContent = yt.by ? `Suggested by ${yt.by}.` : "";
+}
+
+async function saveTitle(title) {
+  try {
+    current.youtube = (await api(`/api/projects/${current.id}/youtube`, { method: "PATCH", json: { title } })).youtube;
+    renderYouTube();
+  } catch (e) { notify(e.message); }
+}
+
+async function redrawThumb(panel = null) {
+  $("#yt-redraw").disabled = true;
+  try {
+    current.youtube = (await api(`/api/projects/${current.id}/youtube/thumbnail`, { method: "POST",
+      json: { text: $("#yt-text").value, panel } })).youtube;
+    renderYouTube();
+  } catch (e) { notify(e.message); }
+  $("#yt-redraw").disabled = false;
+}
+
+$("#yt-title").addEventListener("change", (e) => saveTitle(e.target.value));
+$("#yt-title").addEventListener("input", (e) => { $("#yt-count").textContent = `${e.target.value.length}/100`; });
+$("#yt-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("#yt-title").value);
+    $("#yt-copy").textContent = "Copied";
+    setTimeout(() => { $("#yt-copy").textContent = "Copy"; }, 1500);
+  } catch { notify("Select the title and copy it yourself.", "Couldn't copy"); }
+});
+$("#yt-redraw").addEventListener("click", () => redrawThumb());
+$("#yt-text").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); redrawThumb(); } });
+$("#yt-suggest").addEventListener("click", () => {
+  if (!current.panels.some((x) => (x.narration || "").trim())) {
+    return notify("The title is suggested from the story: write the script first.", "No script yet");
+  }
+  runSteps(["title"], null, "redo");
+});
 
 // ---- panels ----------------------------------------------------------------
 
@@ -2317,6 +2404,7 @@ function render() {
   renderJob();
   renderPanels();
   renderOutput();
+  renderYouTube();
 }
 
 // The overview above the tabs: how far each stage is, and what the main button does next.
