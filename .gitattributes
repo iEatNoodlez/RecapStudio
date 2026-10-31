@@ -1,0 +1,7 @@
+# text files are stored with LF; Windows scripts keep CRLF wherever they're checked out or downloaded
+* text=auto
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+*.ico binary
+*.png binary

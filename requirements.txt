@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pywebview
+numpy
+opencv-python-headless
+pillow
+rapidocr-onnxruntime
+kokoro-onnx
+soundfile
+requests
+anthropic>=2.3.0
+edge-tts>=7.3.1
+vosk>=0.3.45

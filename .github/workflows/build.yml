@@ -1,0 +1,66 @@
+# Builds the Windows installer and the portable zip (packaging/build.ps1).
+# Push a tag like v1.0.0 to publish them as a GitHub release; run it by hand (Actions → Build → Run workflow) to
+# get them as the run's artifacts instead.
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version in the file names (default: 0.0.0-<commit>)"
+        required: false
+
+permissions:
+  contents: write  # to create the release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          if ($env:REF_TYPE -eq "tag") { $v = $env:REF_NAME.TrimStart("v") }
+          elseif ($env:INPUT_VERSION) { $v = $env:INPUT_VERSION }
+          else { $v = "0.0.0-" + $env:SHA.Substring(0, 7) }
+          if ($v -notmatch '^[0-9A-Za-z.\-]+$') { throw "Version '$v' can only have letters, digits, dots and dashes." }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+
+      - name: Build
+        shell: pwsh
+        run: ./packaging/build.ps1 -Version "${{ steps.version.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recap-studio-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+          if-no-files-found: error
+          compression-level: 0  # already compressed
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $files = (Get-ChildItem dist\*.exe, dist\*.zip).FullName
+          gh release create $env:TAG @files --title "Recap Studio $env:VERSION" --generate-notes

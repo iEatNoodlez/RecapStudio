@@ -1,0 +1,12 @@
+# what the app makes while it runs: your projects, settings, keys and downloads
+/data/
+/models/
+/.venv/
+/backups/
+*.log
+__pycache__/
+*.pyc
+
+# packaging/build.ps1's output and download cache
+/dist/
+/build/
