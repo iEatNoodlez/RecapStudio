@@ -59,8 +59,8 @@
       <nav class="steps">
         <!-- numbered by renderSteps(); Characters shows only when the character scan models are installed -->
         <button data-steps="panels" data-label="Detect panels">1 · Detect panels</button>
-        <button id="step-characters" data-label="Characters" hidden title="Find the characters with Scan for characters, then name them">Characters</button>
         <button data-steps="ocr" data-label="Read text">2 · Read text</button>
+        <button id="step-characters" data-label="Characters" hidden title="Find the characters with Scan for characters, then name them (Make the recap does this before the script)">Characters</button>
         <button data-steps="script" data-label="Write script">3 · Write script</button>
         <button data-steps="audio" data-label="Voice">4 · Voice</button>
         <button data-steps="video" data-label="Render video">5 · Render video</button>
@@ -69,7 +69,7 @@
     </div>
 
     <div id="job" class="job" hidden>
-      <div class="job-row"><span id="job-msg"></span><button id="job-wording" class="primary small" hidden>Check wording</button><button id="job-pause" class="ghost small">Pause</button><button id="job-cancel" class="ghost small">Cancel</button></div>
+      <div class="job-row"><span id="job-msg"></span><button id="job-wording" class="primary small" hidden>Check wording</button><button id="job-characters" class="primary small" hidden>Review characters</button><button id="job-pause" class="ghost small">Pause</button><button id="job-cancel" class="ghost small">Cancel</button></div>
       <div class="bar"><div id="job-bar"></div></div>
       <div id="job-error" class="error"></div>
     </div>
@@ -584,6 +584,7 @@
 <dialog id="review-dialog" class="wide-dialog">
   <form method="dialog" class="import-form">
     <h2>Characters found</h2>
+    <p id="review-wait" class="muted" hidden>Make the recap is waiting for this: the script is written once each character is added or ignored (or close this and press Resume).</p>
     <div class="review-head">
       <span id="review-summary" class="muted"></span>
       <button type="button" id="review-names" class="small">Suggest names</button>

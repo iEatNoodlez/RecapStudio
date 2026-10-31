@@ -27,7 +27,7 @@ INSTRUCTIONS = (
     "panels), ocr (Read text), script (Write script), audio (Voice), video (Render video); scan and names find "
     "and name the characters. If the app is closed, open_app starts it.")
 
-STEPS = ["panels", "ocr", "script", "audio", "video", "scan", "names", "credits", "boxes", "editors"]
+STEPS = ["panels", "ocr", "characters", "script", "audio", "video", "scan", "names", "credits", "boxes", "editors"]
 
 
 def _tool(name, description, props=None, required=()):
@@ -45,10 +45,11 @@ TOOLS = [
           "chapter, how far it is: pieces, text read, scenes narrated, lines voiced, whether it has a summary, and "
           "for a YouTube-safe project any lines flagged by the wording check. Also its characters and the latest "
           "job.", {"project": _PROJECT}, ["project"]),
-    _tool("run_steps", "Run app steps on a project, as its buttons do: panels, ocr, script, audio, video, scan "
-          "(find the characters), names (suggest names for the scan's groups, with the script writer), credits, "
-          "boxes, editors. Only work not done yet is done, unless redo. One job at a time per project; check it "
-          "with job_status.",
+    _tool("run_steps", "Run app steps on a project, as its buttons do: panels, ocr, characters (Make the "
+          "recap's: in a project never scanned, finds and names the characters, then waits while scanned "
+          "characters wait for the user's review), script, audio, video, scan (find the characters), names "
+          "(suggest names for the scan's groups, with the script writer), credits, boxes, editors. Only work not "
+          "done yet is done, unless redo. One job at a time per project; check it with job_status.",
           {"project": _PROJECT, "steps": {"type": "array", "items": {"type": "string", "enum": STEPS}},
            "chapters": _CHAPTERS, "redo": {"type": "boolean", "description": "Redo work already done."}},
           ["project", "steps"]),

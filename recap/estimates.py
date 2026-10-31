@@ -39,7 +39,7 @@ STILLS_SPEEDUP = 1.3      # stills are drawn once per scene
 CHARS_PER_SECOND = 17.5   # the voice at speed 1.0, measured over 3,843 lines
 # before a chapter has a script: about one narration line per three panels, ~179 characters each
 LINES_PER_PANEL, CHARS_PER_LINE = 0.32, 179
-UNITS = {"panels": "page", "ocr": "panel", "scan": "panel", "audio": "narration line", "video": "frame"}
+UNITS = {"panels": "page", "ocr": "panel", "scan": "panel", "characters": "panel", "audio": "narration line", "video": "frame"}
 
 
 def _speeds() -> dict:
@@ -64,6 +64,8 @@ def key(step: str, settings: dict) -> str:
         return f"audio:{settings['voice_provider']}"  # an online voice: the computer's device doesn't matter
     if step in ("ocr", "scan", "audio"):
         return f"{step}:{_device(settings)}"
+    if step == "characters":  # its scan (the names request isn't counted)
+        return f"scan:{_device(settings)}"
     if step == "script":
         provider = settings.get("llm_provider", "ollama")
         if provider == "ollama":
@@ -129,6 +131,9 @@ def work(step: str, project: dict, chapters: list[str] | None, missing: bool,
         return sum(1 for x in read if not (missing and pipeline.ocr_done(x))), "panel"
     if step == "scan":
         return len(panels), "panel"
+    if step == "characters":  # Make the recap's scan, in a project never scanned
+        scan = set(pipeline.characters_to_scan(project, chapters, missing))
+        return sum(1 for x in panels if x["chapter"] in scan), "panel"
     if step == "script":
         groups = [g for g in scenes.groups(project["panels"]) if g[0]["chapter"] in chosen]
         todo = [g for g in groups if not (missing and pipeline.script_done(g[0]))]

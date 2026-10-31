@@ -517,8 +517,8 @@ $("#magi-remove").addEventListener("click", async () => {
 
 // ---- character scan: find the cast, review the groups, add them to the character list ----
 
-// With the scan models installed, Characters is a step of its own (after Detect panels); without them
-// the step bar is as before. Steps are numbered by what is shown.
+// With the scan models installed, Characters is a step of its own (after Read text, where Make the recap finds
+// them); without them the step bar is as before. Steps are numbered by what is shown.
 const scanReady = () => !!(env && env.charscan && env.charscan.installed);
 function renderSteps() {
   $("#step-characters").hidden = !scanReady();
@@ -630,6 +630,7 @@ $("#scan-start").addEventListener("click", async () => {
 
 function openReview() {
   renderReview();
+  $("#review-wait").hidden = !waitingForCharacters();
   if (!$("#review-dialog").open) $("#review-dialog").showModal();
 }
 $("#review-small").addEventListener("change", (e) => { reviewSmall = e.target.checked; renderReview(); });
@@ -695,7 +696,7 @@ function renderReview() {
     (suggested.length ? ` Names suggested by ${suggested[0].suggestion.by}: check them before adding.` : "");
   $("#review-small-label").textContent = `Show small groups (${small.length})`;
   $("#review-names").textContent = suggested.length ? "Suggest names again" : "Suggest names";
-  $("#review-names").disabled = !!(current.job && ACTIVE.includes(current.job.status));
+  $("#review-names").disabled = $("#review-rescan").disabled = !!(current.job && ACTIVE.includes(current.job.status));
   $("#review-names").title = `${writerLabel()} (Settings → Script) reads each group's pictures and the lines around it, and suggests who it is.`;
   $("#review-add-all").hidden = !suggested.some((g) => !g.suggestion.extra && (g.suggestion.name || g.suggestion.character));
   reviewFields = new Map();
@@ -1590,6 +1591,8 @@ function wordingFlags(c) {
 
 // The job waiting at Voice for flagged lines to be checked (pipeline._wording_hold)
 const waitingForWording = () => !!(current.job && current.job.status === "paused" && current.job.waiting_for === "wording");
+// Waiting before the script in Make the recap: it carries on once each scanned character is added or ignored
+const waitingForCharacters = () => !!(current.job && current.job.status === "paused" && current.job.waiting_for === "characters");
 
 async function checkWording(c, flags) {
   // Waiting at Voice in Make the recap: writing the chapter again restarts the job with that chapter rewritten
@@ -1623,6 +1626,7 @@ async function checkWording(c, flags) {
 }
 
 // The job box's Check wording: the first chapter (in the job's chapters) still to check
+$("#job-characters").addEventListener("click", () => openReview());
 $("#job-wording").addEventListener("click", () => {
   const scope = current.job && current.job.chapters;
   const c = current.chapters.find((x) => (!scope || scope.includes(x.id)) && wordingFlags(x).length);
@@ -1698,14 +1702,14 @@ async function loadEstimate(force = false) {
 
 function renderEstimate() {
   if (!estimate) return;
-  const names = { panels: "Detect panels", ocr: "Read text", script: "Write script", audio: "Voice", video: "Render video" };
+  const names = { panels: "Detect panels", ocr: "Read text", characters: "Find characters", script: "Write script", audio: "Voice", video: "Render video" };
   const all = estimate.run_all;
   const parts = Object.entries(names).filter(([s]) => all[s] && all[s].seconds > 0)
     .map(([s, name]) => `${name} ${aboutTime(all[s].seconds).replace("about ", "")}`);
   $("#estimate").textContent = parts.length
     ? `All of it: ${aboutTime(all.total)} (${parts.join(" · ")}). Hover a step for its own estimate.`
     : "Everything in these chapters is done. Render video makes the video again.";
-  const todo = { panels: "find the panels", ocr: "read the text", script: "write the script", audio: "voice it", video: "render the video" };
+  const todo = { panels: "find the panels", ocr: "read the text", characters: "find the characters", script: "write the script", audio: "voice it", video: "render the video" };
   const left = Object.keys(todo).filter((s) => all[s] && all[s].seconds > 0);
   const what = left.map((s) => todo[s]);
   $("#go-note").textContent = left.some((s) => s !== "video")
@@ -1807,11 +1811,11 @@ async function runStep(step) {
   if (go) runSteps([step], null, go);
 }
 
-// The main button: Run all (it picks up where things left off and never redoes finished work), or Add chapters
+// The main button: Run all (it picks up where things left off and never redoes finished work), or Add chapters.
+// Its Finding characters step scans a project never scanned, then waits for the review before the script.
 $("#go").addEventListener("click", async () => {
   if (!current.chapters.length) return $("#import-folder").click();
-  if (!await charactersReady()) return;
-  runSteps(["panels", "ocr", "script", "audio", "video"], null, "missing");
+  runSteps(["panels", "ocr", "characters", "script", "audio", "video"], null, "missing");
 });
 
 document.querySelectorAll(".steps button[data-steps]").forEach((b) =>
@@ -1847,6 +1851,7 @@ function poll() {
     if (finished || job.step !== lastStep || job.status !== lastStatus || streaming) {
       current = p;
       render();
+      if (job.status === "paused" && lastStatus !== "paused" && waitingForCharacters()) openReview();
     } else {
       current.job = job;
       renderJob();
@@ -1886,6 +1891,7 @@ function renderJob() {
   pause.hidden = !running;
   pause.textContent = j.status === "paused" ? "Resume" : j.pause ? "Pausing… (resume)" : "Pause";
   $("#job-wording").hidden = !waitingForWording();
+  $("#job-characters").hidden = $("#review-wait").hidden = !waitingForCharacters();
   box.classList.toggle("paused", j.status === "paused");
 }
 

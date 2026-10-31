@@ -19,10 +19,11 @@ import anthropic
 from . import (charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, naming, ocr,
                online_voices, panels, scenes, package, script, store, textless, tts, video, voiceover, wording)
 
-STEPS = ["panels", "ocr", "script", "audio", "video"]
+STEPS = ["panels", "ocr", "characters", "script", "audio", "video"]
 STEP_LABELS = {
     "panels": "Detecting panels",
     "ocr": "Reading text",
+    "characters": "Finding characters",
     "script": "Writing script",
     "audio": "Generating voice",
     "video": "Rendering video",
@@ -115,8 +116,8 @@ def _start_step(job, step):
 
 def _learn_speed(job, speed, amount):
     """After a step that did its whole share of work, remember how fast this computer did it (the video's
-    drawing without the joining, which run_video learns on its own)."""
-    if speed and not job["only"] and not job.get("idle"):
+    drawing without the joining, which run_video learns on its own; Finding characters learns its scan's)."""
+    if speed and not job["only"] and not job.get("idle") and job["step"] != "characters":
         estimates.learn(speed, amount, time.time() - job["step_started"] - job.get("paused_for", 0.0)
                         - job.get("join_time", 0.0))
 
@@ -1478,9 +1479,16 @@ def _merge(pid, field, values: dict, clear_audio=False, mark=None):
 
 def run_scan(job):
     """Find the characters in the job's chapters and keep the groups for the user to review."""
-    pid = job["project"]
-    p = store.load(pid)
-    chapters = [c["id"] for c in _chapters(job, p)]
+    p = store.load(job["project"])
+    record = _scan(job, p, [c["id"] for c in _chapters(job, p)])
+    n = sum(1 for g in record["groups"] if g["size"] >= 3)
+    job["note"] = (f"Found {n} characters (and {len(record['groups']) - n} small groups). "
+                   "Review them in the Characters tab." if record["groups"] else "No characters were found.")
+
+
+def _scan(job, p, chapters) -> dict:
+    """Scan these chapters; the new record replaces the project's last scan."""
+    pid = p["id"]
 
     def report(fraction, message):
         job.update(progress=fraction, message=message)
@@ -1494,17 +1502,99 @@ def run_scan(job):
                 f.unlink(missing_ok=True)
         proj["scan"] = record
     store.update(pid, apply)
-    n = sum(1 for g in record["groups"] if g["size"] >= 3)
-    job["note"] = (f"Found {n} characters (and {len(record['groups']) - n} small groups). "
-                   "Review them in the Characters tab." if record["groups"] else "No characters were found.")
+    return record
+
+
+# Finding characters (Make the recap, before the script): the narrator writes better knowing who is who
+SCAN_FIRST = 5  # chapters scanned, as the scan dialog does by default: the main cast shows up early
+
+
+def _to_write(project, chapters, missing=True) -> list[str]:
+    """The chapters (all when None) whose script the next Write script would write, in project order."""
+    chosen = set(chapters or [c["id"] for c in project["chapters"]])
+    todo = {g[0]["chapter"] for g in scenes.groups(project["panels"]) if not (missing and script_done(g[0]))}
+    return [c["id"] for c in project["chapters"] if c["id"] in chosen and c["id"] in todo]
+
+
+def characters_to_scan(project, chapters, missing=True) -> list[str]:
+    """What Finding characters scans: in a project never scanned and with no named characters, the first
+    chapters whose script is about to be written. Nothing otherwise (Scan again is in the Characters tab)."""
+    if project.get("scan") or any((c.get("name") or "").strip() for c in project["characters"]):
+        return []
+    return _to_write(project, chapters, missing)[:SCAN_FIRST]
+
+
+def _open_groups(project) -> int:
+    """Scanned characters still to review (as the review page counts them: small groups aside)."""
+    groups = (project.get("scan") or {}).get("groups", [])
+    return sum(1 for g in groups if g["status"] == "open" and g["size"] >= naming.MIN_SIZE)
+
+
+def run_characters(job):
+    """Before the script: scan a project that's never been scanned (characters_to_scan) and suggest names, then
+    wait while the scan has characters to review, once per scan, until each is added or ignored (Resume
+    writes the script without them)."""
+    pid = job["project"]
+    p = store.load(pid)
+    missing = job["mode"] == "missing"
+    if not _to_write(p, job["chapters"], missing):
+        return _nothing_to_do(job, "every chapter has its script")
+    chapters = characters_to_scan(p, job["chapters"], missing)
+    if chapters and not charscan.installed():
+        job["note"] = ". ".join(x for x in (job.get("note"), "Characters weren't looked for: download the "
+                                "character scan (the Characters tab) and Make the recap finds them first") if x)
+        return _nothing_to_do(job, "the character scan isn't downloaded")
+    if chapters:
+        started, paused = time.time(), job.get("paused_for", 0.0)
+        _scan(job, p, chapters)
+        estimates.learn(estimates.key("scan", p["settings"]),
+                        sum(1 for x in p["panels"] if x["chapter"] in chapters and x.get("enabled", True)),
+                        time.time() - started - (job.get("paused_for", 0.0) - paused))
+        if _open_groups(store.load(pid)):
+            try:
+                _suggest_names(job, store.load(pid))
+            except (Cancelled, InterruptedError):
+                raise
+            except Exception as e:  # the review works without suggestions
+                traceback.print_exc()
+                job["note"] = ". ".join(x for x in (job.get("note"), f"Names weren't suggested ({e})") if x)
+    _characters_hold(job)
+
+
+def _characters_hold(job):
+    pid = job["project"]
+    p = store.load(pid)
+    scan, n = p.get("scan") or {}, _open_groups(p)
+    if not n or scan.get("held"):
+        return
+    job["waiting_for"] = "characters"
+    try:
+        pause_for(job, f"Paused before the script: the character scan found {n} character{'s' if n != 1 else ''} "
+                       "to review. Add or ignore each one (Review characters) and the script is written, or Resume "
+                       "to write it now.",
+                  until=lambda: not _open_groups(store.load(pid)))
+    finally:
+        job.pop("waiting_for", None)
+
+    def apply(q):  # not asked again for this scan
+        if (q.get("scan") or {}).get("id") == scan["id"]:
+            q["scan"]["held"] = True
+    store.update(pid, apply)
 
 
 def run_names(job):
     """Ask the script's writer to suggest names for the scan's open groups (see naming.py); the user accepts
     them on the review cards."""
-    pid = job["project"]
-    p = store.load(pid)
+    p = store.load(job["project"])
     _check(job)
+    named, total, label = _suggest_names(job, p)
+    job["note"] = (f"{label} suggested names for {named} of {total} groups. "
+                   "Review them in the Characters tab.")
+
+
+def _suggest_names(job, p) -> tuple[int, int, str]:
+    """Fill in the scan's open groups' suggestions: (how many got a name, how many were asked about, by whom)."""
+    pid = p["id"]
     report = lambda fraction, message: job.update(progress=fraction, message=message)  # noqa: E731
     if p["settings"].get("llm_provider") == "claude_code":  # one Claude Code agent answers
         from . import claude_code
@@ -1526,11 +1616,10 @@ def run_names(job):
             if g["id"] in found and g["status"] == "open":
                 g["suggestion"] = found[g["id"]]
     store.update(pid, apply)
-    named = sum(1 for x in found.values() if x["name"] or x["character"])
-    job["note"] = (f"{label} suggested names for {named} of {len(found)} groups. "
-                   "Review them in the Characters tab.")
+    return sum(1 for x in found.values() if x["name"] or x["character"]), len(found), label
 
 
-RUNNERS = {"panels": run_panels, "ocr": run_ocr, "script": run_script, "audio": run_audio, "video": run_video,
+RUNNERS = {"panels": run_panels, "ocr": run_ocr, "characters": run_characters, "script": run_script,
+           "audio": run_audio, "video": run_video,
            "scan": run_scan, "editors": run_editors, "voiceover": run_voiceover, "package": run_package,
            "credits": run_credits, "names": run_names, "boxes": run_boxes}
