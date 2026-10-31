@@ -100,13 +100,19 @@ DEFAULT_SETTINGS = {
 GLOBAL_KEYS = {
     "llm_provider", "claude_model", "claude_code_model", "claude_code_workers", "ollama_url", "ollama_model", "use_vision", "panels_per_batch",
     "temperature", "voice", "voice_provider", "edge_voice", "elevenlabs_voice", "elevenlabs_model", "speed",
-    "orientation", "fps", "min_panel_seconds", "pad_seconds",
-    "transition_seconds", "motion", "motion_focus", "remove_text", "use_gpu", "parallel_workers", "use_magi", "ocr_english",
-    "video_encoder", "video_workers", "resolution", "video_style",
+    "use_gpu", "parallel_workers", "use_magi", "ocr_english", "video_encoder", "video_workers",
     "openrouter_model", "gemini_model", "deepseek_model", "groq_model", "mistral_model", "setup_done",
-    "video_split", "video_split_chapters", "video_split_hours", "editor_export", "editor_transition",
     "check_updates", "skip_version", "projects_dir",
 }
+# How each project's video looks: chosen when it's created (the New project dialog), changed in its Video tab.
+# App-wide until 0.1.1 (move_video_settings copies those choices into the projects).
+VIDEO_KEYS = (
+    "orientation", "resolution", "fps", "video_style", "motion", "motion_focus", "remove_text", "min_panel_seconds",
+    "pad_seconds", "transition_seconds", "video_split", "video_split_chapters", "video_split_hours", "editor_export",
+    "editor_transition",
+)
+# what the New project dialog sets, besides those
+NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "webtoon_video", "youtube_safe"}
 GLOBAL_FILE = DATA_ROOT / "settings.json"
 
 DEFAULT_PROMPT = {
@@ -311,7 +317,8 @@ def load(pid: str) -> dict:
     for key in DEFAULT_PROMPT:  # untouched old defaults -> current defaults; edits are kept
         if any(stored.get(key) == old[key] for old in _PREVIOUS_PROMPTS):
             stored.pop(key)
-    data["settings"] = {**copy.deepcopy(DEFAULT_SETTINGS), **stored, **global_settings()}
+    # (video settings a project doesn't have yet: the app-wide ones from before they were per project)
+    data["settings"] = {**copy.deepcopy(DEFAULT_SETTINGS), **_saved_video(), **stored, **global_settings()}
     data.setdefault("characters", [])
     if "chapters" not in data:  # projects from before chapters existed
         data["chapters"] = []
@@ -416,7 +423,47 @@ def update(pid: str, fn):
         return result if result is not None else p
 
 
-def create(name: str) -> dict:
+def _saved_video() -> dict:
+    """The video settings settings.json still holds from when they were app-wide (until 0.1.1)."""
+    try:
+        saved = json.loads(GLOBAL_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: saved[k] for k in VIDEO_KEYS if k in saved}
+
+
+def move_video_settings():
+    """Video settings were app-wide until 0.1.1: each project gets the ones it was made with (the app-wide
+    choices), then settings.json lets them go."""
+    old = _saved_video()
+    if not old:
+        return
+    _scan()
+    for pid in list(_index):
+        try:
+            with _lock(pid):
+                save(load(pid))  # load fills in the old app-wide ones, save keeps them (and not "updated")
+        except (KeyError, ValueError, OSError) as e:
+            log.warning("couldn't give project %s its video settings: %s", pid, e)
+    with _global_lock:
+        _write_global({k: v for k, v in json.loads(GLOBAL_FILE.read_text(encoding="utf-8")).items()
+                       if k not in VIDEO_KEYS})
+
+
+def new_project_settings() -> dict:
+    """The New project dialog's starting choices: the last project's (it's often the same kind of comic and
+    video), else the old app-wide ones, else the defaults."""
+    out = {k: DEFAULT_SETTINGS[k] for k in NEW_PROJECT_KEYS}
+    out.update(_saved_video())
+    newest = max(list_all(), key=lambda x: x["updated"], default=None)
+    if newest:
+        s = load(newest["id"])["settings"]
+        out.update({k: s[k] for k in NEW_PROJECT_KEYS if k in s and k != "youtube_safe"})
+    return out
+
+
+def create(name: str, settings: dict | None = None) -> dict:
+    """A new project; settings: the New project dialog's choices (NEW_PROJECT_KEYS), each of its default's type."""
     pid = uuid.uuid4().hex[:12]
     p = {
         "id": pid,
@@ -430,6 +477,10 @@ def create(name: str) -> dict:
         "panels": [],
         "output": None,
     }
+    for k, v in (settings or {}).items():
+        if k in NEW_PROJECT_KEYS:
+            kind = type(DEFAULT_SETTINGS[k])
+            p["settings"][k] = (v in (True, "true", 1, "1")) if kind is bool else kind(v)
     d = new_folder(pid, p["name"])
     for sub in ("pages", "panels", "audio", "output"):
         (d / sub).mkdir(parents=True, exist_ok=True)

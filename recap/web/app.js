@@ -123,11 +123,106 @@ async function openProject(id) {
   if (current.job && ACTIVE.includes(current.job.status)) poll();
 }
 
+// ---- New project: a few questions first (the kind of comic, how its video looks, YouTube-safe); the video settings
+// are the project's own from then on (its Video tab) ----
+const NEW_PAGES = ["comic", "video", "content"];
+const KINDS = [
+  ["webtoon", "Webtoon", "One long vertical strip per chapter, read top to bottom.", { layout: "webtoon", reading_direction: "ltr" }],
+  ["manga", "Manga", "Pages, read right to left.", { layout: "pages", reading_direction: "rtl" }],
+  ["comic", "Comic", "Pages, read left to right.", { layout: "pages", reading_direction: "ltr" }],
+  ["auto", "Not sure", "Recap Studio tells from the pages (reading left to right).", { layout: "auto", reading_direction: "ltr" }],
+];
+const STYLES = { auto: "Automatic", motion: "Pan and zoom", stills: "Stills" };
+let newPage = 0, newName = "", newSettings = null;
+
+const kindOf = (s) => (s.layout === "webtoon" ? "webtoon" : s.layout === "pages" ? (s.reading_direction === "rtl" ? "manga" : "comic") : "auto");
+
+function choiceList(name, options, value, onpick) {
+  return el("div", { class: "setup-choices" }, ...options.map(([id, title, about]) =>
+    el("label", { class: `setup-choice${id === value ? " on" : ""}` },
+      el("input", { type: "radio", name, value: id, checked: id === value, onchange: () => onpick(id) }),
+      el("div", {}, el("b", {}, title), about ? el("div", { class: "muted" }, about) : ""))));
+}
+
 $("#new-project").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const p = await api("/api/projects", { method: "POST", json: { name: $("#new-name").value || "Untitled" } });
-  $("#new-name").value = "";
-  openProject(p.id);
+  try { newSettings = await api("/api/projects/new-settings"); } catch (err) { return notify(err.message); }
+  newName = $("#new-name").value.trim();
+  newPage = 0;
+  renderNew();
+  $("#new-dialog").showModal();
+});
+
+function renderNew() {
+  const page = NEW_PAGES[newPage], s = newSettings;
+  $("#new-title").textContent = { comic: "New project", video: "How its video looks", content: "YouTube" }[page];
+  $("#new-stepno").textContent = `Step ${newPage + 1} of ${NEW_PAGES.length}`;
+  $("#new-back").hidden = newPage === 0;
+  $("#new-next").textContent = page === "content" ? "Create project" : "Next";
+  const body = el("div", { class: "setup-page" });
+  if (page === "comic") {
+    const name = el("input", { value: newName, placeholder: "The series' name", oninput: (e) => { newName = e.target.value; },
+      onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); $("#new-next").click(); } } });
+    body.append(el("label", {}, "Name ", name), el("span", { class: "field-head" }, "What kind of comic is it?"),
+      choiceList("new-kind", KINDS, kindOf(s), (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }));
+    setTimeout(() => name.focus(), 0);
+  } else if (page === "video") {
+    const line = el("p", { class: "muted" });
+    const speed = async () => {
+      const q = new URLSearchParams({ resolution: s.resolution, fps: s.fps, video_style: s.video_style, video_encoder: globals.video_encoder });
+      try { line.textContent = `An hour of this video takes about ${aboutTime((await api(`/api/video-speed?${q}`)).seconds_per_hour)} to make on this computer.`; }
+      catch { line.textContent = ""; }
+    };
+    const select = (key, options) => {
+      const sel = el("select", { onchange: () => { s[key] = Number(sel.value); speed(); } },
+        ...options.map(([v, t]) => el("option", { value: v }, t)));
+      sel.value = String(s[key]);
+      return sel;
+    };
+    const webtoon = kindOf(s) === "webtoon";
+    body.append(el("span", { class: "field-head" }, "Format"),
+      choiceList("new-format", [["landscape", "Landscape", "16:9, for YouTube."], ["portrait", "Portrait", "9:16, for Shorts, TikTok and Reels."]],
+        s.orientation, (v) => { s.orientation = v; renderNew(); }),
+      el("span", { class: "field-head" }, "Style"),
+      choiceList("new-style", [
+        ["auto", "Automatic", webtoon ? "The strip scrolls past as it's narrated." : "Each scene pans and zooms; webtoon chapters scroll."],
+        ["motion", "Pan and zoom", "Every scene on its own, moving slowly toward its middle."],
+        ["stills", "Stills", "Every scene on its own, still. The quickest to make."]], s.video_style, (v) => { s.video_style = v; renderNew(); }),
+      el("label", {}, "Resolution ", select("resolution", [[1080, "1080p (full HD)"], [720, "720p"], [480, "480p"], [360, "360p"]])),
+      el("label", {}, "Frame rate ", select("fps", [[60, "60 fps"], [50, "50 fps"], [30, "30 fps"], [25, "25 fps"], [24, "24 fps"],
+        [20, "20 fps"], [15, "15 fps"], [12, "12 fps"], [10, "10 fps"], [5, "5 fps (stills)"]])),
+      line);
+    speed();
+  } else {
+    const kind = KINDS.find((k) => k[0] === kindOf(s))[1];
+    body.append(
+      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.youtube_safe,
+        onchange: (e) => { s.youtube_safe = e.target.checked; } }), " YouTube-safe, for an age-restricted video"),
+      el("span", { class: "hint" }, "For adult comics going on YouTube: sex scenes are written the way an R-rated film shows them, " +
+        "and black boxes cover nudity in the video. Leave it off for everything else."),
+      el("span", { class: "hint warn" }, "It can make mistakes: read the script and look over the boxes before you upload."),
+      el("span", { class: "field-head" }, "Summary"),
+      el("ul", { class: "setup-summary" },
+        el("li", {}, `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "kind of comic told from the pages" : kind.toLowerCase()}`),
+        el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}`)),
+      el("p", { class: "muted" }, "Any of this can change later: the video in the project's Video tab, the kind of comic in its Project settings (advanced mode)."));
+  }
+  $("#new-body").replaceChildren(body);
+}
+
+$("#new-back").addEventListener("click", () => { newPage = Math.max(0, newPage - 1); renderNew(); });
+$("#new-next").addEventListener("click", async () => {
+  if (newPage < NEW_PAGES.length - 1) { newPage++; return renderNew(); }
+  const btn = $("#new-next");
+  btn.disabled = true;
+  try {
+    const p = await api("/api/projects", { method: "POST", json: { name: newName.trim() || "Untitled", settings: newSettings } });
+    $("#new-dialog").close();
+    $("#new-name").value = "";
+    await openProject(p.id);
+    showTab("chapters");
+  } catch (e) { notify(e.message); }
+  btn.disabled = false;
 });
 
 $("#project-name").addEventListener("change", async (e) => {
@@ -147,16 +242,24 @@ async function loadEnv() {
   const url = globals ? globals.ollama_url : "http://localhost:11434";
   env = await api(`/api/status?ollama_url=${encodeURIComponent(url)}`);
   const line = (ok, good, bad) => el("div", { class: ok ? "" : "bad" }, ok ? good : bad);
+  const addon = env.gpu.addon || {};  // GPU support, the download
   $("#env").replaceChildren(
     line(!env.ollama_error, `Ollama: ${env.ollama_models.length} model(s)`, "Ollama: not reachable"),
     line(env.tts_ready, `Voice: ${env.voices.length} voices`, "Voice model missing (run setup.ps1)"),
     line(env.ffmpeg, "ffmpeg: found", "ffmpeg: missing"),
-    line(env.gpu.available, `GPU: ${globals && !globals.use_gpu ? "available (turned off)" : "on"}`, "GPU: not available (using CPU)"),
+    line(env.gpu.available, `GPU: ${globals && !globals.use_gpu ? "available (turned off)" : "on"}`,
+      addon.installed ? "GPU: restart to use GPU support" : env.gpu.card ? "GPU: text and voice on the CPU (CPU build)"
+        : "GPU: not available (using CPU)"),
   );
   const used = [env.gpu.ocr && `text reading on ${env.gpu.ocr}`, env.gpu.voice && `voice on ${env.gpu.voice}`].filter(Boolean);
   $("#gpu-status").textContent = env.gpu.available
     ? `An NVIDIA GPU is available.${used.length ? ` Currently: ${used.join(", ")}.` : ""}`
+    : env.gpu.card ? `Your ${env.gpu.card} encodes the videos, but text reading and the voice run on the CPU: this copy ` +
+      "carries the CPU build of ONNX Runtime, the engine they run on." +
+      (addon.installed ? " GPU support is downloaded: close Recap Studio and open it again to use it."
+        : addon.offered ? " GPU support (below) runs them on the card." : "")
     : "No usable NVIDIA GPU was found, so everything runs on the CPU.";
+  renderGpuSettings(addon);
   const v = env.video, procs = (n) => `${n} process${n > 1 ? "es" : ""}`;
   $("#video-status").textContent = !v ? ""  // an app started before this setting existed
     : v.nvenc
@@ -204,6 +307,9 @@ function setInputs(root, values) {
 
 function renderSettings() {
   for (const box of document.querySelectorAll(".proj-settings")) setInputs(box, current.settings);
+  $("#split-chapters-row").hidden = current.settings.video_split !== "chapters";
+  $("#split-hours-row").hidden = current.settings.video_split !== "hours";
+  $("#focus-select").querySelector("option[value=subject]").disabled = !focusInstalled;
 }
 
 function renderGlobal() {
@@ -217,8 +323,6 @@ function renderGlobal() {
   $("#global-dialog .cloud-only").hidden = !cloudOn;
   $("#global-dialog .ollama-opts").hidden = claudeOn || codeOn || cloudOn;
   if (codeOn) renderClaudeCode();
-  $("#split-chapters-row").hidden = globals.video_split !== "chapters";
-  $("#split-hours-row").hidden = globals.video_split !== "hours";
   fillSelects();
   if (cloudOn) renderCloud();
   renderVoice();
@@ -228,12 +332,64 @@ function renderGlobal() {
   renderOcrSettings();
   renderFocusSettings();
   renderBoxSettings();
+  renderGpuSettings();
   renderUpdate();
 }
+
+// ---- GPU support (ONNX Runtime's GPU build, with CUDA and cuDNN): downloaded on request, never shipped ----
+
+let gpuPoll = null, gpuBusy = false;
+const gpuGB = (st) => (st.download_mb / 1000).toFixed(1);
+const gpuDriver = (st) => `Your NVIDIA driver (${st.driver}) is older than the ${st.driver_needed} these libraries need: ` +
+  "update it (nvidia.com/drivers) first, or text reading and the voice stay on the CPU.";
+const gpuNote = (st) => st.installed && st.active ? `On: text reading and the voice run on your ${st.card}.`
+  : st.installed ? "Downloaded. Close Recap Studio and open it again to use it."
+  : "Removed. Text reading and the voice go back to the CPU when Recap Studio is next started.";
+
+async function renderGpuSettings(st = null) {
+  clearTimeout(gpuPoll);
+  try { st = st && "state" in st ? st : await api("/api/addons/gpu"); } catch { return; }
+  const busy = st.state === "installing", here = st.installed || st.active;
+  $("#gpu-box").hidden = !st.offered;
+  $("#gpu-about").textContent = "The GPU build of ONNX Runtime, the engine text reading and the voice run on, with NVIDIA's " +
+    `CUDA and cuDNN libraries: a ${gpuGB(st)} GB download from PyPI (checked against its SHA-256s) into ${st.folder}, ` +
+    `${st.unpacked_gb} GB once unpacked, not part of the app. It's used from the next start.`;
+  $("#gpu-driver").hidden = !st.driver_old || here;
+  $("#gpu-driver").textContent = st.driver_old ? gpuDriver(st) : "";
+  $("#gpu-off").hidden = here || busy;
+  $("#gpu-download").textContent = `Download GPU support (${gpuGB(st)} GB)`;
+  $("#gpu-busy").hidden = !busy;
+  $("#gpu-on").hidden = !here || busy;
+  $("#gpu-note").textContent = gpuNote(st);
+  $("#gpu-remove").hidden = !st.installed;
+  $("#gpu-stage").textContent = st.message;
+  $("#gpu-bar").style.width = `${Math.round((st.progress || 0) * 100)}%`;
+  $("#gpu-error").textContent = st.state === "error" ? `${st.message}: ${st.error}` : "";
+  const finished = gpuBusy && !busy;
+  gpuBusy = busy;
+  if (busy) gpuPoll = setTimeout(() => renderGpuSettings(), 700);
+  else if (finished) loadEnv();  // the GPU lines say it's downloaded
+}
+$("#gpu-download").addEventListener("click", async () => {
+  try { renderGpuSettings(await api("/api/addons/gpu/install", { method: "POST" })); }
+  catch (e) { $("#gpu-error").textContent = e.message; }
+});
+$("#gpu-cancel").addEventListener("click", async () => renderGpuSettings(await api("/api/addons/gpu/cancel", { method: "POST" })));
+$("#gpu-remove").addEventListener("click", async () => {
+  const st = await api("/api/addons/gpu");
+  if (!await ask("Remove GPU support?", st.active ? "Text reading and the voice then run on the CPU again, from the next " +
+    "start. Your NVIDIA card still encodes the videos." : `Its ${st.unpacked_gb} GB of files are deleted. Text reading and ` +
+    "the voice stay on the CPU.", { ok: "Remove", danger: true })) return;
+  try {
+    renderGpuSettings(await api("/api/addons/gpu", { method: "DELETE" }));
+    loadEnv();
+  } catch (e) { $("#gpu-error").textContent = e.message; }
+});
 
 // ---- subject finder for pan and zoom (U2-Net-p): downloaded on request, never shipped ----
 
 let focusPoll = null;
+let focusInstalled = false;  // the subject finder, for a project's "Pan and zoom toward" (its Video tab)
 async function renderFocusSettings(st = null) {
   clearTimeout(focusPoll);
   try { st = st || await api("/api/addons/focus"); } catch { return; }
@@ -241,6 +397,7 @@ async function renderFocusSettings(st = null) {
   $("#focus-off").hidden = st.installed || busy;
   $("#focus-busy").hidden = !busy;
   $("#focus-on").hidden = !st.installed || busy;
+  focusInstalled = st.installed;
   $("#focus-select").querySelector("option[value=subject]").disabled = !st.installed;
   $("#focus-stage").textContent = st.message;
   $("#focus-bar").style.width = `${Math.round((st.progress || 0) * 100)}%`;
@@ -282,8 +439,7 @@ $("#boxes-remove").addEventListener("click", async () => {
 $("#focus-remove").addEventListener("click", async () => {
   if (!await ask("Remove the subject finder?", "Scenes then zoom toward their middle again.", { ok: "Remove", danger: true })) return;
   try {
-    renderFocusSettings(await api("/api/addons/focus", { method: "DELETE" }));
-    if (globals.motion_focus === "subject") await saveGlobal({ motion_focus: "center" });
+    renderFocusSettings(await api("/api/addons/focus", { method: "DELETE" }));  // (projects set to it zoom to the middle)
     renderGlobal();
   } catch (e) { $("#focus-error").textContent = e.message; }
 });
@@ -703,11 +859,14 @@ function writerLabel() {
 function renderAppLine() {
   if (!globals || !env) return;
   const writer = writerLabel();
-  const style = { motion: ", pan and zoom", stills: ", stills" }[globals.video_style] || "";
-  const fmt = `${globals.resolution || 1080}p ${globals.orientation === "portrait" ? "portrait" : "landscape"} video${style}`;
   const btn = el("button", { type: "button", class: "link-btn", onclick: () => { renderGlobal(); $("#global-dialog").showModal(); } }, "change");
   const voice = { edge: `Edge voice ${globals.edge_voice}`, elevenlabs: "ElevenLabs voice" }[globals.voice_provider] || `voice ${globals.voice}`;
-  $("#app-line").replaceChildren(`Script by ${writer} · ${voice} · ${fmt} (`, btn, ")");
+  if (!current) return $("#app-line").replaceChildren(`Script by ${writer} · ${voice} (`, btn, ")");
+  const s = current.settings;  // the video is the project's own (its Video tab)
+  const style = { motion: ", pan and zoom", stills: ", stills" }[s.video_style] || "";
+  const fmt = `${s.resolution || 1080}p ${s.orientation === "portrait" ? "portrait" : "landscape"} video${style}`;
+  const videoBtn = el("button", { type: "button", class: "link-btn", onclick: () => showTab("video") }, "change");
+  $("#app-line").replaceChildren(`Script by ${writer} · ${voice} (`, btn, `) · ${fmt} (`, videoBtn, ")");
 }
 
 function readInput(input) {
@@ -721,6 +880,11 @@ document.querySelectorAll(".proj-settings [data-key]").forEach((input) => {
     const p = await api(`/api/projects/${current.id}/settings`, { method: "PUT", json: { [input.dataset.key]: readInput(input) } });
     current.settings = p.settings;
     if (input.dataset.key === "youtube_safe") renderPanels();
+    if (input.closest("#video-settings")) {  // (the split rows, the line above the steps, the time left)
+      renderSettings();
+      renderAppLine();
+      loadEstimate();
+    }
   });
 });
 
@@ -2258,7 +2422,9 @@ $("#editors-start").addEventListener("click", async () => {
   const kind = document.querySelector("#editors-dialog input[name=editor-kind]:checked").value;
   $("#editors-dialog").close();
   try {
-    await saveGlobal({ editor_export: kind, editor_transition: $("#editors-transition").value });
+    const s = await api(`/api/projects/${current.id}/settings`, { method: "PUT",  // (the project's own)
+      json: { editor_export: kind, editor_transition: $("#editors-transition").value } });
+    current.settings = s.settings;
     current.job = await api(`/api/projects/${current.id}/run`, {
       method: "POST", json: { steps: ["editors"], chapters: selectedCh.size ? [...selectedCh] : null },
     });
@@ -2496,10 +2662,11 @@ $("#open-file-go").addEventListener("click", async () => {
 // early keeps what was chosen; Settings → Run setup again reopens it.
 
 const SETUP_PAGES = ["computer", "writer", "voice", "video", "extras", "done"];
-const SETUP_TITLES = { computer: "Welcome to Recap Studio", writer: "Script writer", voice: "Voice", video: "Video",
+const SETUP_TITLES = { computer: "Welcome to Recap Studio", writer: "Script writer", voice: "Voice", video: "Video encoding",
   extras: "Optional downloads", done: "All set" };
 const WRITERS = [
   ["claude", "Claude (Anthropic)", "Read the story best in testing: kept track of who was narrating, who said what and what was only imagined. From about 1¢ (Haiku) to 40¢ (Opus) per chapter."],
+  ["claude_code", "Claude Code (your Claude plan)", "Claude on your Claude subscription instead of API credit: a Claude Code agent writes each chapter. Needs Claude Code on this PC (the Claude desktop app includes it), logged in to your Claude account."],
   ["openrouter", "OpenRouter", null],
   ["gemini", "Google Gemini", null],
   ["deepseek", "DeepSeek", null],
@@ -2510,6 +2677,7 @@ const WRITERS = [
 const VOICE_LANGS = { a: "American English", b: "British English", e: "Spanish", f: "French", h: "Hindi", i: "Italian",
   j: "Japanese", p: "Brazilian Portuguese", z: "Mandarin" };
 let setupPage = 0, setupPoll = null, setupKeyNote = null;
+let setupGpuPoll = null;  // (apart from setupPoll: the voice can download at the same time)
 const setupWants = { ocr: true, scan: false, magi: false, magiLicense: false };
 
 function openSetup(page = 0) {
@@ -2531,6 +2699,7 @@ function setupLine(ok, text, ...more) {
 
 async function renderSetup() {
   clearTimeout(setupPoll);
+  clearTimeout(setupGpuPoll);
   const page = SETUP_PAGES[setupPage];
   $("#setup-title").textContent = SETUP_TITLES[page];
   $("#setup-stepno").textContent = `Step ${setupPage + 1} of ${SETUP_PAGES.length}`;
@@ -2546,6 +2715,7 @@ async function renderSetup() {
 
 async function setupComputer(body) {
   const v = await api("/api/addons/voice");
+  const g = await api("/api/addons/gpu");
   const st = await loadStorage();
   body.append(
     el("p", {}, "Recap Studio turns comic and webtoon chapters into narrated recap videos. A few choices first; you can change any of them later in Settings."),
@@ -2558,7 +2728,13 @@ async function setupComputer(body) {
       : setupLine(false, "The voice model isn't downloaded yet. It reads the narration aloud.", voiceDownload(v)),
     env.ffmpeg ? setupLine(true, "ffmpeg found: it puts the videos together.")
       : setupLine(false, "ffmpeg is missing, so videos can't be made. Run setup.ps1 again, or install ffmpeg and restart the app."),
-    env.gpu.available ? setupLine(true, "NVIDIA GPU found: text reading and the voice run on it.")
+    env.gpu.available ? setupLine(true, `NVIDIA GPU found${env.gpu.card ? ` (${env.gpu.card})` : ""}: text reading and the voice run on it.`)
+      : env.gpu.card && g.offered ? setupLine(false, `Text reading and the voice run on the CPU. Your ${env.gpu.card} still encodes ` +
+        "the videos, but this copy carries the CPU build of the engine that reads text and speaks. That works, just more " +
+        "slowly; GPU support, a download, runs them on the card.", gpuDownload(g))
+      : env.gpu.card ? setupLine(false, `Text reading and the voice run on the CPU. Your ${env.gpu.card} still encodes the videos, ` +
+        "but this copy carries the CPU build of the engine that reads text and speaks (a GPU build is about 1.3 GB more). " +
+        "That works, just more slowly.")
       : setupLine(false, "No NVIDIA GPU found: text reading and the voice run on the CPU. That works, just more slowly."),
     env.video && env.video.nvenc ? setupLine(true, `Videos are encoded on the ${env.video.encoder || ""} GPU.`.replace("  ", " "))
       : setupLine(false, "Videos are encoded on the CPU (about half the speed of a GPU encoder)."));
@@ -2568,7 +2744,11 @@ function voiceDownload(st) {
   const box = el("div", { class: "setup-dl" });
   const draw = (s) => {
     clearTimeout(setupPoll);
-    if (s.installed) { box.replaceChildren(el("span", { class: "ok" }, "Downloaded.")); loadEnv(); return; }
+    if (s.installed) {  // the line turns into a tick once the voices are loaded
+      box.replaceChildren(el("span", { class: "ok" }, "Downloaded."));
+      loadEnv().then(() => { if ($("#setup-dialog").open && SETUP_PAGES[setupPage] === "computer") renderSetup(); });
+      return;
+    }
     const busy = s.state === "installing";
     box.replaceChildren(
       busy ? el("div", { class: "bar" }, el("div", { style: `width: ${Math.round(s.progress * 100)}%` })) : "",
@@ -2577,6 +2757,34 @@ function voiceDownload(st) {
       busy ? el("button", { type: "button", class: "ghost small", onclick: async () => draw(await api("/api/addons/voice/cancel", { method: "POST" })) }, "Cancel")
         : el("button", { type: "button", class: "small", onclick: async () => draw(await api("/api/addons/voice/install", { method: "POST" })) }, "Download the voice"));
     if (busy) setupPoll = setTimeout(async () => draw(await api("/api/addons/voice")), 800);
+  };
+  draw(st);
+  return box;
+}
+
+function gpuDownload(st) {
+  const box = el("div", { class: "setup-dl" });
+  const act = (path, method) => async () => {
+    try { draw(await api(path, { method })); } catch (e) { draw({ ...st, state: "error", error: e.message }); }
+  };
+  const draw = (s) => {
+    clearTimeout(setupGpuPoll);
+    const was = st.installed || st.active;
+    st = s;
+    if (s.installed || s.active) {  // used from the next start
+      box.replaceChildren(el("span", { class: "ok" }, gpuNote(s)));
+      if (!was) loadEnv();  // the sidebar's GPU line
+      return;
+    }
+    const busy = s.state === "installing";
+    box.replaceChildren(
+      busy ? el("div", { class: "bar" }, el("div", { style: `width: ${Math.round(s.progress * 100)}%` })) : "",
+      el("span", { class: s.error ? "error" : "muted" }, busy ? s.message : s.error ? `The download failed: ${s.error}`
+        : `${gpuGB(s)} GB from PyPI (${s.unpacked_gb} GB once unpacked): ONNX Runtime's GPU build, with NVIDIA's CUDA and cuDNN.`),
+      !busy && s.driver_old ? el("span", { class: "hint warn" }, gpuDriver(s)) : "",
+      busy ? el("button", { type: "button", class: "ghost small", onclick: act("/api/addons/gpu/cancel", "POST") }, "Cancel")
+        : el("button", { type: "button", class: "small", onclick: act("/api/addons/gpu/install", "POST") }, "Download GPU support"));
+    if (busy) setupGpuPoll = setTimeout(async () => draw(await api("/api/addons/gpu")), 800);
   };
   draw(st);
   return box;
@@ -2594,8 +2802,41 @@ function setupWriter(body) {
     writerDetails(p));
 }
 
+// Claude Code (claude_code.py): on this PC, and logged in? As Settings → Script writer shows it
+function claudeCodeDetails(box) {
+  const status = el("div", { class: "muted" }, "Looking for Claude Code…");
+  const login = el("button", { type: "button", hidden: true }, "Log in to Claude Code");
+  const check = async (refresh) => {
+    let st;
+    try { st = await api(`/api/claude-code${refresh ? "?refresh=true" : ""}`); }
+    catch (e) { status.className = "bad"; status.textContent = e.message; return; }
+    login.hidden = !st.found || st.logged_in;
+    status.className = st.found && st.logged_in && st.skill ? "ok" : "bad";
+    status.textContent = !st.found ? "Claude Code wasn't found on this PC. Install it (claude.com/code), or the Claude desktop app, which includes it, then press Check again."
+      : !st.logged_in ? `Claude Code ${st.version} is here, but not logged in yet.`
+      : !st.skill ? "Claude Code is ready, but the narration skill its agents follow is missing from the app's folder."
+      : `✓ Claude Code ${st.version}, logged in to your Claude account.`;
+  };
+  login.addEventListener("click", async () => {
+    try {
+      await api("/api/claude-code/login", { method: "POST" });
+      status.className = "muted";
+      status.textContent = "Finish signing in in the window and browser that opened, then press Check again.";
+    } catch (e) { notify(e.message); }
+  });
+  const sel = el("select", { onchange: () => saveGlobal({ claude_code_model: sel.value }) },
+    el("option", { value: "opus" }, "Opus (the best writer)"), el("option", { value: "sonnet" }, "Sonnet (faster, uses less of your plan)"));
+  sel.value = globals.claude_code_model || "opus";
+  box.append(status, el("div", { class: "key-row" }, login, el("button", { type: "button", class: "ghost small", onclick: () => check(true) }, "Check again")),
+    el("label", {}, "Model ", sel),
+    el("span", { class: "hint" }, "Each chapter uses your Claude plan's usage. If it runs out, the job pauses until it resets."));
+  check(false);
+  return box;
+}
+
 function writerDetails(p) {
   const box = el("div", { class: "setup-details" });
+  if (p === "claude_code") return claudeCodeDetails(box);
   if (p === "ollama") {
     const models = env.ollama_models.map((m) => m.name);
     if (env.ollama_error) {
@@ -2695,28 +2936,21 @@ function setupVoice(body) {
 
 function setupVideo(body) {
   const line = el("p", { class: "muted" });
-  const showSpeed = async () => {
-    const q = new URLSearchParams({ resolution: globals.resolution, fps: globals.fps, video_style: globals.video_style,
-      video_encoder: globals.video_encoder });
+  const showSpeed = async () => {  // (at the usual 1080p, 30 fps)
+    const q = new URLSearchParams({ resolution: 1080, fps: 30, video_style: "auto", video_encoder: globals.video_encoder });
     try {
       const r = await api(`/api/video-speed?${q}`);
-      line.textContent = `With these choices, an hour of video takes ${aboutTime(r.seconds_per_hour)} to make on this computer.`;
+      line.textContent = `At 1080p and 30 fps, an hour of video takes ${aboutTime(r.seconds_per_hour)} to make on this computer.`;
     } catch { line.textContent = ""; }
   };
-  const field = (key, label, options, numeric = false) => {
-    const sel = el("select", {}, ...options.map(([v, t]) => el("option", { value: v }, t)));
-    sel.value = String(globals[key]);
-    sel.addEventListener("change", async () => { await saveGlobal({ [key]: numeric ? Number(sel.value) : sel.value }); showSpeed(); });
-    return el("label", {}, `${label} `, sel);
-  };
-  body.append(el("p", {}, "How the videos look. Smaller sizes and lower frame rates are quicker to make."),
-    field("orientation", "Format", [["landscape", "Landscape (YouTube)"], ["portrait", "Portrait (Shorts, TikTok, Reels)"]]),
-    field("resolution", "Resolution", [[1080, "1080p"], [720, "720p"], [480, "480p"], [360, "360p"]], true),
-    field("fps", "Frame rate", [[60, "60 fps"], [50, "50 fps"], [30, "30 fps"], [25, "25 fps"], [24, "24 fps"], [20, "20 fps"],
-      [15, "15 fps"], [12, "12 fps"], [10, "10 fps"], [5, "5 fps (stills)"]], true),
-    field("video_style", "Style", [["auto", "Automatic (scroll webtoons)"], ["motion", "Pan and zoom, scene by scene"],
-      ["stills", "Stills, scene by scene"]]),
-    ...(env.video && env.video.nvenc ? [field("video_encoder", "Encoder", [["auto", `${env.video.encoder || "GPU"} GPU (fast)`], ["cpu", "CPU only"]])] : []),
+  const gpu = env.video && env.video.nvenc;
+  const sel = el("select", {}, el("option", { value: "auto" }, gpu ? `${env.video.encoder || "GPU"} GPU (fast)` : "Automatic"),
+    el("option", { value: "cpu" }, "CPU only"));
+  sel.value = globals.video_encoder;
+  sel.addEventListener("change", async () => { await saveGlobal({ video_encoder: sel.value }); showSpeed(); });
+  body.append(el("p", {}, "Each project picks its own format, size and style when you create it. Here: what turns the frames into a video file, for every project."),
+    gpu ? el("label", {}, "Encoder ", sel)
+      : setupLine(false, "No GPU video encoder was found, so videos are encoded on the CPU (about half the speed)."),
     line);
   showSpeed();
 }
@@ -2751,15 +2985,19 @@ async function startSetupDownloads() {
   return true;
 }
 
-function setupDone(body) {
-  const style = { auto: "", motion: ", pan and zoom", stills: ", stills" }[globals.video_style] || "";
+async function setupDone(body) {
+  const gpu = env.video && env.video.nvenc && globals.video_encoder !== "cpu";
+  const g = await api("/api/addons/gpu").catch(() => ({}));  // GPU support, if it was downloaded on the first page
   body.append(el("p", {}, "You're set. Everything chosen here is also in Settings, and Settings → Run setup again brings this back."),
     el("ul", { class: "setup-summary" },
       el("li", {}, `Script: ${writerLabel()}`),
       el("li", {}, `Voice: ${globals.voice}, speed ${globals.speed}`),
-      el("li", {}, `Video: ${globals.resolution}p ${globals.orientation}, ${globals.fps} fps${style}`)),
+      el("li", {}, `Videos encoded on the ${gpu ? `${env.video.encoder || ""} GPU`.trim() : "CPU"}`),
+      g.offered && !g.active && g.installed ? el("li", {}, "GPU support downloaded: close Recap Studio and open it again to use it")
+        : g.offered && g.state === "installing" ? el("li", {}, "GPU support still downloading: once it's done, close Recap " +
+          "Studio and open it again to use it") : ""),
     el("p", {}, $("#projects").children.length ? "Open a project from the list to carry on."
-      : "To start, import a folder of chapter images: the steps across the top then turn it into a video."));
+      : "To start, type a name at the top left and press Create: a few questions set up how its video looks."));
 }
 
 async function finishSetup() {

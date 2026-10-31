@@ -135,6 +135,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .5); }
 .job { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
 .job-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); transition: width .3s; }  /* (a download's fill, its width set as it goes) */
 #job-bar { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
 #job-msg { flex: 1; }
 .job.paused { border-color: var(--warn); }

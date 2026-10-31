@@ -21,10 +21,10 @@ Both carry their own Python with every package, so there's nothing else to insta
 
 - **Projects**: one folder per project, named after it, in `Documents\Recap Studio`. **Settings → Projects folder** moves them anywhere (another drive, say), and **⋯ → Show in folder** opens a project's folder. First-run setup shows the folder, and warns when OneDrive or another cloud service syncs it: a recap runs to several GB.
 - **Settings, API keys and logs**: `%APPDATA%\Recap Studio`.
-- **The voice model and the add-ons**: `%LOCALAPPDATA%\Recap Studio` (gigabytes, so kept out of roaming profiles).
+- **The voice model and the add-ons** (GPU support among them): `%LOCALAPPDATA%\Recap Studio` (gigabytes, so kept out of roaming profiles).
 - **The portable copy** keeps all of it next to itself instead: `data` (with `data\projects`) and `models`.
 
-Copies installed by 0.1.0 kept everything next to the app; the first start after updating moves it to these places. The window uses WebView2, which comes with Windows 11 and current Windows 10. The packaged app reads text and voices lines on the CPU; for NVIDIA GPU acceleration, run it from source (below), where `setup.ps1` installs the GPU build.
+Copies installed by 0.1.0 kept everything next to the app; the first start after updating moves it to these places. The window uses WebView2, which comes with Windows 11 and current Windows 10. The packaged app carries the CPU build of ONNX Runtime, the engine text reading and the voice run on; with an NVIDIA card, **GPU support** (offered in first-run setup and Settings → Performance) downloads the GPU build, 1.3 GB, so they run on the card instead (see [GPU](#gpu)).
 
 **Updates**: once per start the app asks GitHub whether a newer release is out (one request to GitHub's API, with nothing about you in it; Settings → Updates turns it off, or checks now). When there is one, **⬆ Update to x.y.z** appears at the bottom of the sidebar. It shows what's new, then **Update now** downloads the release's file, checks it against the SHA-256 GitHub lists for it, closes the app, installs it and opens it again: an installed copy runs the new setup, and a portable copy swaps in the new program files, putting the old ones back if anything goes wrong. Your projects, settings and models are never touched. It waits while a job is running. **Skip this version** hides the button until the next release. A copy run from source isn't checked: `git pull` updates it.
 
@@ -44,10 +44,10 @@ This creates `.venv`, installs packages, and downloads the Kokoro voice model (a
 
 The first time the app opens, a short setup walks through everything you'd otherwise look for in Settings, saving each choice as you make it:
 
-1. **This computer**: whether the voice model, ffmpeg, an NVIDIA GPU and a GPU video encoder (NVIDIA, AMD or Intel) are there. If the voice model is missing (setup.ps1 skipped or failed), it downloads it (354 MB from the kokoro-onnx project's GitHub release, checked against its size and SHA-256).
-2. **Script writer**: Claude, OpenRouter, Google Gemini, DeepSeek, Groq, Mistral or a local model, with the API key and model for the one you pick (or how to install Ollama).
+1. **This computer**: where projects are saved (with **Change…**), and whether the voice model, ffmpeg, an NVIDIA GPU and a GPU video encoder (NVIDIA, AMD or Intel) are there. If the voice model is missing (setup.ps1 skipped or failed), it downloads it (354 MB from the kokoro-onnx project's GitHub release, checked against its size and SHA-256). The installed app reads text and voices lines on the CPU even with an NVIDIA card (it carries the CPU build of ONNX Runtime); the card still encodes the videos, and setup says which is which. With a card, the CPU line has a **Download GPU support** button (1.3 GB, see [GPU](#gpu)), with Cancel; it's used from the next start.
+2. **Script writer**: Claude, Claude Code (your Claude plan, with its sign-in), OpenRouter, Google Gemini, DeepSeek, Groq, Mistral or a local model, with the API key and model for the one you pick (or how to install Ollama).
 3. **Voice**: pick a Kokoro voice and speed, and play a sample (Settings → Voice also has Microsoft Edge's online voices and ElevenLabs).
-4. **Video**: format, resolution, frame rate, style and encoder, with how long an hour of video takes on this computer with those choices.
+4. **Video encoding**: the GPU's encoder or the CPU, with how long an hour of 1080p video takes on this computer. How each video looks is chosen per project, when it's created.
 5. **Optional downloads**: the English text-reading model (ticked; 9 MB), the character scan models (586 MB) and Magi (4.9 GB, after agreeing to its license). They download in the background.
 6. A summary.
 
@@ -72,8 +72,15 @@ To use your normal browser instead:
 A project opens on an overview: four tiles saying how far the chapters, script, voice and video are, and one main
 button that does whatever comes next (**Make the recap**, **Continue the recap**, or **Make the video again**), with
 the time it takes beside it. Below are tabs: **Chapters**, **Script** (the scenes and their narration),
-**Characters** and **Video** (the player, its files and YouTube-safe). Saving the project as a file, removing all
-chapters and deleting the project are in the **⋯** menu.
+**Characters** and **Video** (the player, its files, the project's video settings and YouTube-safe). Showing the
+project's folder, saving the project as a file, removing all chapters and deleting the project are in the **⋯** menu.
+
+**New project**: type a name at the top left and press **Create**. Three questions follow, starting from your last
+project's answers: what kind of comic it is (webtoon, manga, a left-to-right comic, or not sure); how its video
+looks (landscape or portrait, automatic, pan and zoom or stills, resolution and frame rate, with how long an hour of
+it takes to make on this computer); and whether it's YouTube-safe. The video settings are the project's own from
+then on: its **Video** tab changes them. (Until 0.1.1 they were app-wide; each project made before keeps the
+choices it was made with.) The encoder is the one app-wide video setting (Settings → Video).
 
 **Advanced mode** (the switch at the bottom of the sidebar, remembered) shows everything else: the step buttons,
 ticking chapters to work on just those, each chapter's counts, reordering and your own voice-over, Export for
@@ -81,7 +88,7 @@ editors, the **Prompt** and **Project settings** tabs, the text read from each s
 selected scenes, and the rest of Settings (performance, text reading, the add-ons, Magi, the finer video options).
 In simple mode, long help text shows two lines: hover it for the rest, or click it.
 
-1. Create a project and click **Import folder…**. Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file. Review the list, untick anything you don't want, and import.
+1. Create a project (the New project questions above) and click **Add chapters** or **Import folder…**. Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file. Review the list, untick anything you don't want, and import.
    - Chapters and pages are sorted naturally (`Chapter 2` before `Chapter 10`, `144.5` after `144`).
    - A chapter is named after its folder. Generic image folders like `pages` or `images` are skipped (`Chapter 3/pages` is named "Chapter 3"), and parent folders are added only when two chapters would otherwise share a name (`Season 1 / Chapter 1`).
    - Images in folders are read where they are, not copied, so keep the source folder in place (re-import if you move it). Pages inside `.cbz`/`.zip` files are extracted into the project.
@@ -106,7 +113,7 @@ The video is made one chapter at a time. Each chapter is kept as a finished piec
 - The pieces take about as much disk space as the video. Old versions of a chapter are deleted when it's made again, and a deleted chapter's pieces go with it.
 - The time estimate for Render video counts the chapters still to make, plus joining them all into the video (about a minute and a half per hour of video, on one CPU thread; the app learns this computer's own speed). The progress bar gives each its share: it moves with ffmpeg's position while the chapters are joined, instead of waiting at the end.
 
-**Split into parts** (Settings → Video): one video; a new video every N chapters; or videos of at most N hours (YouTube takes up to 12 hours per video; the default is 11). Parts are cut between chapters, from each chapter's exact length, and named `recap - Part 2 (Chapter 21 to Chapter 40).mp4` and so on, each with its own subtitles, narration and chapter list. Changing the split only joins the pieces again, which takes about a minute and a half per hour of video.
+**Split into parts** (the project's Video tab, advanced mode): one video; a new video every N chapters; or videos of at most N hours (YouTube takes up to 12 hours per video; the default is 11). Parts are cut between chapters, from each chapter's exact length, and named `recap - Part 2 (Chapter 21 to Chapter 40).mp4` and so on, each with its own subtitles, narration and chapter list. Changing the split only joins the pieces again, which takes about a minute and a half per hour of video.
 
 **YouTube chapters**: next to each video is `<name> - YouTube chapters.txt`, one line per chapter with its start time (`0:00 Chapter 1`, `6:12 Chapter 2`, or `1:02:05 …` past an hour). Paste it into the video's description and YouTube shows the chapters on the timeline (it needs at least three, each 10 seconds or longer). Under the player, the app has a button for each part and links to its subtitles and chapter list.
 
@@ -125,7 +132,7 @@ Choose what it's made for:
 
 **Transitions** (for DaVinci Resolve, in the export dialog): *Cross dissolve* like the video, or one of Resolve's own: *Slide*, *Push*, *Blur dissolve*, *Smooth cut*, or *Mixed* (dissolve, slide, push and blur in turn, the same on both video tracks at each cut). They come in with Resolve's default settings, to change in the Inspector; other editors may show them as a plain dissolve or a cut. They're written the way Resolve itself exports a transition (OpenTimelineIO's sample of a Resolve export has one), with Resolve's numbers for each transition taken from RecapSynth's export. The rendered video and the *Any editor* export keep cross dissolves.
 
-To open it in Resolve, first set the project's timeline resolution and frame rate to the video's (Settings → Video) and keep **Image scaling** on *Scale entire image to fit* (the default; the keyframes are worked out from it). Then use **File → Import → Timeline** and pick the `.otioz`. Premiere Pro opens OpenTimelineIO from version 25.6. For an editor that can't open `.otioz`, rename it to `.zip`, unzip it and open `content.otio` (its media is next to it in `media\`).
+To open it in Resolve, first set the project's timeline resolution and frame rate to the video's (the project's Video tab) and keep **Image scaling** on *Scale entire image to fit* (the default; the keyframes are worked out from it). Then use **File → Import → Timeline** and pick the `.otioz`. Premiere Pro opens OpenTimelineIO from version 25.6. For an editor that can't open `.otioz`, rename it to `.zip`, unzip it and open `content.otio` (its media is next to it in `media\`).
 
 How it was checked, on the test series:
 
@@ -290,7 +297,7 @@ The **Prompt** tab (advanced mode) and the **Characters** tab control how the sc
 
 For each batch of panels the model gets those instructions, the last few narration lines for continuity, the text read from each panel and (with **Show panel images to the model** on, and a vision model like gemma) the panel images. Everything goes in one message: in testing, gemma ignored rules such as past tense when they were sent as a separate system message.
 
-Project settings (per project, in advanced mode) cover layout (auto / webtoon / pages), reading direction and the webtoon video; Settings (app-wide) cover the script writer, voice and speed, and the video's format, resolution, frame rate, style, timing and crossfades.
+Project settings (per project, in advanced mode) cover layout (auto / webtoon / pages), reading direction and the webtoon video; the project's Video tab covers the video's format, resolution, frame rate, style, timing and crossfades; Settings (app-wide) cover the script writer, voice and speed, and the video encoder.
 
 To delete a project, hover it in the sidebar and click the trash icon (or use **Delete** at the top of an open project). This removes the project's panels, audio and videos; folders you imported from are never touched. A project can't be deleted while a job is running on it.
 
@@ -335,16 +342,25 @@ Magi v2 (Ragav Sachdeva, Gyungin Shin and Andrew Zisserman, University of Oxford
 
 - `data\projects\<project name>\` (or the projects folder chosen in Settings) holds `project.json`, `pages\`, `panels\`, `audio\`, `output\`, `characters\` (character pictures), `render\` (each chapter's finished video piece, reused by the next render; safe to delete, at the cost of rendering everything again), `editors\` (each chapter's video for **Export for editors** → Any editor, reused the same way), `textless\` (the pictures without their text, reused the same way), `voiceover\` (your recordings) and `focus.json` (each scene's subject).
 - `data\settings.json` holds the app-wide settings, `data\speeds.json` the speeds learned for time estimates, and `data\*_key.txt` the API keys (the script writers' and ElevenLabs').
-- `data\addons\magi\`, `data\addons\charscan\`, `data\addons\ocr_en\`, `data\addons\focus\`, `data\addons\boxes\` and `data\addons\vosk\` hold the Magi add-on, the character scan models, the English text model, the subject finder, the box finder and the speech recognizer when downloaded; each project's `scan\` holds the last scan's snapshots, and `models\` the voice model.
-- `recap\` holds the code: `importer.py` (folder scan and chapter import), `panels.py`, `ocr.py`, `script.py`, `claude.py` and `cloud.py` (the online script writers), `tts.py` and `online_voices.py` (the voices), `voiceover.py` (your own recording), `video.py`, `focus.py` (the scenes' subjects), `textless.py` (the pictures without text), `cover.py` (black boxes and the box finder), `editors.py` (export for video editors), `package.py` (project files), `credits.py` (the scan group's pages), `estimates.py` (time estimates), `magi.py` and `magi_worker.py` (the Magi add-on), `charscan.py` (character scan), `pipeline.py` (steps and the background worker), `server.py` (local API, 127.0.0.1 only) and `web\` (the interface).
+- `data\addons\magi\`, `data\addons\charscan\`, `data\addons\ocr_en\`, `data\addons\focus\`, `data\addons\boxes\`, `data\addons\vosk\` and `data\addons\gpu\` hold the Magi add-on, the character scan models, the English text model, the subject finder, the box finder, the speech recognizer and GPU support when downloaded; each project's `scan\` holds the last scan's snapshots, and `models\` the voice model.
+- `recap\` holds the code: `importer.py` (folder scan and chapter import), `panels.py`, `ocr.py`, `script.py`, `claude.py` and `cloud.py` (the online script writers), `tts.py` and `online_voices.py` (the voices), `voiceover.py` (your own recording), `video.py`, `focus.py` (the scenes' subjects), `textless.py` (the pictures without text), `cover.py` (black boxes and the box finder), `editors.py` (export for video editors), `package.py` (project files), `credits.py` (the scan group's pages), `estimates.py` (time estimates), `magi.py` and `magi_worker.py` (the Magi add-on), `charscan.py` (character scan), `gpu.py` (the NVIDIA GPU, and GPU support), `pipeline.py` (steps and the background worker), `server.py` (local API, 127.0.0.1 only) and `web\` (the interface).
 
 ### Shipping the app
 
-The app is shipped without models. `setup.ps1` downloads the Kokoro voice into `models\` (first-run setup can also download it), Ollama models come from Ollama, and Magi, the character scan models, the English text model, the subject finder, the box finder and the speech recognizer are downloaded from inside the app. When packaging, leave out `models\`, `data\` (projects, settings, API keys, learned speeds, add-ons) and `.venv\`. A fresh install then opens with the first-run setup.
+The app is shipped without models. `setup.ps1` downloads the Kokoro voice into `models\` (first-run setup can also download it), Ollama models come from Ollama, and Magi, the character scan models, the English text model, the subject finder, the box finder, the speech recognizer and GPU support are downloaded from inside the app. When packaging, leave out `models\`, `data\` (projects, settings, API keys, learned speeds, add-ons) and `.venv\`. A fresh install then opens with the first-run setup.
 
 ## GPU
 
-With an NVIDIA graphics card, `setup.ps1` installs the GPU build of ONNX Runtime (with NVIDIA's CUDA and cuDNN libraries, about 1.3 GB), and text reading and the voice run on the GPU. On an RTX 5060 Ti that measured about 0.28 s per panel for text reading (vs 0.81 s on the CPU) and 0.39 s per narration line for the voice (vs 2.11 s). Settings → Performance turns it off; if the GPU can't be used, both quietly run on the CPU, and the sidebar shows which. AMD and Intel graphics cards aren't used for text reading or the voice (they run on the CPU), but they do encode video (below).
+With an NVIDIA graphics card and the GPU build of ONNX Runtime (with NVIDIA's CUDA and cuDNN libraries, about 1.3 GB), text reading and the voice run on the GPU. On an RTX 5060 Ti that measured about 0.28 s per panel for text reading (vs 0.81 s on the CPU) and 0.39 s per narration line for the voice (vs 2.11 s). Settings → Performance turns it off; if the GPU can't be used, both quietly run on the CPU, and the sidebar shows which. AMD and Intel graphics cards aren't used for text reading or the voice (they run on the CPU), but they do encode video (below).
+
+Where the GPU build comes from:
+
+- **From source**, `setup.ps1` installs it into `.venv` when it finds an NVIDIA card (`onnxruntime-gpu[cuda,cudnn]==1.31.0`).
+- **The installer and the portable zip** carry the CPU build in their own Python, which an installed copy can't change (Program Files is read-only). **GPU support** is the GPU build as an optional download, offered when there's an NVIDIA card and the copy has only the CPU build: a **Download GPU support** button on first-run setup's CPU line, and a box under Settings → Performance (advanced mode). It's the same wheels `setup.ps1` installs, for the app's Python 3.12: ONNX Runtime GPU 1.31.0, NVIDIA's CUDA 13 libraries (runtime, cuBLAS, cuFFT, cuRAND, NVRTC, nvJitLink) and cuDNN 9.27, 1.33 GB from PyPI's file server, each wheel pinned in `recap\gpu.py` with its size and SHA-256 and checked as it comes in, with progress and Cancel (nothing half-downloaded is kept). They're unpacked into `addons\gpu` (`%LOCALAPPDATA%\Recap Studio\addons\gpu` for an installed copy), 1.9 GB on disk; about 3.2 GB must be free while they unpack. On the RTX 5060 Ti the download and unpacking took under a minute.
+- GPU support is used from the next start: the app puts `addons\gpu` first on Python's import path before anything loads ONNX Runtime, so the GPU build is loaded instead of the CPU one, and it loads its CUDA and cuDNN libraries from beside it. Until then Settings, setup and the sidebar say it's downloaded and needs a restart. CUDA 13 needs NVIDIA driver 580 or newer; when the driver is older, Settings and setup say so before you download.
+- **Remove GPU support** (Settings → Performance) puts text reading and the voice back on the CPU. Once loaded, its libraries can't be deleted while the app runs, so the app forgets it at once and deletes its files on the next start; removed before a restart, it's deleted straight away.
+
+Tested on a copy of the portable build made to look installed, with its own `%APPDATA%` and `%LOCALAPPDATA%`: before the download both ran on the CPU (a voice sample in about 2.2 s); after it and a restart, both reported GPU (the same sample in 0.33 s); after Remove and a restart, the folder was gone and both were on the CPU again.
 
 ### Video export
 

@@ -140,6 +140,30 @@
         <div id="package-out" class="editors-out" hidden></div>
       </section>
       <div class="settings proj-settings">
+        <fieldset id="video-settings">
+          <legend>Video settings</legend>
+          <span class="hint">For this project. They apply the next time the video is made.</span>
+          <label>Format <select data-key="orientation"><option value="landscape">Landscape (YouTube)</option><option value="portrait">Portrait (Shorts, TikTok, Reels)</option></select></label>
+          <label>Resolution
+            <select data-key="resolution" data-type="number"><option value="1080">1080p (1920×1080)</option><option value="720">720p (1280×720)</option><option value="480">480p (854×480)</option><option value="360">360p (640×360)</option></select></label>
+          <label>Style
+            <select data-key="video_style"><option value="auto">Automatic (scroll webtoons)</option><option value="motion">Pan and zoom, scene by scene</option><option value="stills">Stills, scene by scene</option></select></label>
+          <label class="adv">Frame rate
+            <select data-key="fps" data-type="number"><option value="60">60 fps</option><option value="50">50 fps</option><option value="30">30 fps</option><option value="25">25 fps</option><option value="24">24 fps</option><option value="20">20 fps</option><option value="15">15 fps</option><option value="12">12 fps</option><option value="10">10 fps</option><option value="5">5 fps (stills)</option></select></label>
+          <label class="adv">Pan and zoom toward
+            <select data-key="motion_focus" id="focus-select"><option value="center">The middle of the scene</option><option value="subject">The scene's main subject (needs the subject finder, Settings → Video)</option></select></label>
+          <label class="check adv"><input data-key="remove_text" type="checkbox"> Remove the text from the pictures (speech bubbles and captions)</label>
+          <span class="hint adv">The text is found by the same reader as Read text and painted over where it sits on a plain background, as in speech bubbles and caption boxes. Text drawn over the artwork (sound effects, signs) and bubbles with busy surroundings are left. The first video made this way reads every picture again (about as long as Read text); the cleaned pictures are then kept in the project's textless folder and reused.</span>
+          <label class="adv">Minimum seconds per scene <input data-key="min_panel_seconds" type="number" step="0.1" min="0.5"></label>
+          <label class="adv">Pause after narration (s) <input data-key="pad_seconds" type="number" step="0.05" min="0"></label>
+          <label class="adv">Crossfade (s) <input data-key="transition_seconds" type="number" step="0.05" min="0" max="2"></label>
+          <label class="adv">Split into parts
+            <select data-key="video_split"><option value="none">One video</option><option value="chapters">A new video every few chapters</option><option value="hours">Videos of at most a few hours</option></select></label>
+          <label id="split-chapters-row" class="adv">Chapters per video <input data-key="video_split_chapters" type="number" min="1" max="1000"></label>
+          <label id="split-hours-row" class="adv">Hours per video, at most <input data-key="video_split_hours" type="number" step="0.5" min="0.5" max="48"></label>
+          <span class="hint adv">Each part gets its own subtitles and YouTube chapter list. YouTube takes up to 12 hours per video. Chapters already rendered are reused, so changing how the video is split, or re-rendering after editing a chapter, only makes what changed.</span>
+          <span class="hint">Automatic scrolls webtoon chapters and pans and zooms other comics. Smaller sizes render much faster: 720p has under half the pixels of 1080p, 360p about a ninth.</span>
+        </fieldset>
         <fieldset>
           <legend>YouTube</legend>
           <label class="check"><input data-key="youtube_safe" type="checkbox"> YouTube-safe, for an age-restricted video</label>
@@ -317,17 +341,12 @@
       </fieldset>
       <fieldset>
         <legend>Video</legend>
-        <label>Format <select data-key="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
-        <label>Resolution
-          <select data-key="resolution" data-type="number"><option value="1080">1080p (1920×1080)</option><option value="720">720p (1280×720)</option><option value="480">480p (854×480)</option><option value="360">360p (640×360)</option></select></label>
-        <label class="adv">Frame rate
-          <select data-key="fps" data-type="number"><option value="60">60 fps</option><option value="50">50 fps</option><option value="30">30 fps</option><option value="25">25 fps</option><option value="24">24 fps</option><option value="20">20 fps</option><option value="15">15 fps</option><option value="12">12 fps</option><option value="10">10 fps</option><option value="5">5 fps (stills)</option></select></label>
-        <label class="adv">Style
-          <select data-key="video_style"><option value="auto">Automatic (scroll webtoons)</option><option value="motion">Pan and zoom, scene by scene</option><option value="stills">Stills, scene by scene</option></select></label>
+        <span class="hint">Each project has its own format, size and style, chosen when it's made and changed in its Video tab.</span>
+        <label>Encoder
+          <select data-key="video_encoder"><option value="auto">Automatic (the GPU's encoder when available: NVIDIA, AMD or Intel)</option><option value="cpu">CPU only</option></select></label>
         <div id="focus-box" class="focus-box adv">
-          <label>Pan and zoom toward
-            <select data-key="motion_focus" id="focus-select"><option value="center">The middle of the scene</option><option value="subject">The scene's main subject</option></select></label>
-          <span class="hint">For scenes shown one at a time that zoom in. The main subject (usually the character) is found by U2-Net-p, a small open model (Apache 2.0): a 4.6 MB download into data\addons\focus, not part of the app. Each scene is looked at once (about 0.03 s on an NVIDIA GPU, 0.2 s on the CPU).</span>
+          <span class="field-head">Subject finder (pan and zoom toward the subject)</span>
+          <span class="hint">A project can pan and zoom toward each scene's main subject (its Video tab) instead of its middle. The main subject (usually the character) is found by U2-Net-p, a small open model (Apache 2.0): a 4.6 MB download into data\addons\focus, not part of the app. Each scene is looked at once (about 0.03 s on an NVIDIA GPU, 0.2 s on the CPU).</span>
           <div id="focus-off" class="magi-part"><button type="button" id="focus-download">Download the subject finder (4.6 MB)</button></div>
           <div id="focus-busy" class="magi-part" hidden>
             <span id="focus-stage"></span>
@@ -350,17 +369,6 @@
           <div id="boxes-on" class="magi-part" hidden><button type="button" id="boxes-remove" class="ghost small danger">Remove the box finder</button></div>
           <div id="boxes-error" class="error"></div>
         </div>
-        <label class="check adv"><input data-key="remove_text" type="checkbox"> Remove the text from the pictures (speech bubbles and captions)</label>
-        <span class="hint adv">The text is found by the same reader as Read text and painted over where it sits on a plain background, as in speech bubbles and caption boxes. Text drawn over the artwork (sound effects, signs) and bubbles with busy surroundings are left. The first video made this way reads every picture again (about as long as Read text); the cleaned pictures are then kept in the project's textless folder and reused.</span>
-        <label class="adv">Minimum seconds per scene <input data-key="min_panel_seconds" type="number" step="0.1" min="0.5"></label>
-        <label class="adv">Pause after narration (s) <input data-key="pad_seconds" type="number" step="0.05" min="0"></label>
-        <label class="adv">Crossfade (s) <input data-key="transition_seconds" type="number" step="0.05" min="0" max="2"></label>
-        <label class="adv">Split into parts
-          <select data-key="video_split"><option value="none">One video</option><option value="chapters">A new video every few chapters</option><option value="hours">Videos of at most a few hours</option></select></label>
-        <label id="split-chapters-row" class="adv">Chapters per video <input data-key="video_split_chapters" type="number" min="1" max="1000"></label>
-        <label id="split-hours-row" class="adv">Hours per video, at most <input data-key="video_split_hours" type="number" step="0.5" min="0.5" max="48"></label>
-        <span class="hint adv">Each part gets its own subtitles and YouTube chapter list. YouTube takes up to 12 hours per video. Chapters already rendered are reused, so changing how the video is split, or re-rendering after editing a chapter, only makes what changed.</span>
-        <span class="hint adv">Automatic scrolls webtoon chapters (when the project's Webtoon video says so) and pans and zooms other comics. Smaller sizes and lower frame rates render much faster: 720p has under half the pixels of 1080p, 360p about a ninth. Scrolling and pan and zoom look smooth from about 24 fps; stills look the same at any rate, and are the quickest to make.</span>
       </fieldset>
       <fieldset class="adv">
         <legend>Performance</legend>
@@ -368,8 +376,22 @@
         <label>Work on this many panels / lines at once
           <select data-key="parallel_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
         <span class="hint" id="gpu-status"></span>
-        <label>Video encoder
-          <select data-key="video_encoder"><option value="auto">Automatic (the GPU's encoder when available: NVIDIA, AMD or Intel)</option><option value="cpu">CPU only</option></select></label>
+        <div id="gpu-box" class="focus-box" hidden>
+          <span class="field-head">GPU support (text reading and the voice on the NVIDIA GPU)</span>
+          <span class="hint" id="gpu-about"></span>
+          <span class="hint warn" id="gpu-driver" hidden></span>
+          <div id="gpu-off" class="magi-part"><button type="button" id="gpu-download">Download GPU support</button></div>
+          <div id="gpu-busy" class="magi-part" hidden>
+            <span id="gpu-stage"></span>
+            <div class="bar"><div id="gpu-bar"></div></div>
+            <button type="button" id="gpu-cancel" class="ghost small">Cancel download</button>
+          </div>
+          <div id="gpu-on" class="magi-part" hidden>
+            <span class="hint" id="gpu-note"></span>
+            <button type="button" id="gpu-remove" class="ghost small danger">Remove GPU support</button>
+          </div>
+          <div id="gpu-error" class="error"></div>
+        </div>
         <label>Draw video frames in this many processes
           <select data-key="video_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
         <span class="hint" id="video-status"></span>
@@ -455,6 +477,23 @@
 </dialog>
 
 <!-- first-run setup: shown until finished or skipped; Settings → Run setup again reopens it -->
+<!-- New project: what kind of comic, how its video looks, YouTube-safe; then the project is made -->
+<dialog id="new-dialog" class="wide-dialog">
+  <form method="dialog" class="import-form">
+    <div class="setup-head">
+      <h2 id="new-title"></h2>
+      <span id="new-stepno" class="muted"></span>
+    </div>
+    <div id="new-body" class="setup-body"></div>
+    <div class="import-actions">
+      <button value="cancel" class="ghost">Cancel</button>
+      <span class="grow"></span>
+      <button id="new-back" type="button" class="ghost">Back</button>
+      <button id="new-next" type="button" class="primary">Next</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="setup-dialog" class="wide-dialog">
   <form method="dialog" class="import-form">
     <div class="setup-head">

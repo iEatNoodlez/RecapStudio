@@ -64,6 +64,8 @@ def main():
     args = ap.parse_args()
     from .store import move_old_layout
     move_old_layout()  # an installed copy that kept its data beside itself: before anything reads its settings
+    from . import gpu
+    gpu.activate()  # the downloaded GPU build of ONNX Runtime, if any: before anything imports onnxruntime
 
     port = args.port or _free_port()
     config = uvicorn.Config("recap.server:app", host="127.0.0.1", port=port, log_level="warning")

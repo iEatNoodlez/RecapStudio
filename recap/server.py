@@ -41,6 +41,7 @@ async def _fresh_page(request, call_next):
 def _startup():
     store.move_old_layout()  # an installed copy that kept its data beside itself (__main__ does it first)
     store.name_folders()     # folders still named by project id take their project's name
+    store.move_video_settings()  # video settings were app-wide until 0.1.1: each project keeps its own
     pipeline.start_worker()
 
 
@@ -59,8 +60,18 @@ def list_projects():
 
 
 @app.post("/api/projects")
-def create_project(name: str = Body("Untitled", embed=True)):
-    return store.create(name)
+def create_project(name: str = Body("Untitled", embed=True), settings: dict | None = Body(None, embed=True)):
+    """A new project, with the New project dialog's choices (the kind of comic, how its video looks)."""
+    try:
+        return store.create(name, settings)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, f"Those settings don't fit: {e}")
+
+
+@app.get("/api/projects/new-settings")
+def new_project_settings():
+    """The New project dialog's starting choices: the last project's."""
+    return store.new_project_settings()
 
 
 @app.get("/api/projects/{pid}")
@@ -744,15 +755,45 @@ def status(ollama_url: str = "http://localhost:11434"):
         "charscan": {"installed": charscan.installed()},  # shows the Characters step
         "ocr_english": ocr.ENGLISH.installed(),
         # devices are what the loaded engines run on ("" until first used)
-        "gpu": {"available": gpu.available(),
+        "gpu": {"available": gpu.available(), "card": gpu.nvidia_card(),
                 "voice": tts.device if tts._engine is not None else "",
-                "ocr": ocr.device if ocr._engine is not None else ""},
+                "ocr": ocr.device if ocr._engine is not None else "",
+                "addon": gpu.addon_status()},  # GPU support, the download (Settings → Performance)
         "claude": {**claude.key_status(),
                    "models": [{"id": m, "name": n, "note": claude.MODEL_NOTES.get(m, "")} for m, n in claude.MODELS]},
         "writers": {k: {**cloud.key_status(k), "name": v["name"], "about": v["about"], "keys_url": v["keys_url"],
                         "default_model": v["default_model"]} for k, v in cloud.PROVIDERS.items()},
         "elevenlabs": online_voices.key_status(),
     }
+
+
+# ---- GPU support (ONNX Runtime's GPU build, with CUDA and cuDNN): downloaded on request (never shipped) ----
+
+@app.get("/api/addons/gpu")
+def gpu_addon_status():
+    return gpu.addon_status()
+
+
+@app.post("/api/addons/gpu/install")
+def gpu_addon_install():
+    try:
+        return gpu.install()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/addons/gpu/cancel")
+def gpu_addon_cancel():
+    gpu.DOWNLOAD.cancel()
+    return gpu.addon_status()
+
+
+@app.delete("/api/addons/gpu")
+def gpu_addon_remove():  # (in use, it's only marked removed: the next start deletes it)
+    try:
+        return gpu.remove()
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 # ---- English text-reading model: downloaded on request (never shipped) ----
