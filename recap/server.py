@@ -279,7 +279,7 @@ def _add_picture(pid: str, cid: str, img, look: str | None = None) -> dict:
             c = next((lk for lk in c.get("looks") or [] if lk["id"] == look), None)
             if c is None:
                 raise HTTPException(404, "That look was not found (save it first)")
-        cv2.imwrite(str(folder / name), img)
+        panels.imwrite(folder / name, img)
         c.setdefault("pictures", []).append(name)
     return store.update(pid, apply)
 
@@ -360,7 +360,7 @@ def _save_image(data: bytes, dest: Path) -> tuple[int, int] | None:
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         return None
-    cv2.imwrite(str(dest), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    panels.imwrite(dest, img, [cv2.IMWRITE_JPEG_QUALITY, 95])
     return img.shape[1], img.shape[0]
 
 

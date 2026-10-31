@@ -38,6 +38,8 @@ import re
 import cv2
 import numpy as np
 
+from .panels import imread_gray
+
 WINDOW = 30            # pieces looked at from each end of a chapter
 SIZE = 64              # pictures are compared this small, in grey
 NEAR, CORR = 0.03, 0.95
@@ -78,7 +80,7 @@ def _groups(panels):
 
 
 def _fingerprint(path):
-    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    img = imread_gray(path)
     if img is None:
         return None
     h, w = img.shape

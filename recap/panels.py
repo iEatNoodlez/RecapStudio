@@ -20,6 +20,24 @@ def imread(path) -> np.ndarray | None:
     return cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
 
 
+def imread_gray(path) -> np.ndarray | None:
+    try:
+        data = np.fromfile(str(path), dtype=np.uint8)
+    except OSError:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_GRAYSCALE) if data.size else None
+
+
+def imwrite(path, img: np.ndarray, params=()):
+    """cv2.imwrite that also works with non-ASCII Windows paths (cv2.imwrite silently writes
+    nothing to a folder named "Title꞉ Subtitle"), and raises instead of returning False."""
+    path = str(path)
+    ok, data = cv2.imencode(path[path.rfind("."):], img, list(params))
+    if not ok:
+        raise OSError(f"Couldn't save {path}")
+    data.tofile(path)
+
+
 def _gutter_runs(gray: np.ndarray, axis: int, bg: float, min_gap: int):
     """Return (start, end) runs of gutter lines across `axis` (0 = rows, 1 = cols)."""
     std = gray.std(axis=1 - axis)

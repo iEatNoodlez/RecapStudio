@@ -234,7 +234,7 @@ def run_panels(job):
         def add(page_index, crop, joined=False):
             panel_id = f"{cid}_{len(found):05d}"
             name = f"{panel_id}_{run_tag}.jpg"
-            cv2.imwrite(str(d / "panels" / name), crop, [cv2.IMWRITE_JPEG_QUALITY, 92])
+            panels.imwrite(d / "panels" / name, crop, [cv2.IMWRITE_JPEG_QUALITY, 92])
             found.append({
                 "id": panel_id, "chapter": cid, "page": page_index, "file": name, "joined": joined,
                 "text": "", "narration": "", "audio": None, "duration": 0.0, "enabled": True,
@@ -592,7 +592,7 @@ def _run_magi(job, pid, chapters):
                 files = []
                 for k, (_, _, y0, y1) in enumerate(spans):
                     files.append(str(tmp / f"{k:04d}.png"))
-                    cv2.imwrite(files[-1], strip.rows(y0, y1))
+                    panels.imwrite(files[-1], strip.rows(y0, y1))
             else:
                 files = [str(store.page_path(p, pg)) for pg in pages]
             lines = []

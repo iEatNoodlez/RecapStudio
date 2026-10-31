@@ -396,8 +396,8 @@ def _scan(project, chapter_ids, use_gpu, check, report):
             img = panels.imread(d / "panels" / dets[i]["file"])[y0:y1, x0:x1]
             s = min(1.0, 320 / img.shape[0])
             name = f"{sid}_{gi}_{k}.jpg"
-            cv2.imwrite(str(out_dir / name), cv2.resize(img, (max(1, int(img.shape[1] * s)), max(1, int(img.shape[0] * s))),
-                                                        interpolation=cv2.INTER_AREA), [cv2.IMWRITE_JPEG_QUALITY, 88])
+            panels.imwrite(out_dir / name, cv2.resize(img, (max(1, int(img.shape[1] * s)), max(1, int(img.shape[0] * s))),
+                                                    interpolation=cv2.INTER_AREA), [cv2.IMWRITE_JPEG_QUALITY, 88])
             snaps.append({"file": f"scan/{name}", "piece": dets[i]["piece"], "box": dets[i]["box"]})
         girl, boy = (mean[[r["name"] for r in models.tags].index(t)] for t in ("1girl", "1boy"))
         sums.append(F[g].sum(0))

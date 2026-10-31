@@ -29,7 +29,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 
-from . import claude, pipeline, scenes, script, store
+from . import claude, panels, pipeline, scenes, script, store
 
 SERVER = "recap-studio"   # the MCP server's name: its tools are mcp__recap-studio__<tool> in Claude Code
 MODEL_ID = "claude-code"  # what claude.ask is told the model is (the agents' model is the setting below)
@@ -402,7 +402,7 @@ class Run:
         on_sheet, names = {}, []
         for i, (img, nums) in enumerate(_sheets([(i, np.vstack(p["imgs"])) for i, p in sorted(pieces.items())]), 1):
             name = f"sheet_{i:02d}.jpg"
-            cv2.imwrite(str(r.folder / name), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            panels.imwrite(r.folder / name, img, [cv2.IMWRITE_JPEG_QUALITY, 85])
             names.append(f"{name} (P{nums[0]}-P{nums[-1]})")
             for x in nums:
                 on_sheet.setdefault(x, i)
