@@ -2,13 +2,14 @@
 
 Works for manga/comic grids (rows and columns separated by gutters) and for
 long webtoon strips (panels stacked vertically with background between them).
-No trained model needed.
+No trained model needed (an optional one keeps a webtoon's cuts out of its speech bubbles: bubbles.py).
 """
 import cv2
 import numpy as np
 
 STD_THRESH = 7.0      # a gutter line is (nearly) one flat color
 BG_DIFF = 28.0        # ...and close to the region's border color
+THROUGH_BUBBLES = 3.3  # with zones: a piece taller than this many widths may be split through a bubble
 
 
 def imread(path) -> np.ndarray | None:
@@ -165,7 +166,7 @@ def is_webtoon(sizes: list[tuple[int, int]]) -> bool:
 
 
 def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_groups: bool = False,
-                 middle_cuts: bool = False):
+                 middle_cuts: bool = False, zones=None):
     """Treat pages as one continuous vertical strip and cut it at flat rows.
 
     Gutters in webtoons are often gradients, so a gutter row only needs to be
@@ -184,6 +185,9 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
     in a white caption is mostly one color too. A mostly-one-color band is cut at its cleanest row.
     middle_cuts: at the band's middle, lettering or not, as versions before 0.1.7 cut (for matching projects
     they cut).
+    zones: a function giving the rows of the strip (its pages scaled to one width) not to cut: (rows kept out of
+    mostly-one-color bands, rows kept out of flat ones). bubbles.zones: the speech bubbles, captions and sound
+    effects a trained model finds, outlines and all.
     """
     W = images[0].shape[1]
     pages = [im if im.shape[1] == W else cv2.resize(im, (W, int(im.shape[0] * W / im.shape[1])))
@@ -205,6 +209,18 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
         text, inner = _lettering(np.vstack(grays), W)
         flat &= ~inner
         mostly &= ~text
+    min_gap = max(3, int(W * 0.01))
+    max_h = int(W * 2.2)  # a taller piece is split at its longest mostly-empty band
+    # where a tall piece may be split, in order of preference: (rows, shortest run, only in pieces taller than)
+    bands = [(mostly, min_gap, max_h)]
+    if zones is not None:
+        banded, flat_too = zones(pages)
+        flat &= ~flat_too
+        # a narrow gap between two bubbles; then through a bubble (never its text), only in a piece that would
+        # stay very tall
+        bands = [(mostly & ~banded, min_gap, max_h), (mostly & ~banded, 1, max_h),
+                 (mostly & ~flat_too, min_gap, int(W * THROUGH_BUBBLES))]
+        mostly = bands[0][0]
     del grays
 
     def band_cut(s, e):
@@ -217,7 +233,6 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
     offsets = np.cumsum([0] + [im.shape[0] for im in pages])
     total = int(offsets[-1])
 
-    min_gap = max(3, int(W * 0.01))
     segs, start, gap_start = [], None, None
     for y, f in enumerate(flat):
         if not f:
@@ -247,21 +262,24 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
         a, b = min(i, j), max(i, j)
         segs[a:b + 1] = [[segs[a][0], segs[b][1]]]
 
-    # split very tall pieces at the longest mostly-empty band
-    max_h = int(W * 2.2)
-
     def split_tall(a, b):
         if b - a <= max_h:
             return [[a, b]]
-        best, run_start = None, None
-        for y in range(a + min_h, b - min_h + 1):
-            m = y < b - min_h and mostly[y]
-            if m and run_start is None:
-                run_start = y
-            elif not m and run_start is not None:
-                if y - run_start >= min_gap and (best is None or y - run_start > best[1] - best[0]):
-                    best = (run_start, y)
-                run_start = None
+        best = None
+        for band, shortest, taller in bands:
+            if b - a <= taller:
+                continue
+            run_start = None
+            for y in range(a + min_h, b - min_h + 1):
+                m = y < b - min_h and band[y]
+                if m and run_start is None:
+                    run_start = y
+                elif not m and run_start is not None:
+                    if y - run_start >= shortest and (best is None or y - run_start > best[1] - best[0]):
+                        best = (run_start, y)
+                    run_start = None
+            if best is not None:
+                break
         if best is None:
             return [[a, b]]
         cut = band_cut(*best)

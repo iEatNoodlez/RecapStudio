@@ -87,14 +87,15 @@ Your script writer also suggests a clickbait title, a few others, and a thumbnai
 
 | Step | What it does | With |
 |---|---|---|
-| Panels | Cuts the pages into panels. Webtoons are stitched into one strip and cut at the gutters. | OpenCV |
+| Chapters | Imports folders, .zip and .cbz files, or gets chapters from sites through sources members bring (no scrapers come with the app), and checks for new ones. | Plugins you add; gallery-dl or Suwayomi if you run them |
+| Panels | Cuts the pages into panels. Webtoons are stitched into one strip and cut at the gutters, around the speech bubbles. | OpenCV; ogkalu's comic text-and-bubble detector (optional download) |
 | Text | Reads the speech bubbles and captions, in English, Korean, Chinese or Japanese. | RapidOCR; PaddleOCR's PP-OCRv5 for Korean, Chinese and Japanese (optional download) |
 | Translate | Translates a Korean, Chinese or Japanese comic into English, and can letter the English into the bubbles. | Your script writer |
 | Characters | Finds who's who and suggests their names. | DeepGHS's detectors and CCIP, the WD tagger (optional download) |
 | Script | Writes the narration a chapter at a time, from the pictures and the text. | A local model (Ollama), Claude Code on your Claude plan, or Claude, Gemini, OpenRouter, DeepSeek, Groq or Mistral with your own key |
 | Voice | Reads the narration aloud, or uses your own recording. | Kokoro on your PC, Microsoft Edge's voices, or ElevenLabs |
 | Title | Suggests a clickbait title and draws a labelled thumbnail, which an image model can repaint. | Your script writer; Gemini or OpenRouter image models |
-| Video | Scrolls webtoons, pans and zooms other comics, crossfades, adds your background music and writes subtitles. | OpenCV and ffmpeg |
+| Video | Scrolls webtoons, pans and zooms other comics, crossfades, adds your background music, writes subtitles, can draw CapCut-style captions and cuts Shorts. | OpenCV and ffmpeg |
 
 ## Costs and privacy
 
@@ -120,6 +121,7 @@ The [docs](docs/README.md) cover every feature in detail:
 - [Video](docs/video.md)
 - [YouTube title, thumbnail and YouTube-safe](docs/youtube.md)
 - [Your phone](docs/phone.md)
+- [Getting chapters from sites](docs/sources.md)
 - [The scan group's pages](docs/scan-group-pages.md)
 - [Performance and the GPU](docs/performance.md)
 

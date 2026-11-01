@@ -9,7 +9,7 @@ estimate and the speed learned from the same run always match up.
 import json
 import threading
 
-from . import gpu, scenes, store, video
+from . import bubbles, gpu, scenes, store, video
 
 SPEEDS_FILE = store.DATA_ROOT / "speeds.json"
 _lock = threading.Lock()
@@ -17,6 +17,8 @@ _lock = threading.Lock()
 # seconds per unit of work, measured on the reference PC
 DEFAULTS = {
     "panels": 0.08,       # per page (145 chapters, 3,166 pages in about 4 minutes)
+    "panels:bubbles": 0.6,  # per webtoon page, cut around speech bubbles (the bubble finder on the CPU: 0.5 s a
+                            # 720 x 1,900 page; pages 15,000 pixels tall take a few seconds each)
     "ocr:gpu": 0.14,      # per panel, 4 workers on the GPU
     "ocr:cpu": 0.81,
     "scan:gpu": 0.065,    # per panel (12,024 panels in about 13 minutes)
@@ -63,6 +65,8 @@ def _video_key(settings) -> str:
 
 def key(step: str, settings: dict) -> str:
     """Which measured speed applies to this step with these settings."""
+    if step == "panels" and settings.get("layout", "auto") != "pages" and bubbles.installed():
+        return "panels:bubbles"
     if step == "audio" and settings.get("voice_provider", "kokoro") != "kokoro":
         return f"audio:{settings['voice_provider']}"  # an online voice: the computer's device doesn't matter
     if step in ("ocr", "scan", "audio"):

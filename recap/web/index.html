@@ -71,7 +71,7 @@
     </div>
 
     <div id="job" class="job" hidden>
-      <div class="job-row"><span id="job-msg"></span><button id="job-wording" class="primary small" hidden>Check wording</button><button id="job-characters" class="primary small" hidden>Review characters</button><button id="job-pause" class="ghost small">Pause</button><button id="job-cancel" class="ghost small">Cancel</button></div>
+      <div class="job-row"><span id="job-msg"></span><button id="job-wording" class="primary small" hidden>Check wording</button><button id="job-credits" class="primary small" hidden>Check the scan group's pages</button><button id="job-characters" class="primary small" hidden>Review characters</button><button id="job-pause" class="ghost small">Pause</button><button id="job-cancel" class="ghost small">Cancel</button></div>
       <div class="bar"><div id="job-bar"></div></div>
       <div id="job-error" class="error"></div>
     </div>
@@ -88,6 +88,7 @@
     <section class="tab-page" data-page="chapters">
       <div id="dropzone" class="dropzone">
         <button id="import-folder">Import folder…</button>
+        <button id="get-chapters" class="ghost">Get chapters from a site…</button>
         <span class="muted">or drop images, .zip or .cbz files anywhere here, or</span>
         <label class="link">browse<input id="file-input" type="file" multiple accept="image/*,.zip,.cbz" hidden></label>
         <span id="page-count" class="muted"></span>
@@ -95,6 +96,7 @@
       <section id="chapters-box" class="chapters-box" hidden>
         <div class="chapters-head">
           <h2>Chapters <span id="chapter-count" class="muted"></span></h2>
+          <button id="new-chapters" class="ghost small" hidden title="Look for chapters of this series the project doesn't have yet, at the site it came from">Check for new chapters</button>
           <div class="chapters-tools adv">
             <button id="ch-all" class="ghost small">Select all</button>
             <button id="ch-none" class="ghost small">Select none</button>
@@ -133,6 +135,7 @@
       <section id="output" class="output" hidden>
         <video id="player" controls></video>
         <div id="output-parts" class="output-parts"></div>
+        <div id="output-shorts" class="output-parts" hidden></div>
         <div class="output-actions">
           <button id="open-folder">Open output folder</button>
           <a id="srt-link" class="link" target="_blank">Subtitles (.srt)</a>
@@ -178,6 +181,21 @@
             <input id="music-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma" multiple hidden>
             <span id="music-status" class="hint"></span></div>
           <span class="hint">Your own tracks play in this order, then again from the first until the video ends, each evened out in loudness and fading into the next. Use music you're allowed to put on YouTube, such as tracks from the YouTube Audio Library, or the video may be claimed. It's added when the chapters are joined, so changing it only joins the video again, without drawing anything. The narration file (recap.wav) and Export for editors leave it out.</span>
+        </fieldset>
+        <fieldset id="captions-box">
+          <legend>Captions and Shorts</legend>
+          <label>Captions in the video
+            <select data-key="captions"><option value="off">None (the subtitles file only)</option><option value="classic">CapCut classic: bold capitals, the word being said in colour</option><option value="box">Highlight box: a box in colour behind the word being said</option><option value="minimal">Minimal: whole phrases on a dark band</option></select></label>
+          <label id="captions-color-row">Colour of the word being said
+            <select data-key="captions_color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="red">Red</option><option value="purple">Purple</option><option value="white">White (not picked out)</option></select></label>
+          <label id="captions-font-row">Letters
+            <select data-key="captions_font"><option value="Arial Black">Arial Black</option><option value="Segoe UI Black">Segoe UI Black</option><option value="Impact">Impact</option><option value="Comic Sans">Comic Sans (bold)</option></select></label>
+          <img id="captions-preview" class="caption-preview" alt="How the captions look" hidden>
+          <span class="hint">The narration is drawn into the picture a few words at a time, the way CapCut's captions look, with the word being said picked out. Its timing comes from each line's sound, or from the speech recognizer when it's installed (Settings → Voice, for your own recordings), which is exact. The whole video is drawn again the next time it's made.</span>
+          <label>Shorts
+            <select data-key="shorts" data-type="number"><option value="0">None</option><option value="60">Cut the video into Shorts of up to 1 minute</option><option value="90">Cut the video into Shorts of up to 90 seconds</option><option value="180">Cut the video into Shorts of up to 3 minutes</option></select></label>
+          <label id="shorts-label-row" class="check"><input data-key="shorts_label" type="checkbox"> "Part 1", "Part 2"… at the top of each</label>
+          <span class="hint">Once the video is made, it's cut into parts that end in a pause between two lines, in the output folder's shorts folder: an 11-minute recap makes 13 one-minute Shorts. Portrait suits Shorts, TikTok and Reels best. YouTube takes Shorts of up to 3 minutes; TikTok and Reels longer.</span>
         </fieldset>
         <fieldset>
           <legend>YouTube</legend>
@@ -269,8 +287,10 @@
         <legend>The scan group's pages</legend>
         <label class="check"><input data-key="leave_out_credits" type="checkbox"> Leave out the scan group's pages at the start and end of chapters</label>
         <span class="hint">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages: found after Detect panels, and again after Read text, because they repeat across chapters or their text says so. They're unticked in the scene list (tick one to keep it) and cut out of the video.</span>
+        <label>Before the script
+          <select data-key="credits_review"><option value="review">Let me check them (one of each kind; it waits for you)</option><option value="trust">Leave them out as found (no waiting)</option></select></label>
         <div><button type="button" id="find-credits" class="ghost small">Find them now</button>
-          <button type="button" class="ghost small credits-open">See what was left out…</button></div>
+          <button type="button" class="ghost small credits-open">Check what was left out…</button></div>
       </fieldset>
       <p class="hint settings-note">These settings belong to this project. The script writer, voice and video are set for all projects in <button type="button" class="link-btn open-global">Settings</button>.</p>
     </section>
@@ -472,6 +492,46 @@
         <label>Draw video frames in this many processes
           <select data-key="video_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
         <span class="hint" id="video-status"></span>
+      </fieldset>
+      <fieldset id="bubbles-box">
+        <legend>Cutting webtoons</legend>
+        <span class="hint">The bubble finder keeps a webtoon's cuts out of its speech bubbles, captions and sound effects. Without it a cut can pass between a bubble's outline and its text, leaving a sliver of the bubble at the bottom of one scene and the rest of it on the next (on test chapters, a quarter of the cuts did; with it, 7 in 1,885). It's comic-text-and-bubble-detector, an open model trained on manga, webtoons and western comics (Apache 2.0, by ogkalu): an 11.1 MB download into data\addons\bubbles, not part of the app. Detect panels takes longer with it, on the CPU: 10 to 40 seconds more a chapter.</span>
+        <div id="bubbles-off" class="magi-part"><button type="button" id="bubbles-download">Download the bubble finder (11.1 MB)</button></div>
+        <div id="bubbles-busy" class="magi-part" hidden>
+          <span id="bubbles-stage"></span>
+          <div class="bar"><div id="bubbles-bar"></div></div>
+          <button type="button" id="bubbles-cancel" class="ghost small">Cancel download</button>
+        </div>
+        <div id="bubbles-on" class="magi-part" hidden>
+          <span class="ok">Downloaded: webtoon chapters are cut around their speech bubbles.</span>
+          <span class="hint">Chapters already cut keep their scenes. Detect panels with Redo cuts a chapter again (its text, script and voice are then made again too).</span>
+          <button type="button" id="bubbles-remove" class="ghost small danger">Remove the bubble finder</button>
+        </div>
+        <div id="bubbles-error" class="error"></div>
+      </fieldset>
+      <fieldset id="sources-box">
+        <legend>Sources (getting chapters from sites)</legend>
+        <span class="hint">Recap Studio comes with no scrapers and no links to any. Bring your own: a plugin (a Python file for a site, from a file or a plugin list someone shares), gallery-dl, or a Suwayomi server with its extensions. Then a project's Chapters tab has Get chapters from a site.</span>
+        <span class="hint warn">A plugin is a program: it runs on this PC with your permissions. Add only plugins from people you trust, and only get chapters you're allowed to.</span>
+        <div id="src-plugins" class="src-plugins"></div>
+        <div class="key-row"><label class="button-like ghost small">Add plugin file…<input type="file" id="src-plugin-file" accept=".py" hidden></label></div>
+        <span class="field-head">Plugin lists</span>
+        <div id="src-repos" class="src-repos"></div>
+        <div class="key-row src-repo-add"><input id="src-repo-url" placeholder="A plugin list's link (…/index.json)" spellcheck="false"><button type="button" id="src-repo-add" class="ghost small">Add list</button></div>
+        <span class="field-head">gallery-dl</span>
+        <label>Program <input data-key="gallery_dl_path" placeholder="Empty: found on PATH" spellcheck="false"></label>
+        <span class="hint" id="src-gdl-status"></span>
+        <span class="field-head">Suwayomi</span>
+        <label>Server <input data-key="suwayomi_url" placeholder="http://127.0.0.1:4567" spellcheck="false"></label>
+        <span class="hint" id="src-suwa-status"></span>
+        <div class="key-row src-login">
+          <input id="src-suwa-user" placeholder="User name" spellcheck="false" autocomplete="off">
+          <input id="src-suwa-pass" type="password" placeholder="Password" autocomplete="new-password">
+          <button type="button" id="src-suwa-save" class="ghost small">Save login</button>
+        </div>
+        <span class="hint">Only when the server has a login turned on. Kept on this PC (data\suwayomi_login.json).</span>
+        <label class="check"><input type="checkbox" data-key="check_new_chapters"> Check projects for new chapters when the app starts</label>
+        <div id="src-error" class="error"></div>
       </fieldset>
       <fieldset id="ocr-box" class="adv">
         <legend>Text reading</legend>
@@ -708,14 +768,17 @@
 <!-- every piece left out as the scan group's pages, in one place (credits.py) -->
 <dialog id="credits-dialog" class="wide-dialog">
   <form method="dialog" class="import-form">
-    <h2>Left out as the scan group's pages</h2>
-    <p class="muted">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages that were found and left out of the video. Use it puts a piece back; click a piece to see it full size.</p>
+    <h2>The scan group's pages</h2>
+    <p class="muted">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages, found at the start and end of chapters and left out of the video. Each picture is shown once, with how many chapters it's in: <b>Keep</b> puts it back in all of them, <b>Leave out</b> confirms it, and chapters added later follow. Click a picture to see it full size.</p>
+    <p id="credits-wait" class="muted" hidden>Make the recap is waiting for this: the script is written once each kind is kept or left out (Leave the rest out does the rest), or close this and press Resume.</p>
     <div class="review-head">
       <span id="credits-summary" class="muted"></span>
-      <label class="check"><input type="checkbox" id="credits-kept"> <span>Show the ones you put back</span></label>
+      <label class="check adv"><input type="checkbox" id="credits-every"> <span>Every piece, chapter by chapter</span></label>
+      <label class="check" id="credits-kept-box" hidden><input type="checkbox" id="credits-kept"> <span>Show the ones you put back</span></label>
     </div>
-    <div id="credits-list" class="credits-list"></div>
-    <div class="import-actions"><button value="cancel" class="ghost">Close</button></div>
+    <div id="credits-kinds" class="credits-list"></div>
+    <div id="credits-list" class="credits-list" hidden></div>
+    <div class="import-actions"><button type="button" id="credits-rest" class="primary" hidden>Leave the rest out</button><button value="cancel" class="ghost">Close</button></div>
   </form>
 </dialog>
 
@@ -767,6 +830,58 @@
     <div class="import-actions">
       <button value="cancel" class="ghost">Cancel</button>
       <button id="import-go" type="button" class="primary" disabled>Import</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="sources-dialog" class="wide-dialog">
+  <form method="dialog" class="sources-form">
+    <h2 id="src-title">Get chapters from a site</h2>
+    <div id="src-none" class="src-none" hidden>
+      <p>No sources yet. Recap Studio comes with no scrapers: add a plugin, gallery-dl or a Suwayomi server in <button type="button" class="link-btn" id="src-open-settings">Settings → Sources</button>.</p>
+    </div>
+    <div id="src-find">
+      <div class="src-modes" role="tablist">
+        <button type="button" role="tab" data-mode="link">Link</button>
+        <button type="button" role="tab" data-mode="search">Search</button>
+        <button type="button" role="tab" data-mode="lists">Lists</button>
+      </div>
+      <div class="src-row" data-for="link">
+        <input id="src-link" placeholder="A series' page, e.g. https://…" spellcheck="false">
+        <button type="button" id="src-link-go">Open</button>
+      </div>
+      <div class="src-row" data-for="search">
+        <select id="src-search-source" aria-label="Source"></select>
+        <input id="src-query" placeholder="Title" spellcheck="false">
+        <button type="button" id="src-search-go">Search</button>
+      </div>
+      <div class="src-row" data-for="lists">
+        <select id="src-list-source" aria-label="Source"></select>
+        <select id="src-list" aria-label="List"></select>
+      </div>
+      <div id="src-status" class="muted"></div>
+      <div id="src-results" class="src-results"></div>
+      <button type="button" id="src-more" class="ghost small" hidden>More</button>
+    </div>
+    <div id="src-series" hidden>
+      <button type="button" id="src-back" class="ghost small">← Back</button>
+      <div class="src-head">
+        <img id="src-cover" alt="">
+        <div><h3 id="src-name"></h3><p id="src-summary" class="muted"></p><p id="src-from" class="muted"></p></div>
+      </div>
+      <div class="import-tools">
+        <button type="button" class="ghost small" id="src-all">Select all</button>
+        <button type="button" class="ghost small" id="src-none-btn">Select none</button>
+        <button type="button" class="ghost small" id="src-new">Only new</button>
+        <span id="src-summary-line" class="muted"></span>
+      </div>
+      <div id="src-chapters" class="import-list"></div>
+      <label class="import-place" id="src-place-row">Put them <select id="src-place"></select></label>
+      <label class="check" id="src-skip-row" hidden><input type="checkbox" id="src-skip"> Don't offer the unticked chapters again</label>
+      <div id="src-series-status" class="muted"></div>
+    </div>
+    <div class="import-actions">
+      <button value="cancel" class="ghost">Cancel</button>
+      <button id="src-go" type="button" class="primary" disabled>Get chapters</button>
     </div>
   </form>
 </dialog>

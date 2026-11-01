@@ -16,7 +16,8 @@ import soundfile as sf
 
 import anthropic
 
-from . import (charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, music, naming, ocr,
+from . import (bubbles, captions, charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, music,
+               naming, ocr, sources,
                online_voices, panels, scenes, package, script, store, textless, translate, tts, typeset, video,
                voiceover, wording, youtube)
 
@@ -37,9 +38,10 @@ STEP_LABELS = {
     "credits": "Finding credit pages",
     "names": "Suggesting names",
     "boxes": "Finding what to cover",
+    "download": "Getting chapters",
 }
 # run on their own, never part of Run all
-EXTRA_STEPS = ["scan", "editors", "voiceover", "package", "credits", "names", "boxes"]
+EXTRA_STEPS = ["scan", "editors", "voiceover", "package", "credits", "names", "boxes", "download"]
 
 jobs: dict[str, dict] = {}
 _queue: "queue.Queue[str]" = queue.Queue()
@@ -237,6 +239,7 @@ def run_panels(job):
         if layout == "auto":
             layout = "webtoon" if panels.is_webtoon([(x["w"], x["h"]) for x in pages]) else "pages"
         found = []
+        around = layout == "webtoon" and bubbles.installed()  # cut around speech bubbles (the bubble finder)
         # new images get fresh file names, so the old panels stay intact until the switch-over
         run_tag = uuid.uuid4().hex[:6]
 
@@ -257,7 +260,7 @@ def run_panels(job):
         try:
             if layout == "webtoon":
                 prev_group = None
-                for piece in _strip_pieces(p, pages, job, report):
+                for piece in _strip_pieces(p, pages, job, report, around_bubbles=around):
                     # pieces of one detected panel start out joined into one scene
                     add(piece["page"], piece["crop"], joined=piece["group"] == prev_group)
                     found[-1]["y0"], found[-1]["y1"] = piece["y0"], piece["y1"]
@@ -272,12 +275,16 @@ def run_panels(job):
                             found[-1]["box"] = [int(x), int(y), int(w), int(h)]  # where it sits on its page
                     report(pi + 1)
 
-            def apply(proj, cid=cid, found=found):
+            def apply(proj, cid=cid, found=found, around=around):
                 proj["panels"] = [x for x in proj["panels"] if x["chapter"] != cid] + found
                 proj["panels_rev"] = int(time.time())
                 for c in proj["chapters"]:  # new pieces: Magi's speakers have to be found again
                     if c["id"] == cid:
                         c.pop("magi_done", None)
+                        if around:  # how it was cut, for matching its pieces again (recover_strip_positions)
+                            c["cut_around_bubbles"] = True
+                        else:
+                            c.pop("cut_around_bubbles", None)
             store.update(pid, apply)
         except BaseException:
             # cancelled or failed partway: drop the half-made images, keep the old panels as they were
@@ -360,13 +367,18 @@ _END = object()
 STRIP_GROUP = 30  # webtoon pages stitched per detection pass, to bound memory use
 
 
-def _strip_pieces(p, pages, job=None, report=None, with_groups=False, middle_cuts=False):
+def _strip_pieces(p, pages, job=None, report=None, with_groups=False, middle_cuts=False, around_bubbles=False):
     """Detect a webtoon chapter's pieces. Each gets page, crop, group (unique in the
     chapter) and y0/y1: its rows in the chapter strip, with every page scaled to the
     chapter's first page width (the strip the scrolling video shows). middle_cuts: cut as
-    versions before 0.1.7 did (panels.detect_strip)."""
+    versions before 0.1.7 did (panels.detect_strip). around_bubbles: no cuts through the speech
+    bubbles the bubble finder finds (bubbles.py)."""
     width = pages[0]["w"]
     out, groups, offset, gbase = [], [], 0.0, 0
+    zones = None
+    if around_bubbles:
+        def zones(imgs):
+            return bubbles.zones(imgs, (lambda: _check(job)) if job else None)
     for g in range(0, len(pages), STRIP_GROUP):
         if job:
             _check(job)
@@ -374,7 +386,7 @@ def _strip_pieces(p, pages, job=None, report=None, with_groups=False, middle_cut
         imgs = [im for im in (panels.imread(store.page_path(p, x)) for x in chunk) if im is not None]
         if imgs:
             scale = width / imgs[0].shape[1]
-            res = panels.detect_strip(imgs, with_groups=with_groups, middle_cuts=middle_cuts)
+            res = panels.detect_strip(imgs, with_groups=with_groups, middle_cuts=middle_cuts, zones=zones)
             pieces, found_groups = res if with_groups else (res, [])
             for page_offset, crop, gi, a, b in pieces:
                 out.append({"page": g + page_offset, "crop": crop, "group": gbase + gi,
@@ -394,7 +406,8 @@ def recover_strip_positions(p, chapter) -> bool:
 
     Detection is re-run (read-only) and matched to the stored panel images by order
     and size: first against today's fine pieces, then against whole panels as
-    earlier versions cut them; and again with cuts as versions before 0.1.7 placed them.
+    earlier versions cut them; and again with cuts as versions before 0.1.7 placed them. A chapter
+    cut around speech bubbles is matched that way first, while the bubble finder is installed.
     Returns True when every panel got y0/y1."""
     from PIL import Image
     d = store.project_dir(p["id"])
@@ -409,8 +422,11 @@ def recover_strip_positions(p, chapter) -> bool:
                 sizes.append((im.size[1], im.size[0]))
         except OSError:
             return False
-    for middle_cuts in (False, True):
-        pieces, groups = _strip_pieces(p, pages, with_groups=True, middle_cuts=middle_cuts)
+    ways = [(False, False), (True, False)]
+    if chapter.get("cut_around_bubbles") and bubbles.installed():
+        ways.insert(0, (False, True))
+    for middle_cuts, around in ways:
+        pieces, groups = _strip_pieces(p, pages, with_groups=True, middle_cuts=middle_cuts, around_bubbles=around)
         cands = ([(x["crop"].shape[:2], x["y0"], x["y1"]) for x in pieces],
                  [(tuple(x["shape"]), x["y0"], x["y1"]) for x in groups])
         cand = next((c for c in cands if len(c) == len(stored)
@@ -588,15 +604,50 @@ def _leave_out_credits(job, pid, chapter_ids, always=False) -> str:
     if not chapter_ids or not (always or p["settings"].get("leave_out_credits", True)):
         return ""
     job["message"] = "Finding the scan group's pages at the start and end of chapters"
-    found = credits.find(p, store.project_dir(pid), chapter_ids, cancelled=lambda: job["cancel"])
+    followed = set()
+    found = credits.find(p, store.project_dir(pid), chapter_ids, cancelled=lambda: job["cancel"], followed=followed)
     result = {}
-    store.update(pid, lambda q: result.update(n=credits.apply(q, found)))
+    store.update(pid, lambda q: result.update(n=credits.apply(q, found, followed)))
     hit = sum(1 for ids in found.values() if ids)
     note = (f"Left out {result['n']} pieces at the start or end of {hit} chapter{'s' if hit != 1 else ''} "
             "(the scan group's credits, notices and ads)" if result["n"] else "")
     if note:
         job["note"] = ". ".join(x for x in (job.get("note"), note) if x)
     return note
+
+
+def _credits_hold(job):
+    """Before the script: while pieces left out as the scan group's pages in the chapters it's about to write
+    haven't been checked, wait for the check (Check them: a choice per kind, credits.kinds), or for Resume,
+    which leaves them out as found and doesn't ask about them again. Not when the project trusts what's
+    found, or for selected scenes."""
+    pid = job["project"]
+    p = store.load(pid)
+    s = p["settings"]
+    if job["only"] or not s.get("leave_out_credits", True) or s.get("credits_review", "review") == "trust":
+        return
+    chapters = {g[0]["chapter"] for g in _scene_targets(job, p)}
+    d = store.project_dir(pid)
+    todo = [x for x in p["panels"] if x["chapter"] in chapters and credits.unchecked(x)]
+    blank = {x["id"] for x in todo if credits.blank(d, x)}
+    if blank:  # (they go with the pages around them)
+        store.update(pid, lambda q: [x.update(credits_seen=True) for x in q["panels"] if x["id"] in blank])
+    if len(todo) == len(blank):
+        return
+    kinds = [k for k in credits.kinds(store.load(pid), d, list(chapters)) if k["open"]]
+    waiting = lambda: [x["id"] for x in store.load(pid)["panels"]  # noqa: E731
+                       if x["chapter"] in chapters and credits.unchecked(x)]
+    job["waiting_for"] = "credits"
+    try:
+        pause_for(job, f"Paused before the script: {len(kinds)} kind{'s' if len(kinds) != 1 else ''} of the scan "
+                       "group's pages to check. Keep or leave out each one (Check them) and the script is written, "
+                       "or Resume to leave them out as found.",
+                  until=lambda: not waiting())
+    finally:
+        job.pop("waiting_for", None)
+        left = set(waiting())
+        if left:  # (resumed: not asked about again)
+            store.update(pid, lambda q: [x.update(credits_seen=True) for x in q["panels"] if x["id"] in left])
 
 
 def run_credits(job):
@@ -768,6 +819,7 @@ def _scene_text(group) -> str:
 
 
 def run_script(job):
+    _credits_hold(job)
     p = store.load(job["project"])
     if p["settings"].get("llm_provider") == "claude_code" or job.get("options", {}).get("agents"):
         from . import claude_code  # Claude Code's agents, on the user's Claude plan
@@ -1266,6 +1318,22 @@ def _save_audio(pid, results):
     store.update(pid, apply)
 
 
+def run_download(job):
+    """Get chapters from a source (sources.py: a member's plugin, gallery-dl or Suwayomi) into the project. Run
+    again after a failure, it carries on: chapters already there are passed over."""
+    o = job["options"]
+
+    def progress(f, message):
+        job["progress"], job["message"] = f, message
+    res = sources.download(job["project"], o["key"], o["series"], o["chapters"], o.get("place") or "number",
+                           o.get("skip") or [], progress, lambda: _check(job))
+    sources.new_counts.pop(job["project"], None)
+    job["note"] = f"Added {res['chapters']} chapter{'s' * (res['chapters'] != 1)} ({res['pages']} pages)"
+    if res["duplicates"]:
+        job["note"] += ". Same pages as another chapter: " + ", ".join(
+            f"{x['chapter']} and {x['same_as']}" for x in res["duplicates"])
+
+
 def run_package(job):
     """Save the whole project as one file in its output folder (see package.py)."""
     pid = job["project"]
@@ -1533,13 +1601,22 @@ def run_video(job):
     job["join_time"] = result["join_time"]  # left out of the drawing speed _learn_speed takes from this step
     estimates.learn("join", result["joined"], result["join_time"])
     outs = result["parts"]
+    shorts = []
+    if s.get("shorts"):  # the finished video cut into Shorts (video.make_shorts)
+        for k, o in enumerate(outs):
+            def cut(f, k=k):
+                job["progress"] = (k + f) / len(outs)
+                job["message"] = f"Cutting the video into Shorts: {int(job['progress'] * 100)}%"
+            cut(0.0)
+            shorts += video.make_shorts(o, s, cut, lambda: job["cancel"])
 
     def apply(proj):
         proj["output"] = {
             "video": f"output/{outs[0]['video'].name}", "srt": f"output/{outs[0]['srt'].name}", "time": time.time(),
             "parts": [{"video": f"output/{o['video'].name}", "srt": f"output/{o['srt'].name}",
                        "chapters": f"output/{o['chapters'].name}", "seconds": round(o["seconds"], 1),
-                       "first": o["first"], "last": o["last"]} for o in outs]}
+                       "first": o["first"], "last": o["last"]} for o in outs],
+            "shorts": [f"output/shorts/{x.name}" for x in shorts]}
     store.update(pid, apply)
     notes = []
     if result["reused"]:
@@ -1547,6 +1624,10 @@ def run_video(job):
                      f"made {result['made']}")
     if len(outs) > 1:
         notes.append(f"Saved as {len(outs)} parts")
+    if shorts:
+        notes.append(f"Cut into {len(shorts)} Shorts of up to {int(s['shorts'])} seconds (the output folder's shorts folder)")
+    if captions.style_of(s):
+        notes.append("With captions")
     if tracks:
         notes.append(f"With background music ({len(tracks)} track{'s' if len(tracks) != 1 else ''})")
     elif s.get("background_music"):
@@ -1858,4 +1939,4 @@ RUNNERS = {"panels": run_panels, "ocr": run_ocr, "translate": run_translate, "ch
            "script": run_script,
            "title": run_title, "audio": run_audio, "video": run_video,
            "scan": run_scan, "editors": run_editors, "voiceover": run_voiceover, "package": run_package,
-           "credits": run_credits, "names": run_names, "boxes": run_boxes}
+           "credits": run_credits, "names": run_names, "boxes": run_boxes, "download": run_download}

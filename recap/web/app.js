@@ -8,6 +8,7 @@ let selected = new Set();     // selected panels (for re-running script + voice)
 let selectedCh = new Set();   // selected chapters (scope for every step); empty = all
 let polling = null;
 let env = null;
+let newCounts = {};  // project id: new chapters at its source (sources.py), from the check when the app started
 
 async function api(path, opts = {}) {
   const init = { ...opts };
@@ -80,6 +81,7 @@ const TRASH_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
 
 async function loadProjects() {
   const list = await api("/api/projects");
+  try { newCounts = await api("/api/sources/new"); } catch {}
   const ul = $("#projects");
   ul.replaceChildren(...list.map((p) => {
     const del = el("button", {
@@ -89,7 +91,8 @@ async function loadProjects() {
     del.innerHTML = TRASH_ICON;
     return el("li", { class: current && p.id === current.id ? "active" : "", onclick: () => openProject(p.id) },
       el("div", { class: "proj-text" }, p.name,
-        el("small", {}, `${plural(p.chapters, "chapter")} · ${p.pages} pages · ${p.panels} panels`)),
+        el("small", {}, `${plural(p.chapters, "chapter")} · ${p.pages} pages · ${p.panels} panels`,
+          newCounts[p.id] ? el("span", { class: "new-tag", title: "New chapters at its source" }, ` · ${newCounts[p.id]} new`) : null)),
       del);
   }));
 }
@@ -140,6 +143,8 @@ const STYLES = { auto: "Automatic", motion: "Pan and zoom", stills: "Stills" };
 let newPage = 0, newName = "", newSettings = null;
 
 const kindOf = (s) => (s.layout === "webtoon" ? "webtoon" : s.layout === "pages" ? (s.reading_direction === "rtl" ? "manga" : "comic") : "auto");
+
+const CAPTION_NAMES = { classic: "CapCut classic", box: "highlight box", minimal: "minimal" };
 
 function choiceList(name, options, value, onpick) {
   return el("div", { class: "setup-choices" }, ...options.map(([id, title, about]) =>
@@ -229,7 +234,34 @@ function renderNew() {
       el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.background_music,
         onchange: (e) => { s.background_music = e.target.checked; } }), " Background music under the narration"),
       el("span", { class: "hint" }, "Your own tracks, added in the project's Video tab once it's made: they play in turn " +
-        "until the video ends, evened out in loudness. Use music you're allowed to put on YouTube."));
+        "until the video ends, evened out in loudness. Use music you're allowed to put on YouTube."),
+      el("span", { class: "field-head" }, "Captions in the video"),
+      choiceList("new-captions", [
+        ["off", "None", "Just the subtitles file, to upload with the video."],
+        ["classic", "CapCut classic", "Bold capitals, three words at a time, the word being said in colour."],
+        ["box", "Highlight box", "A box in colour behind the word being said."],
+        ["minimal", "Minimal", "Whole phrases on a dark band. Suits long videos."]],
+        s.captions || "off", (v) => { s.captions = v; renderNew(); }),
+      (s.captions || "off") !== "off" ? el("div", { class: "caption-pick" },
+        el("img", { class: "caption-preview", alt: "How the captions look", src: captionsPreview(s) }),
+        el("label", {}, "Colour of the word being said ", (() => {
+          const sel = el("select", { onchange: () => { s.captions_color = sel.value; renderNew(); } },
+            ...[["yellow", "Yellow"], ["green", "Green"], ["red", "Red"], ["purple", "Purple"], ["white", "White (not picked out)"]]
+              .map(([v, t]) => el("option", { value: v }, t)));
+          sel.value = s.captions_color || "yellow";
+          return sel;
+        })())) : "",
+      el("span", { class: "field-head" }, "Shorts"),
+      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!Number(s.shorts),
+        onchange: (e) => { s.shorts = e.target.checked ? 60 : 0; renderNew(); } }), " Also cut the video into Shorts"),
+      Number(s.shorts) ? el("label", {}, "Each up to ", (() => {
+        const sel = el("select", { onchange: () => { s.shorts = Number(sel.value); } },
+          ...[[60, "1 minute"], [90, "90 seconds"], [180, "3 minutes"]].map(([v, t]) => el("option", { value: v }, t)));
+        sel.value = String(s.shorts);
+        return sel;
+      })()) : "",
+      el("span", { class: "hint" }, "Cut where a line ends, with \"Part 1\", \"Part 2\"… at the top" +
+        (s.orientation === "portrait" ? "." : ". Portrait suits Shorts, TikTok and Reels best.")));
     speed();
   } else {
     const kind = KINDS.find((k) => k[0] === kindOf(s))[1];
@@ -255,7 +287,9 @@ function renderNew() {
         el("li", {}, !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
           (s.characters_review === "trust" ? "names added as suggested" : "names checked by you")),
         el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}` +
-          (s.background_music ? ", with background music" : "")),
+          (s.background_music ? ", with background music" : "") +
+          ((s.captions || "off") !== "off" ? `, with ${CAPTION_NAMES[s.captions]} captions` : "") +
+          (Number(s.shorts) ? `, cut into Shorts of up to ${Number(s.shorts) >= 120 ? `${Number(s.shorts) / 60} minutes` : `${s.shorts} seconds`}` : "")),
         el("li", {}, s.suggest_title ? `A title and thumbnail suggested after the script${s.redraw_thumbnail ? ", then redrawn with AI" : ""}`
           : "No title or thumbnail suggested")),
       el("p", { class: "muted" }, "Any of this can change later: the video and title in the project's Video tab, the kind of comic and the characters in its Project settings (advanced mode)."));
@@ -365,6 +399,24 @@ function renderSettings() {
   $("#focus-select").querySelector("option[value=subject]").disabled = !focusInstalled;
   $("#typeset-row").hidden = $("#typeset-hint").hidden = !isRaw(current.settings);
   renderMusic();
+  renderCaptionsBox();
+}
+
+// ---- captions in the video and Shorts (captions.py, video.make_shorts) ----
+
+// a picture of the chosen caption style, over one of the project's pictures (or a plain one, for a new project)
+function captionsPreview(s, pid) {
+  const q = new URLSearchParams({ style: s.captions, color: s.captions_color || "yellow", font: s.captions_font || "Arial Black",
+    orientation: s.orientation || "landscape", pid: pid || "" });
+  return `/api/captions/preview.jpg?${q}`;
+}
+
+function renderCaptionsBox() {
+  const s = current.settings, on = (s.captions || "off") !== "off";
+  $("#captions-color-row").hidden = $("#captions-font-row").hidden = $("#captions-preview").hidden = !on;
+  const src = on ? captionsPreview(s, current.id) : "";
+  if (on && $("#captions-preview").dataset.src !== src) $("#captions-preview").src = $("#captions-preview").dataset.src = src;
+  $("#shorts-label-row").hidden = !Number(s.shorts);
 }
 
 // ---- background music (music.py): the project's own tracks, in the order they play ----
@@ -436,6 +488,8 @@ function renderGlobal() {
   loadPhone();
   renderFocusSettings();
   renderBoxSettings();
+  renderBubbleSettings();
+  renderSourceSettings();
   renderGpuSettings();
   renderUpdate();
   renderRedraw();
@@ -539,6 +593,33 @@ $("#boxes-remove").addEventListener("click", async () => {
     "writer and from you.", { ok: "Remove", danger: true })) return;
   try { renderBoxSettings(await api("/api/addons/boxes", { method: "DELETE" })); }
   catch (e) { $("#boxes-error").textContent = e.message; }
+});
+
+// ---- bubble finder for cutting webtoons (comic-text-and-bubble-detector): downloaded on request, never shipped ----
+
+let bubblesPoll = null;
+async function renderBubbleSettings(st = null) {
+  clearTimeout(bubblesPoll);
+  try { st = st || await api("/api/addons/bubbles"); } catch { return; }
+  const busy = st.state === "installing";
+  $("#bubbles-off").hidden = st.installed || busy;
+  $("#bubbles-busy").hidden = !busy;
+  $("#bubbles-on").hidden = !st.installed || busy;
+  $("#bubbles-stage").textContent = st.message;
+  $("#bubbles-bar").style.width = `${Math.round((st.progress || 0) * 100)}%`;
+  $("#bubbles-error").textContent = st.state === "error" ? `${st.message}: ${st.error}` : "";
+  if (busy) bubblesPoll = setTimeout(() => renderBubbleSettings(), 700);
+}
+$("#bubbles-download").addEventListener("click", async () => {
+  try { renderBubbleSettings(await api("/api/addons/bubbles/install", { method: "POST" })); }
+  catch (e) { $("#bubbles-error").textContent = e.message; }
+});
+$("#bubbles-cancel").addEventListener("click", async () => renderBubbleSettings(await api("/api/addons/bubbles/cancel", { method: "POST" })));
+$("#bubbles-remove").addEventListener("click", async () => {
+  if (!await ask("Remove the bubble finder?", "Chapters already cut keep their scenes. Webtoon chapters cut from now on " +
+    "can be cut through speech bubbles again.", { ok: "Remove", danger: true })) return;
+  try { renderBubbleSettings(await api("/api/addons/bubbles", { method: "DELETE" })); }
+  catch (e) { $("#bubbles-error").textContent = e.message; }
 });
 
 $("#focus-remove").addEventListener("click", async () => {
@@ -1045,6 +1126,7 @@ document.querySelectorAll(".proj-settings [data-key]").forEach((input) => {
     if (input.dataset.key === "youtube_safe") renderPanels();
     if (input.dataset.key === "language") render();  // (the Translate step, the translation in the Script tab)
     if (input.closest("#music-box")) renderMusic();
+    if (input.closest("#captions-box") || input.dataset.key === "orientation") renderCaptionsBox();
     if (input.closest("#video-settings")) {  // (the split rows, the line above the steps, the time left)
       renderSettings();
       renderAppLine();
@@ -1058,6 +1140,7 @@ document.querySelectorAll("#global-dialog [data-key]").forEach((input) => {
     globals = await api("/api/settings", { method: "PUT", json: { [input.dataset.key]: readInput(input) } });
     if (current) Object.assign(current.settings, globals);
     if (["ollama_url", "use_gpu"].includes(input.dataset.key)) await loadEnv();
+    if (input.closest("#sources-box")) await renderSourceSettings();
     renderGlobal();
   });
 });
@@ -1737,6 +1820,304 @@ $("#import-go").addEventListener("click", async () => {
   }
 });
 
+// ---- getting chapters from a site (sources.py): a member's plugin, gallery-dl or Suwayomi ----
+
+let srcAll = [];          // the sources that can be used now
+let srcMode = "link";     // how a series is found: link, search, lists
+let srcMore = null;       // loads the next page of results, when there is one
+let srcSeries = null;     // {key, series} picked, with its chapters
+let srcHave = new Set();  // the project's chapters from that series (source_ref)
+const srcDlg = $("#sources-dialog");
+const srcName = (key) => (srcAll.find((s) => s.key === key) || {}).name || key;
+
+async function openSources(newOnly = false) {
+  $("#src-status").textContent = "";
+  $("#src-results").replaceChildren();
+  $("#src-more").hidden = true;
+  $("#src-go").disabled = true;
+  srcDlg.showModal();
+  if (newOnly) return openNewChapters();
+  showSourceStep("find");
+  $("#src-status").textContent = "Looking for sources…";
+  try { srcAll = (await api("/api/sources")).sources; }
+  catch (e) { $("#src-status").textContent = e.message; return; }
+  $("#src-status").textContent = "";
+  $("#src-none").hidden = srcAll.length > 0;
+  $("#src-find").hidden = !srcAll.length;
+  const searchable = srcAll.filter((s) => s.search), listed = srcAll.filter((s) => s.lists.length);
+  const opts = (list) => list.map((s) => el("option", { value: s.key }, s.name + (s.language ? ` (${s.language})` : "")));
+  $("#src-search-source").replaceChildren(...opts(searchable));
+  $("#src-list-source").replaceChildren(...opts(listed));
+  fillSourceLists();
+  document.querySelector('.src-modes [data-mode="search"]').disabled = !searchable.length;
+  document.querySelector('.src-modes [data-mode="lists"]').disabled = !listed.length;
+  setSourceMode(srcMode === "search" && !searchable.length || srcMode === "lists" && !listed.length ? "link" : srcMode);
+}
+
+function showSourceStep(step) {
+  $("#src-find").hidden = step !== "find";
+  $("#src-series").hidden = step !== "series";
+  $("#src-none").hidden = true;
+  $("#src-go").hidden = step !== "series";
+  $("#src-title").textContent = step === "series" ? "Choose the chapters" : "Get chapters from a site";
+}
+
+function setSourceMode(mode) {
+  srcMode = mode;
+  document.querySelectorAll(".src-modes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
+  document.querySelectorAll(".src-row").forEach((r) => { r.hidden = r.dataset.for !== mode; });
+  $("#src-results").replaceChildren();
+  $("#src-more").hidden = true;
+  $("#src-status").textContent = mode === "link" && !srcAll.some((s) => s.link)
+    ? "None of your sources opens links: use Search or Lists." : "";
+  if (mode === "lists") loadSourceList();
+  (mode === "link" ? $("#src-link") : mode === "search" ? $("#src-query") : $("#src-list")).focus();
+}
+
+function fillSourceLists() {
+  const s = srcAll.find((x) => x.key === $("#src-list-source").value);
+  $("#src-list").replaceChildren(...(s ? s.lists : []).map((l) => el("option", { value: l.id }, l.name)));
+}
+
+document.querySelectorAll(".src-modes button").forEach((b) => b.addEventListener("click", () => setSourceMode(b.dataset.mode)));
+$("#src-list-source").addEventListener("change", () => { fillSourceLists(); loadSourceList(); });
+$("#src-list").addEventListener("change", loadSourceList);
+$("#src-search-go").addEventListener("click", () => runSourceSearch());
+$("#src-query").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runSourceSearch(); } });
+$("#src-link").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openSourceLink(); } });
+$("#src-link-go").addEventListener("click", openSourceLink);
+$("#src-more").addEventListener("click", () => srcMore && srcMore());
+$("#src-back").addEventListener("click", () => { showSourceStep("find"); $("#src-go").disabled = true; });
+$("#src-open-settings").addEventListener("click", () => { srcDlg.close(); renderGlobal(); $("#global-dialog").showModal(); });
+
+async function showResults(key, load, page = 1) {
+  $("#src-status").textContent = page === 1 ? `Asking ${srcName(key)}…` : "Loading more…";
+  $("#src-more").hidden = true;
+  if (page === 1) $("#src-results").replaceChildren();
+  let r;
+  try { r = await load(page); }
+  catch (e) { $("#src-status").textContent = e.message; return; }
+  $("#src-status").textContent = page === 1 && !r.items.length ? "Nothing found." : "";
+  $("#src-results").append(...r.items.map((it) => el("button", {
+    type: "button", class: "src-card", title: it.summary || it.title, onclick: () => openSeries(key, it.ref),
+  }, it.cover ? el("img", { src: it.cover, alt: "", loading: "lazy" }) : el("div", { class: "src-nocover" }),
+  el("span", {}, it.title))));
+  srcMore = r.more ? () => showResults(key, load, page + 1) : null;
+  $("#src-more").hidden = !r.more;
+}
+
+function runSourceSearch() {
+  const key = $("#src-search-source").value, query = $("#src-query").value.trim();
+  if (!key || !query) return;
+  return showResults(key, (page) => api("/api/sources/search", { method: "POST", json: { key, query, page } }));
+}
+
+function loadSourceList() {
+  const key = $("#src-list-source").value, list = $("#src-list").value;
+  if (!key || !list) return;
+  showResults(key, (page) => api("/api/sources/browse", { method: "POST", json: { key, list, page } }));
+}
+
+async function openSourceLink() {
+  const url = $("#src-link").value.trim();
+  if (!url) return;
+  let found;
+  try { found = await api(`/api/sources/link?url=${encodeURIComponent(url)}`); }
+  catch (e) { $("#src-status").textContent = e.message; return; }
+  if (found.ref) return openSeries(found.key, found.ref);
+  if (found.key && found.search !== undefined) {  // a Suwayomi source: its server can't open links, so search it
+    setSourceMode("search");
+    $("#src-search-source").value = found.key;
+    $("#src-query").value = found.search;
+    await runSourceSearch();
+    if (!$("#src-status").textContent) {
+      $("#src-status").textContent = `Suwayomi can't open links, so ${srcName(found.key)} was searched for "${found.search}".`;
+    }
+    return;
+  }
+  $("#src-status").textContent = "None of your sources takes links from that site. Add a plugin for it, or " +
+    "gallery-dl (Settings → Sources).";
+}
+
+async function openSeries(key, ref, newOnly = false) {
+  $("#src-status").textContent = `Getting the chapters from ${srcName(key)}…`;
+  let series;
+  try { series = await api("/api/sources/series", { method: "POST", json: { key, ref } }); }
+  catch (e) { $("#src-status").textContent = e.message; return; }
+  $("#src-status").textContent = "";
+  showSeries(key, series, newOnly);
+}
+
+function showSeries(key, series, newOnly) {
+  srcHave = new Set(current.chapters.map((c) => c.source_ref).filter(Boolean));
+  srcSeries = { key, series, newOnly, rows: series.chapters.map((c) => ({ ...c, have: srcHave.has(c.ref), on: !srcHave.has(c.ref) })) };
+  showSourceStep("series");
+  $("#src-back").hidden = newOnly;
+  $("#src-cover").hidden = !series.cover;
+  if (series.cover) $("#src-cover").src = series.cover;
+  $("#src-name").textContent = series.title;
+  $("#src-summary").textContent = series.summary;
+  $("#src-from").textContent = `From ${srcName(key)}${series.url ? ` · ${series.url}` : ""}`;
+  $("#src-place").replaceChildren(
+    el("option", { value: "number" }, "In order, by chapter number"),
+    el("option", { value: "end" }, "At the end"),
+    el("option", { value: "start" }, "At the start"));
+  $("#src-place-row").hidden = !current.chapters.length;
+  $("#src-skip-row").hidden = !newOnly;
+  $("#src-skip").checked = false;
+  $("#src-series-status").textContent = series.chapters.length ? "" : newOnly
+    ? "No new chapters: the project has every chapter the site lists." : "The source found no chapters in this series.";
+  renderSourceChapters();
+}
+
+function renderSourceChapters() {
+  const rows = srcSeries.rows;
+  $("#src-chapters").replaceChildren(...rows.map((c) => el("label", { class: "imp-row" },
+    el("input", { type: "checkbox", checked: c.on, onchange: (e) => { c.on = e.target.checked; summarizeSource(); } }),
+    el("span", {}, c.name, c.have ? el("span", { class: "tag" }, "in the project") : null),
+    el("span", { class: "muted" }, c.date || ""))));
+  summarizeSource();
+}
+
+function summarizeSource() {
+  const on = srcSeries.rows.filter((c) => c.on).length;
+  $("#src-summary-line").textContent = `${plural(srcSeries.rows.length, "chapter")} · getting ${on}`;
+  $("#src-go").disabled = on === 0 && !(srcSeries.newOnly && $("#src-skip").checked);
+}
+
+$("#src-all").addEventListener("click", () => { srcSeries.rows.forEach((c) => (c.on = true)); renderSourceChapters(); });
+$("#src-none-btn").addEventListener("click", () => { srcSeries.rows.forEach((c) => (c.on = false)); renderSourceChapters(); });
+$("#src-new").addEventListener("click", () => { srcSeries.rows.forEach((c) => (c.on = !c.have)); renderSourceChapters(); });
+$("#src-skip").addEventListener("change", summarizeSource);
+
+$("#src-go").addEventListener("click", async () => {
+  const { key, series, rows, newOnly } = srcSeries;
+  const chosen = rows.filter((c) => c.on).map(({ ref, name, url }) => ({ ref, name, url }));
+  const skip = newOnly && $("#src-skip").checked ? rows.filter((c) => !c.on).map((c) => c.ref) : [];
+  $("#src-go").disabled = true;
+  try {
+    current.job = await api(`/api/projects/${current.id}/download`, {
+      method: "POST", json: { key, series: { ref: series.ref, url: series.url, title: series.title }, chapters: chosen,
+                              place: $("#src-place").value || "number", skip },
+    });
+    srcDlg.close();
+    delete newCounts[current.id];
+    render();
+    poll();
+  } catch (e) {
+    $("#src-series-status").textContent = e.message;
+    $("#src-go").disabled = false;
+  }
+});
+
+async function openNewChapters() {
+  srcAll = (await api("/api/sources").catch(() => ({ sources: [] }))).sources;
+  showSourceStep("series");
+  $("#src-chapters").replaceChildren();
+  $("#src-series-status").textContent = "Looking for new chapters…";
+  let r;
+  try { r = await api(`/api/projects/${current.id}/source/new`); }
+  catch (e) { $("#src-series-status").textContent = e.message; return; }
+  newCounts[current.id] = r.series.chapters.length;
+  showSeries(r.key, r.series, true);
+  renderChapters();
+}
+
+$("#get-chapters").addEventListener("click", () => openSources());
+$("#new-chapters").addEventListener("click", () => openSources(true));
+
+// Settings → Sources: plugins, plugin lists, gallery-dl and Suwayomi
+async function renderSourceSettings() {
+  let st;
+  try { st = await api("/api/sources"); } catch (e) { $("#src-error").textContent = e.message; return; }
+  $("#src-plugins").replaceChildren(...st.plugins.map((p) => el("div", { class: "src-plugin" },
+    el("label", { class: "check" },
+      el("input", { type: "checkbox", checked: p.enabled, disabled: !!p.error, onchange: async (e) => {
+        await api(`/api/sources/plugins/${p.id}`, { method: "PUT", json: { enabled: e.target.checked } });
+        renderSourceSettings();
+      } }),
+      el("b", {}, p.name), p.version ? ` ${p.version}` : ""),
+    el("span", { class: p.error ? "error" : "muted" },
+      p.error || [p.sites.join(", "), p.language, p.nsfw ? "adult" : "", p.repo ? "from a list" : "from a file"].filter(Boolean).join(" · ")),
+    el("button", { type: "button", class: "ghost small danger", onclick: async () => {
+      if (!await ask(`Remove ${p.name}?`, "Its file is deleted from data\\plugins. Chapters already got stay.", { ok: "Remove", danger: true })) return;
+      await api(`/api/sources/plugins/${p.id}`, { method: "DELETE" });
+      renderSourceSettings();
+    } }, "Remove"))));
+  if (!st.plugins.length) $("#src-plugins").replaceChildren(el("span", { class: "muted" }, "No plugins."));
+  $("#src-repos").replaceChildren(...st.repos.map((url) => {
+    const box = el("div", { class: "src-repo-list" });
+    const row = el("div", { class: "src-repo" },
+      el("span", { class: "src-repo-url", title: url }, url),
+      el("button", { type: "button", class: "ghost small", onclick: () => showRepo(url, box) }, "Plugins…"),
+      el("button", { type: "button", class: "ghost small danger", onclick: async () => {
+        await api("/api/sources/repos", { method: "DELETE", json: { url } });
+        renderSourceSettings();
+      } }, "Remove"));
+    return el("div", {}, row, box);
+  }));
+  const g = st.gallery_dl;
+  $("#src-gdl-status").title = g.found ? g.path : "";
+  $("#src-gdl-status").textContent = g.found ? `Found: gallery-dl ${g.version}.`
+    : g.error || "Not found. Install gallery-dl yourself (it isn't part of the app), then give its program here if it isn't on PATH.";
+  renderSuwayomi(st.suwayomi);
+  $("#src-error").textContent = "";
+}
+
+function renderSuwayomi(s) {
+  $("#src-suwa-status").textContent = s.ok ? `Connected: ${plural(s.sources, "source")}${s.version ? ` (Suwayomi ${s.version})` : ""}.`
+    : `Not connected: ${s.error}`;
+  if (document.activeElement !== $("#src-suwa-user")) $("#src-suwa-user").value = s.user || "";
+}
+
+$("#src-suwa-save").addEventListener("click", async () => {
+  $("#src-suwa-status").textContent = "Connecting…";
+  try {
+    renderSuwayomi(await api("/api/sources/suwayomi-login", { method: "PUT",
+      json: { user: $("#src-suwa-user").value, password: $("#src-suwa-pass").value } }));
+  } catch (e) { $("#src-suwa-status").textContent = e.message; }
+  $("#src-suwa-pass").value = "";
+});
+
+async function showRepo(url, box) {
+  box.replaceChildren(el("span", { class: "muted" }, "Loading…"));
+  let r;
+  try { r = await api(`/api/sources/repo?url=${encodeURIComponent(url)}`); }
+  catch (e) { box.replaceChildren(el("span", { class: "error" }, e.message)); return; }
+  box.replaceChildren(el("span", { class: "field-head" }, r.name), ...r.plugins.map((p) => el("div", { class: "src-plugin" },
+    el("b", {}, p.name, p.version ? ` ${p.version}` : ""),
+    el("span", { class: "muted" }, [p.summary, p.sites.join(", "), p.language, p.nsfw ? "adult" : ""].filter(Boolean).join(" · ")),
+    p.installed && !p.update ? el("span", { class: "ok" }, "Installed")
+      : el("button", { type: "button", class: "ghost small", onclick: async (e) => {
+        e.target.disabled = true;
+        try { await api("/api/sources/repos/install", { method: "POST", json: { url, id: p.id } }); }
+        catch (err) { e.target.disabled = false; return notify(err.message, "Not installed"); }
+        await renderSourceSettings();
+      } }, p.update ? "Update" : "Install"))));
+}
+
+$("#src-plugin-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  if (!await ask(`Add ${file.name}?`, "A plugin is a program: it runs on this PC with your permissions, and can read " +
+    "and change your files. Add it only if you trust whoever wrote it.", { ok: "Add plugin" })) return;
+  const fd = new FormData();
+  fd.append("file", file);
+  try { await api("/api/sources/plugins", { method: "POST", body: fd }); }
+  catch (err) { return notify(err.message, "Not added"); }
+  renderSourceSettings();
+});
+
+$("#src-repo-add").addEventListener("click", async () => {
+  const url = $("#src-repo-url").value.trim();
+  if (!url) return;
+  try { await api("/api/sources/repos", { method: "POST", json: { url } }); }
+  catch (e) { $("#src-error").textContent = e.message; return; }
+  $("#src-repo-url").value = "";
+  renderSourceSettings();
+});
+
 // ---- chapters --------------------------------------------------------------
 
 function saveChapterSelection() {
@@ -1782,13 +2163,16 @@ function renderChapters() {
   const box = $("#chapters");
   $("#chapters-box").hidden = current.chapters.length === 0;
   $("#chapter-count").textContent = current.chapters.length ? `${current.chapters.length}` : "";
+  const fresh = newCounts[current.id];
+  $("#new-chapters").hidden = !current.source;
+  $("#new-chapters").textContent = fresh ? `${plural(fresh, "new chapter")}…` : "Check for new chapters";
   const busy = current.job && ACTIVE.includes(current.job.status);
   if (!editingIn(box)) {
     const stats = chapterStats();
     box.replaceChildren(...current.chapters.map((c, i) => {
       const s = stats[c.id];
       const stat = (label, n, of) => el("span", { class: of && n === of ? "done" : "" }, `${label} ${n}/${of}`);
-      const name = el("input", { class: "ch-name", value: c.name, title: c.source || "" });
+      const name = el("input", { class: "ch-name", value: c.name, title: c.source || c.source_url || "" });
       name.addEventListener("change", async () => {
         await api(`/api/projects/${current.id}/chapters/${c.id}`, { method: "PATCH", json: { name: name.value } });
         c.name = name.value;
@@ -1837,6 +2221,7 @@ function wordingFlags(c) {
 const waitingForWording = () => !!(current.job && current.job.status === "paused" && current.job.waiting_for === "wording");
 // Waiting before the script in Make the recap: it carries on once each scanned character is added or ignored
 const waitingForCharacters = () => !!(current.job && current.job.status === "paused" && current.job.waiting_for === "characters");
+const waitingForCredits = () => !!(current.job && current.job.status === "paused" && current.job.waiting_for === "credits");
 
 async function checkWording(c, flags) {
   // Waiting at Voice in Make the recap: writing the chapter again restarts the job with that chapter rewritten
@@ -2097,12 +2482,13 @@ function poll() {
     const job = p.job;
     const finished = !ACTIVE.includes(job.status);
     // refresh the lists when a step finishes, and while panels/text/script are streaming in
-    const streaming = job.status === "running" && ["panels", "ocr", "script"].includes(job.step);
+    const streaming = job.status === "running" && ["panels", "ocr", "script", "download"].includes(job.step);
     // (and when it pauses or resumes: Check wording works while Voice waits for it)
     if (finished || job.step !== lastStep || job.status !== lastStatus || streaming) {
       current = p;
       render();
       if (job.status === "paused" && lastStatus !== "paused" && waitingForCharacters()) openReview();
+      if (job.status === "paused" && lastStatus !== "paused" && waitingForCredits()) openCredits();
     } else {
       current.job = job;
       renderJob();
@@ -2143,6 +2529,7 @@ function renderJob() {
   pause.textContent = j.status === "paused" ? "Resume" : j.pause ? "Pausing… (resume)" : "Pause";
   $("#job-wording").hidden = !waitingForWording();
   $("#job-characters").hidden = $("#review-wait").hidden = !waitingForCharacters();
+  $("#job-credits").hidden = $("#credits-wait").hidden = !waitingForCredits();
   box.classList.toggle("paused", j.status === "paused");
 }
 
@@ -2746,6 +3133,8 @@ let shownPart = 0;
 const lengthText = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.max(1, Math.round(s / 60))} min`);
 const sizeText = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`);
 
+let shownShort = -1;  // the Short in the player (-1: the video itself)
+
 function renderOutput() {
   const out = current.output;
   $("#output").hidden = !out && !current.editors && !current.package;
@@ -2756,6 +3145,8 @@ function renderOutput() {
     ` · ${sizeText(pk.size)} · saved ${new Date(pk.time * 1000).toLocaleString()}`));
   for (const x of ["#player", "#srt-link", "#chapters-link"]) $(x).hidden = !out;
   $("#video-empty").hidden = !!out;
+  const shorts = (out && out.shorts) || [];
+  $("#output-shorts").hidden = !shorts.length;
   if (!out) {
     $("#player").removeAttribute("src");
     $("#output-parts").replaceChildren();
@@ -2763,16 +3154,22 @@ function renderOutput() {
   }
   const parts = out.parts && out.parts.length ? out.parts : [{ video: out.video, srt: out.srt }];
   if (shownPart >= parts.length) shownPart = 0;
+  if (shownShort >= shorts.length) shownShort = -1;
   const part = parts[shownPart];
-  const src = `/files/${current.id}/${encodeURI(part.video)}?t=${out.time}`;
+  const src = `/files/${current.id}/${encodeURI(shownShort >= 0 ? shorts[shownShort] : part.video)}?t=${out.time}`;
   if (!$("#player").src.endsWith(src)) $("#player").src = src;
   $("#srt-link").href = fileUrl(encodeURI(part.srt), out.time);
   $("#chapters-link").hidden = !part.chapters;
   if (part.chapters) $("#chapters-link").href = fileUrl(encodeURI(part.chapters), out.time);
   $("#output-parts").replaceChildren(...(parts.length > 1 ? parts.map((x, k) => el("button", {
-    type: "button", class: k === shownPart ? "ghost small on" : "ghost small", "aria-pressed": k === shownPart ? "true" : "false",
-    onclick: () => { shownPart = k; renderOutput(); },
+    type: "button", class: k === shownPart && shownShort < 0 ? "ghost small on" : "ghost small", "aria-pressed": k === shownPart ? "true" : "false",
+    onclick: () => { shownPart = k; shownShort = -1; renderOutput(); },
   }, `Part ${k + 1}: ${x.first}${x.last !== x.first ? ` to ${x.last}` : ""} (${lengthText(x.seconds)})`)) : []));
+  $("#output-shorts").replaceChildren(el("span", { class: "muted" }, `${plural(shorts.length, "Short")}:`),
+    ...(shorts.length ? [el("button", { type: "button", class: shownShort < 0 ? "ghost small on" : "ghost small",
+      onclick: () => { shownShort = -1; renderOutput(); } }, "Whole video")] : []),
+    ...shorts.map((x, k) => el("button", { type: "button", class: k === shownShort ? "ghost small on" : "ghost small",
+      title: x.split("/").pop(), onclick: () => { shownShort = k; renderOutput(); } }, String(k + 1))));
 }
 $("#open-folder").addEventListener("click", () => api(`/api/projects/${current.id}/open-folder`, { method: "POST" }));
 
@@ -2949,17 +3346,103 @@ $("#find-credits").addEventListener("click", async () => {
   } catch (e) { notify(e.message); }
 });
 
-// Every piece found as the scan group's pages, chapter by chapter in one dialog, to check what was left out
-// and put back what shouldn't be (or leave out again one you put back).
+// What was found as the scan group's pages, in one dialog: each kind once (a picture and its copies in other
+// chapters, credits.kinds), to keep or leave out all of them at once; in advanced mode also every piece,
+// chapter by chapter, to put back what shouldn't be (or leave out again one you put back).
 function creditPieces(withKept) {
   return current.panels.filter((p) => p.credits && inScope(p.chapter) && (withKept || !p.enabled));
 }
 
+// left out and not checked yet (credits.unchecked)
+const uncheckedCredit = (p) => p.credits && !p.enabled && !("credits_kept" in p) && !p.credits_seen;
+
 function renderCreditsCount() {
   const all = creditPieces(true), off = all.filter((p) => !p.enabled).length;
+  const open = all.filter(uncheckedCredit).length;
   $("#credits-count").hidden = !all.length;
-  $("#credits-count").textContent = `Left out: ${plural(off, "piece")}…`;
+  $("#credits-count").textContent = `Left out: ${plural(off, "piece")}${open ? ` (${open} to check)` : ""}…`;
 }
+
+let creditKinds = [];
+
+function kindTile(k) {
+  const tile = el("div", {});
+  const fill = () => {
+    const shown = k.show.map((id) => current.panels.find((x) => x.id === id)).filter(Boolean);
+    if (!shown.length) return tile.replaceChildren();
+    const p = shown[0];
+    const state = k.open ? "to check" : k.kept === k.ids.length ? "kept" : k.kept ? `${k.kept} of ${k.ids.length} kept` : "left out";
+    tile.className = "credit-piece kind" + (k.open ? " open" : k.kept === k.ids.length ? " kept" : "");
+    const pick = (enabled) => async (e) => {
+      for (const b of tile.querySelectorAll("button")) b.disabled = true;
+      try {
+        const r = await api(`/api/projects/${current.id}/panels/choose`, { method: "POST", json: { ids: k.ids, enabled } });
+        for (const u of r.panels) current.panels[current.panels.findIndex((x) => x.id === u.id)] = u;
+      } catch (err) { notify(err.message); }
+      Object.assign(k, { open: 0, kept: enabled ? k.ids.length : 0 });
+      fill();
+      renderCreditsSummary();
+      renderPanels();  // the scene list behind, and its count
+    };
+    const where = k.chapters > 1 ? `in ${plural(k.chapters, "chapter")}` : current.chapters.find((c) => c.id === p.chapter)?.name || "";
+    tile.replaceChildren(
+      el("div", { class: "kind-pics" }, ...shown.map((x) => {  // (a page cut into pieces: all of them)
+        const src = fileUrl(`panels/${x.file}`);
+        return el("img", { loading: "lazy", src, title: `Page ${x.page + 1}`, onclick: () => lightbox(src, x.id) });
+      })),
+      el("span", { class: "piece-tag" }, state),
+      el("div", { class: "kind-why" }, el("b", {}, where), ` · ${k.why}`),
+      el("div", { class: "kind-actions" },
+        el("button", { type: "button", class: "small" + (k.open || k.kept < k.ids.length ? "" : " primary"), onclick: pick(true),
+          title: k.ids.length > 1 ? `Use all ${k.ids.length} in the video` : "Use it in the video" }, "Keep"),
+        el("button", { type: "button", class: "small" + (k.open || k.kept ? "" : " primary"), onclick: pick(false),
+          title: k.ids.length > 1 ? `Leave all ${k.ids.length} out of the video` : "Leave it out of the video" }, "Leave out")));
+  };
+  fill();
+  return tile;
+}
+
+async function renderKinds() {
+  $("#credits-kinds").replaceChildren(el("p", { class: "muted" }, "Sorting them by picture…"));
+  try {
+    const chapters = selectedCh.size ? [...selectedCh].join(",") : "";
+    creditKinds = (await api(`/api/projects/${current.id}/credits/kinds?chapters=${encodeURIComponent(chapters)}`)).kinds;
+  } catch (e) { creditKinds = []; notify(e.message); }
+  $("#credits-kinds").replaceChildren(creditKinds.length
+    ? el("div", { class: "credits-grid kinds-grid" }, ...creditKinds.map(kindTile))
+    : el("p", { class: "muted" }, "Nothing to check."));
+  renderCreditsSummary();
+}
+
+async function openCredits() {
+  $("#credits-every").checked = false;
+  showCreditsView();
+  if (!$("#credits-dialog").open) $("#credits-dialog").showModal();
+  await renderKinds();
+}
+
+function showCreditsView() {
+  const every = $("#credits-every").checked && isAdvanced();
+  $("#credits-kinds").hidden = every;
+  $("#credits-list").hidden = $("#credits-kept-box").hidden = !every;
+  if (every) renderCredits();
+  else renderCreditsSummary();
+}
+
+$("#credits-every").addEventListener("change", () => { showCreditsView(); if (!$("#credits-every").checked) renderKinds(); });
+
+$("#credits-rest").addEventListener("click", async (e) => {
+  const ids = current.panels.filter((p) => uncheckedCredit(p) && creditKinds.some((k) => k.open && k.ids.includes(p.id))).map((p) => p.id);
+  if (!ids.length) return;
+  e.target.disabled = true;
+  try {
+    const r = await api(`/api/projects/${current.id}/panels/choose`, { method: "POST", json: { ids, enabled: false } });
+    for (const u of r.panels) current.panels[current.panels.findIndex((x) => x.id === u.id)] = u;
+  } catch (err) { notify(err.message); }
+  e.target.disabled = false;
+  renderPanels();
+  renderKinds();
+});
 
 function creditTile(p) {
   const tile = el("div", {});
@@ -2987,11 +3470,17 @@ function creditTile(p) {
 function renderCreditsSummary() {
   const all = creditPieces(true), off = all.filter((p) => !p.enabled);
   const chapters = new Set(off.map((p) => p.chapter)).size;
+  const kinds = $("#credits-list").hidden;
+  const open = kinds ? creditKinds.filter((k) => k.open).length : 0;
   $("#credits-summary").textContent = all.length
-    ? `${plural(off.length, "piece")} left out in ${plural(chapters, "chapter")}` +
+    ? (kinds && creditKinds.length ? `${!open ? `${plural(creditKinds.length, "kind")}, all checked`
+      : open === creditKinds.length ? `${plural(open, "kind")} to check` : `${open} of ${creditKinds.length} kinds to check`} · ` : "") +
+      `${plural(off.length, "piece")} left out in ${plural(chapters, "chapter")}` +
       (all.length > off.length ? `, ${all.length - off.length} put back` : "") + (selectedCh.size ? " (selected chapters)" : "")
     : "Nothing is left out as the scan group's pages" + (selectedCh.size ? " in the selected chapters" : "") +
       ". Find them now (Settings for this project) looks for them.";
+  $("#credits-rest").hidden = !open;
+  $("#credits-wait").hidden = !waitingForCredits();
 }
 
 function renderCredits() {
@@ -3008,14 +3497,9 @@ function renderCredits() {
   renderCreditsSummary();
 }
 
-for (const b of document.querySelectorAll(".credits-open")) b.addEventListener("click", () => {
-  renderCredits();
-  $("#credits-dialog").showModal();
-  // the first look for a piece's copies reads every chapter's ends (a few seconds); start it now
-  const first = creditPieces(true)[0];
-  if (first) api(`/api/projects/${current.id}/panels/${first.id}/same`).catch(() => {});
-});
+for (const b of document.querySelectorAll(".credits-open")) b.addEventListener("click", () => openCredits());
 $("#credits-kept").addEventListener("change", renderCredits);
+$("#job-credits").addEventListener("click", () => openCredits());
 
 // ---- the project as one file (.recap): Save as file, and Open project file (package.py) ----
 
@@ -3081,7 +3565,7 @@ const VOICE_LANGS = { a: "American English", b: "British English", e: "Spanish",
   j: "Japanese", p: "Brazilian Portuguese", z: "Mandarin" };
 let setupPage = 0, setupPoll = null, setupKeyNote = null;
 let setupGpuPoll = null;  // (apart from setupPoll: the voice can download at the same time)
-const setupWants = { ocr: true, scan: false, magi: false, magiLicense: false };
+const setupWants = { ocr: true, bubbles: true, scan: false, magi: false, magiLicense: false };
 
 function openSetup(page = 0) {
   setupPage = page;
@@ -3359,7 +3843,8 @@ function setupVideo(body) {
 }
 
 async function setupExtras(body) {
-  const [o, c, m] = await Promise.all([api("/api/addons/ocr-en"), api("/api/addons/charscan"), api("/api/addons/magi")]);
+  const [o, b, c, m] = await Promise.all([api("/api/addons/ocr-en"), api("/api/addons/bubbles"), api("/api/addons/charscan"),
+    api("/api/addons/magi")]);
   const row = (key, st, title, about) => (st.installed ? setupLine(true, `${title}: installed.`)
     : st.state === "installing" ? setupLine(true, `${title}: downloading (see Settings).`)
     : el("label", { class: "setup-choice" },
@@ -3368,6 +3853,7 @@ async function setupExtras(body) {
   const magiOpen = !m.installed && m.state !== "installing";
   body.append(el("p", {}, "Optional extras that improve the results. Tick what you want; it downloads in the background after you press Next, and you can add or remove these later in Settings."),
     row("ocr", o, `English text reading (${o.download_mb} MB)`, "Reads English comic lettering far more accurately than the built-in model. Recommended."),
+    row("bubbles", b, `Bubble finder (${b.download_mb} MB)`, "Keeps a webtoon's cuts out of its speech bubbles and captions, so no scene shows half a bubble. Recommended for webtoons."),
     row("scan", c, `Character scan (${c.download_mb} MB)`, "Finds the characters in your chapters so you can name them. Named characters help the narrator tell who is who."),
     row("magi", m, `Speaker detection, Magi v2 (about ${m.download_gb} GB)`, `Guesses who says each line. ${m.license}`),
     magiOpen ? el("label", { class: "check setup-license" },
@@ -3378,6 +3864,7 @@ async function setupExtras(body) {
 async function startSetupDownloads() {
   const tries = [];
   if (setupWants.ocr) tries.push(api("/api/addons/ocr-en/install", { method: "POST" }));
+  if (setupWants.bubbles) tries.push(api("/api/addons/bubbles/install", { method: "POST" }));
   if (setupWants.scan) tries.push(api("/api/addons/charscan/install", { method: "POST" }));
   if (setupWants.magi) {
     if (!setupWants.magiLicense) return notify("Tick the box agreeing to Magi's license, or untick Magi.", "Magi's license");

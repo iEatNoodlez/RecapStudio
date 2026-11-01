@@ -29,6 +29,8 @@ DEFAULT_SETTINGS = {
     "min_panel_frac": 0.08,          # smallest panel side, as a fraction of page width
     "webtoon_video": "scroll",       # webtoon chapters: "scroll" the whole strip, or show "scenes" one by one
     "leave_out_credits": True,       # leave out the scan group's credits, notices and ads at chapters' ends (credits.py)
+    # and before the script, "review" the kinds found (it waits: pipeline._credits_hold) or "trust" them
+    "credits_review": "review",
     # YouTube-safe: milder sex scenes in the script (script.YOUTUBE) and black boxes over nudity in the video (cover.py)
     "youtube_safe": False,
     # Make the recap, before the script (pipeline.run_characters): scan a project never scanned for its characters,
@@ -99,6 +101,15 @@ DEFAULT_SETTINGS = {
     # then at this volume (1.0: about as loud as the narration)
     "background_music": False,
     "music_volume": 0.25,
+    # captions drawn into the video, a few words at a time (captions.py): "off", "classic", "box" or "minimal",
+    # the colour of the word being said (captions.COLORS) and the letters (captions.FONTS)
+    "captions": "off",
+    "captions_color": "yellow",
+    "captions_font": "Arial Black",
+    # the finished video also cut into Shorts of at most this many seconds (0: none), at pauses between lines,
+    # each with "Part N" at the top when shorts_label (video.make_shorts)
+    "shorts": 0,
+    "shorts_label": True,
     # run text reading and the voice on the NVIDIA GPU when available (falls back to the CPU)
     "use_gpu": True,
     "parallel_workers": 0,           # panels / lines worked on at once; 0 = automatic
@@ -115,6 +126,9 @@ DEFAULT_SETTINGS = {
     "skip_version": "",
     # where projects are saved; empty: the default (paths.DEFAULT_PROJECTS)
     "projects_dir": "",
+    # sources (sources.py): plugin lists added, gallery-dl's program (empty: found on PATH), the Suwayomi server
+    "plugin_repos": [], "gallery_dl_path": "", "suwayomi_url": "http://127.0.0.1:4567",
+    "check_new_chapters": False,  # look for each project's new chapters when the app starts
 }
 
 # App-wide settings, shared by every project (data/settings.json): who writes the
@@ -126,13 +140,15 @@ GLOBAL_KEYS = {
     "openrouter_model", "gemini_model", "deepseek_model", "groq_model", "mistral_model", "setup_done",
     "redraw_provider", "redraw_model",
     "check_updates", "skip_version", "projects_dir",
+    "plugin_repos", "gallery_dl_path", "suwayomi_url", "check_new_chapters",
 }
 # How each project's video looks: chosen when it's created (the New project dialog), changed in its Video tab.
 # App-wide until 0.1.1 (move_video_settings copies those choices into the projects).
 VIDEO_KEYS = (
     "orientation", "resolution", "fps", "video_style", "motion", "motion_focus", "remove_text", "min_panel_seconds",
     "pad_seconds", "transition_seconds", "video_split", "video_split_chapters", "video_split_hours", "editor_export",
-    "editor_transition", "background_music", "music_volume", "typeset",
+    "editor_transition", "background_music", "music_volume", "typeset", "captions", "captions_color", "captions_font",
+    "shorts", "shorts_label",
 )
 # what the New project dialog sets, besides those
 NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "language", "webtoon_video", "youtube_safe", "find_characters",

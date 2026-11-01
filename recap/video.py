@@ -24,6 +24,7 @@ import cv2
 import numpy as np
 import soundfile as sf
 
+from . import captions
 from .panels import imread
 from .scenes import stack
 from .tts import SAMPLE_RATE
@@ -410,6 +411,7 @@ class _Timeline:
         self.starts = list(np.concatenate([[0.0], np.cumsum(self.durations)[:-1]]))
         self.frames = int(float(sum(self.durations)) * fps)
         self._released = 0  # segments before this one have had their images freed
+        self.captions = None  # captions.Captions drawn over the frames, when the project has them
 
     def draw(self, f: int, out: np.ndarray, spare: np.ndarray) -> np.ndarray:
         """Frame f drawn into out; spare holds the previous segment's picture during a crossfade."""
@@ -427,6 +429,8 @@ class _Timeline:
         if self.fade and (f < self.fade or f >= self.frames - self.fade):
             k = min(1.0, (f + 0.5) / self.fade, (self.frames - f - 0.5) / self.fade)
             cv2.convertScaleAbs(frame, dst=frame, alpha=_ease(max(0.0, k)))
+        if self.captions:
+            self.captions.draw(frame, t)
         return frame
 
     def release(self):
@@ -779,6 +783,7 @@ def piece_signature(items, settings, encoder_args) -> str:
                             *([it["focus"]] if it.get("focus") else [])])  # pieces made before keep their names
     look = [frame_size(settings), int(settings["fps"]), float(settings["transition_seconds"]),
             float(settings["pad_seconds"]), float(settings["min_panel_seconds"]), scene_motion(settings)]
+    look += captions.signature(settings)  # (nothing when they're off: pieces made before stay the same)
     blob = json.dumps([PIECE_VERSION, look, list(encoder_args), content], default=str)
     return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
@@ -811,15 +816,21 @@ def render_piece(items, base: Path, settings, encoder_args, workers, progress=No
     timeline = _Timeline([segment(it, settings, W, H) for it in items], fps, tr, fade=round(tr * 0.5 * fps))
     n = round(timeline.frames * SAMPLE_RATE / fps)  # the narration runs exactly as long as the frames
     track = np.zeros(n, dtype=np.float32)
-    subs = []
-    for seg, st in zip(timeline.segments, timeline.starts):
-        for at, a, text in seg.events:
+    subs, pages, style = [], [], captions.style_of(settings)
+    for it, seg, st in zip(items, timeline.segments, timeline.starts):
+        files = ([it["scenes"][i].get("audio") for i in seg.voiced] if it.get("type") == "strip"
+                 else [it.get("audio")] * len(seg.events))
+        for (at, a, text), file in zip(seg.events, files):
             o = int((st + at) * SAMPLE_RATE)
             if o < n:
                 track[o:o + len(a)] += a[: n - o]
             if text.strip():
                 subs.append([round(st + at, 3), round(st + at + len(a) / SAMPLE_RATE, 3), text.strip()])
+                if style:
+                    pages += captions.pages(captions.words(text, a, SAMPLE_RATE, file), style, st + at)
         seg.events = []
+    if pages:
+        timeline.captions = captions.Captions(captions.track(pages), settings, W, H)
     np.clip(track, -1, 1, out=track)
     tmp = {k: _piece_file(base, f"part.{k}") for k in ("mp4", "wav", "json")}
     base.parent.mkdir(parents=True, exist_ok=True)
@@ -1043,7 +1054,102 @@ def _join_part(ffmpeg, stem, pieces, out_dir: Path, cancelled=None, progress=Non
     chapters.write_text("".join(f"{_yt_time(st, total >= 3600)} {name}\n" for (name, _), st in zip(pieces, starts)),
                         encoding="utf-8")
     return {"video": video, "srt": srt, "wav": wav, "chapters": chapters, "seconds": total,
-            "first": pieces[0][0], "last": pieces[-1][0]}
+            "first": pieces[0][0], "last": pieces[-1][0],
+            "lines": [[st + a, st + b] for info, st in zip(infos, starts) for a, b, _ in info["subs"]]}
+
+
+# ---- Shorts: the finished video cut into parts of at most a minute or so, at pauses between lines ------------
+
+def short_spans(lines, total: float, most: float) -> list[tuple[float, float]]:
+    """Where to cut a video of total seconds, whose narration lines run [start, end], into Shorts of at most
+    `most` seconds: each as long as it can be, ending in the middle of a pause between two lines (never in
+    the first 40% of a Short, which would make one too short); straight at `most` when no pause fits."""
+    pauses = [(b + a2) / 2 for (_, b), (a2, _) in zip(lines, lines[1:]) if a2 > b]
+    cuts, start = [], 0.0
+    while total - start > most + 0.05:
+        fit = [p for p in pauses if start + 0.4 * most <= p <= start + most]
+        start = max(fit) if fit else start + most
+        cuts.append(start)
+    return list(zip([0.0] + cuts, cuts + [total]))
+
+
+def _label(text: str, settings, W: int, H: int, path: Path):
+    """"Part 3" in big white capitals with a black outline, as a PNG to lay over a Short."""
+    from PIL import Image, ImageDraw, ImageFont
+    size = round(0.06 * min(W, H))
+    font = ImageFont.truetype(captions.font_path(settings), size)
+    stroke = max(2, round(size * 0.1))
+    box = font.getbbox(text.upper(), stroke_width=stroke)
+    img = Image.new("RGBA", (box[2] - box[0] + 8, box[3] - box[1] + 8), (0, 0, 0, 0))
+    ImageDraw.Draw(img).text((4 - box[0], 4 - box[1]), text.upper(), font=font, fill=(255, 255, 255, 255),
+                             stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
+    img.save(path)
+
+
+def _run(cmd, cancelled=None):
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=NO_WINDOW)
+    while True:
+        try:
+            _, err = proc.communicate(timeout=0.5)
+            return proc.returncode, err.decode(errors="replace")
+        except subprocess.TimeoutExpired:
+            if cancelled and cancelled():
+                proc.kill()
+                proc.communicate()
+                raise InterruptedError("cancelled")
+
+
+def make_shorts(part: dict, settings, progress=None, cancelled=None) -> list[Path]:
+    """Cut a joined video (a part from render_chapters) into Shorts of at most settings["shorts"] seconds
+    (short_spans), in a "shorts" folder beside it: "<stem> - Short 01.mp4" and on, with "Part N" at the top
+    when shorts_label. The video is encoded again (cuts fall between keyframes); captions and music come
+    with it. Shorts made before for the same video are deleted first. progress(fraction)."""
+    ffmpeg = find_ffmpeg()
+    most = float(settings.get("shorts") or 0)
+    video = Path(part["video"])
+    folder = video.parent / "shorts"
+    folder.mkdir(parents=True, exist_ok=True)
+    stem = video.stem
+    for old in folder.glob(f"{glob_escape(stem)} - Short *.mp4"):
+        old.unlink(missing_ok=True)
+    spans = short_spans(part.get("lines") or [], float(part["seconds"]), most)
+    W, H = frame_size(settings)
+    first = chapter_encoder(settings)
+    encoders = [first, CPU_ENCODER] if is_hardware(first) else [CPU_ENCODER]
+    out = []
+    for n, (a, b) in enumerate(spans, 1):
+        dest = folder / f"{stem} - Short {n:02}.mp4"
+        tmp = folder / f"{stem} - Short {n:02}.making.mp4"
+        label = folder / f"{stem}.label.png"
+        top = round((0.1 if H > W else 0.05) * H)
+        if settings.get("shorts_label", True) and len(spans) > 1:
+            _label(f"Part {n}", settings, W, H, label)
+            picture = ["-i", str(label), "-filter_complex", f"[0:v][1:v]overlay=(W-w)/2:{top}[v]", "-map", "[v]"]
+        else:
+            picture = ["-map", "0:v"]
+        try:
+            for enc in list(encoders):
+                code, err = _run([ffmpeg, "-y", "-loglevel", "error", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}",
+                                  "-i", str(video), *picture, "-map", "0:a?", *enc, "-pix_fmt", output_pix_fmt(enc),
+                                  "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)], cancelled)
+                if code == 0:
+                    break
+                encoders = [e for e in encoders if e is not enc]  # (the GPU one wouldn't start: the CPU from now on)
+                if not encoders:
+                    raise RuntimeError(f"Cutting the Shorts failed: {err[-600:]}")
+            tmp.replace(dest)
+        finally:
+            tmp.unlink(missing_ok=True)
+            label.unlink(missing_ok=True)
+        out.append(dest)
+        if progress:
+            progress(n / len(spans))
+    return out
+
+
+def glob_escape(name: str) -> str:
+    """name with glob's special characters taken literally."""
+    return "".join(f"[{c}]" if c in "*?[" else c for c in name)
 
 
 def _clean_cache(cache_dir: Path, current: dict):

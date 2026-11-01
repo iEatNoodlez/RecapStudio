@@ -4,6 +4,7 @@ import copy
 import io
 import os
 import re
+import threading
 import time
 import uuid
 import zipfile
@@ -17,10 +18,11 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 import anthropic
+import requests
 
-from . import (charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu, importer, magi,
-               mcp, music, ocr, online_voices, package, panels, phone, pipeline, scenes, script, store, translate,
-               tts, updates, video, voiceover, youtube)
+from . import (bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu,
+               importer, magi, mcp, music, ocr, online_voices, package, panels, phone, pipeline, scenes, script,
+               sources, store, translate, tts, updates, video, voiceover, youtube)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -77,6 +79,13 @@ def _startup():
     store.move_video_settings()  # video settings were app-wide until 0.1.1: each project keeps its own
     pipeline.start_worker()
     phone.restore(app)       # Phone access, when it was on
+    if store.global_settings().get("check_new_chapters"):  # each project's new chapters, from its source
+        threading.Thread(target=sources.check_all, daemon=True, name="new-chapters").start()
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    sources.stop_all()  # the plugins' processes
 
 
 # ---- Phone access (phone.py): Settings → Phone on the PC, and the phone page ----
@@ -844,6 +853,14 @@ def same_picture(pid: str, panel_id: str):
     return {"ids": credits.same(p, store.project_dir(pid), panel_id)}
 
 
+@app.get("/api/projects/{pid}/credits/kinds")
+def credit_kinds(pid: str, chapters: str = ""):
+    """The pieces left out as the scan group's pages, by kind (each picture once, with its copies), to check
+    them; chapters: comma-separated ids, to show only the kinds in those."""
+    p = _project(pid)
+    return {"kinds": credits.kinds(p, store.project_dir(pid), [c for c in chapters.split(",") if c] or None)}
+
+
 @app.post("/api/projects/{pid}/panels/choose")
 def choose_panels(pid: str, ids: list[str] = Body(..., embed=True), enabled: bool = Body(..., embed=True)):
     """Use or leave out these pieces, as your choice (see credits.choose). Returns the pieces changed."""
@@ -1160,6 +1177,169 @@ def boxes_remove():
     cover.forget()
     try:
         return cover.DOWNLOAD.remove()
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+# ---- sources (sources.py): getting chapters from sites through plugins members bring, gallery-dl or Suwayomi ----
+
+def _sourced(fn, *args):
+    """Run a source call, its problems as messages the page shows."""
+    try:
+        return fn(*args)
+    except sources.SourceError as e:
+        raise HTTPException(400, str(e))
+    except requests.RequestException as e:
+        raise HTTPException(502, f"The source didn't answer: {e}")
+
+
+@app.get("/api/sources")
+def sources_status():
+    s = store.global_settings()
+    return {"sources": sources.available(), "plugins": sources.plugins(), "repos": s.get("plugin_repos") or [],
+            "gallery_dl": sources.gallery_dl.status(), "suwayomi": sources.suwayomi.status(),
+            "new_counts": sources.new_counts}
+
+
+@app.get("/api/sources/new")
+def sources_new_counts():
+    """New chapters per project, from the check when the app started (and Check for new chapters since)."""
+    return sources.new_counts
+
+
+@app.post("/api/sources/plugins")
+async def sources_add_plugin(file: UploadFile):
+    data = await file.read(sources.MAX_FILE + 1)
+    return _sourced(sources.add_plugin, file.filename or "plugin.py", data)
+
+
+@app.put("/api/sources/plugins/{pid}")
+def sources_switch_plugin(pid: str, enabled: bool = Body(..., embed=True)):
+    sources.set_enabled(pid, enabled)
+    return {"plugins": sources.plugins()}
+
+
+@app.delete("/api/sources/plugins/{pid}")
+def sources_remove_plugin(pid: str):
+    sources.remove_plugin(pid)
+    return {"plugins": sources.plugins()}
+
+
+@app.put("/api/sources/suwayomi-login")
+def sources_suwayomi_login(user: str = Body("", embed=True), password: str = Body("", embed=True)):
+    """The Suwayomi server's user name and password, for when it asks for a login (kept in
+    data\\suwayomi_login.json; empty forgets them)."""
+    sources.suwayomi.set_login(user.strip(), password)
+    return sources.suwayomi.status()
+
+
+@app.get("/api/sources/repo")
+def sources_repo(url: str):
+    return _sourced(sources.repo, url)
+
+
+@app.post("/api/sources/repos")
+def sources_add_repo(url: str = Body(..., embed=True)):
+    url = url.strip()
+    found = _sourced(sources.repo, url)  # only a link that gives a plugin list is kept
+    repos = store.global_settings().get("plugin_repos") or []
+    if url not in repos:
+        store.update_global({"plugin_repos": repos + [url]})
+    return found
+
+
+@app.delete("/api/sources/repos")
+def sources_remove_repo(url: str = Body(..., embed=True)):
+    store.update_global({"plugin_repos": [u for u in store.global_settings().get("plugin_repos") or [] if u != url]})
+    return {"repos": store.global_settings()["plugin_repos"]}
+
+
+@app.post("/api/sources/repos/install")
+def sources_install(url: str = Body(..., embed=True), id: str = Body(..., embed=True)):
+    return _sourced(sources.install, url, id)
+
+
+@app.get("/api/sources/link")
+def sources_for_link(url: str):
+    return sources.for_link(url)
+
+
+@app.post("/api/sources/search")
+def sources_search(key: str = Body(..., embed=True), query: str = Body(..., embed=True), page: int = Body(1, embed=True)):
+    return _sourced(sources.search, key, query, page)
+
+
+@app.post("/api/sources/browse")
+def sources_browse(key: str = Body(..., embed=True), list: str = Body(..., embed=True), page: int = Body(1, embed=True)):
+    return _sourced(sources.browse, key, list, page)
+
+
+@app.post("/api/sources/series")
+def sources_series(key: str = Body(..., embed=True), ref: str = Body(..., embed=True)):
+    return _sourced(sources.series, key, ref)
+
+
+@app.get("/api/sources/image/{token}")
+def sources_image(token: str):
+    data, kind = _sourced(sources.fetch_image, token)
+    return Response(data, media_type=kind, headers={"Cache-Control": "max-age=86400"})
+
+
+@app.get("/api/projects/{pid}/source/new")
+def sources_new(pid: str):
+    """The chapters of the project's series it doesn't have yet."""
+    found = _sourced(sources.new_chapters, _project(pid))
+    sources.new_counts[pid] = len(found["series"]["chapters"])
+    return found
+
+
+@app.post("/api/projects/{pid}/download")
+def sources_download(pid: str, key: str = Body(..., embed=True), series: dict = Body(..., embed=True),
+                     chapters: list[dict] = Body(..., embed=True), place: str = Body("number", embed=True),
+                     skip: list[str] = Body([], embed=True)):
+    """Get chapters from a source into the project: a job (pipeline.run_download)."""
+    _project(pid)
+    current = pipeline.latest_for(pid)
+    if current and current["status"] in pipeline.ACTIVE:
+        raise HTTPException(409, "A job is already running for this project")
+    chosen = [{"ref": str(c["ref"]), "name": str(c.get("name") or "Chapter"), "url": str(c.get("url") or "")}
+              for c in chapters if isinstance(c, dict) and c.get("ref")]
+    if not chosen and not skip:
+        raise HTTPException(400, "No chapters chosen")
+    found = {"ref": str(series.get("ref", "")), "url": str(series.get("url") or ""), "title": str(series.get("title") or "")}
+    return pipeline.public(pipeline.submit(pid, ["download"], options={
+        "key": key, "series": found, "chapters": chosen, "place": place, "skip": [str(x) for x in skip]}))
+
+
+# ---- the bubble finder for cutting webtoons (comic-text-and-bubble-detector): downloaded on request (never shipped) --
+
+@app.get("/api/addons/bubbles")
+def bubbles_status():
+    return bubbles.DOWNLOAD.status()
+
+
+@app.post("/api/addons/bubbles/install")
+def bubbles_install():
+    try:
+        return bubbles.DOWNLOAD.start()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/addons/bubbles/cancel")
+def bubbles_cancel():
+    bubbles.DOWNLOAD.cancel()
+    return bubbles.DOWNLOAD.status()
+
+
+@app.delete("/api/addons/bubbles")
+def bubbles_remove():
+    for job in pipeline.jobs.values():  # the model is open while chapters are cut
+        if job["status"] in pipeline.ACTIVE and job.get("step") == "panels":
+            raise HTTPException(409, "Panels are being detected right now; try again when that's done")
+    bubbles.forget()
+    try:
+        return bubbles.DOWNLOAD.remove()
     except ValueError as e:
         raise HTTPException(409, str(e))
 
@@ -1482,6 +1662,33 @@ def writer_models(provider: str):
         return {"models": cloud.list_models(_writer(provider))}
     except cloud.Problem as e:
         raise HTTPException(502, f"Couldn't get the list of models: {e}")
+
+
+@app.get("/api/captions/preview.jpg")
+def captions_preview(style: str = "classic", color: str = "yellow", font: str = "Arial Black",
+                     orientation: str = "portrait", pid: str = ""):
+    """A picture of a caption style (captions.preview), at half size: over one of the project's pictures when
+    pid is given, else over a plain background (a project not made yet)."""
+    W, H = (540, 960) if orientation == "portrait" else (960, 540)
+    background = None
+    try:
+        p = _project(pid) if pid else None
+    except HTTPException:
+        p = None
+    used = [x for x in (p or {}).get("panels", []) if x.get("enabled", True)]
+    if used:
+        img = panels.imread(store.project_dir(pid) / "panels" / used[len(used) // 3]["file"])
+        if img is not None:
+            k = min(W / img.shape[1], H / img.shape[0])
+            img = cv2.resize(img, (max(1, round(img.shape[1] * k)), max(1, round(img.shape[0] * k))),
+                             interpolation=cv2.INTER_AREA)
+            background = np.zeros((H, W, 3), np.uint8)
+            y, x = (H - img.shape[0]) // 2, (W - img.shape[1]) // 2
+            background[y:y + img.shape[0], x:x + img.shape[1]] = img
+    picture = captions.preview({"captions": style if style in captions.STYLES else "classic",
+                                "captions_color": color, "captions_font": font}, W, H, background)
+    ok, buf = cv2.imencode(".jpg", picture, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    return Response(buf.tobytes(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/projects/{pid}/open-folder")

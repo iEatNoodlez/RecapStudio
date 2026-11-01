@@ -42,6 +42,27 @@ Turn on **Background music under the narration** in New project (How its video l
 - **Your music, your rights.** Nothing is bundled. Use music you're allowed to put on YouTube, such as tracks from the YouTube Audio Library, or the video may get a Content ID claim.
 - Tracks are part of the project: **Save as file** takes them along. Ones under 6 seconds aren't taken.
 
+## Captions in the video
+
+**Captions in the video** (New project, How its video looks; or the Video tab → Captions and Shorts) draws the narration into the picture a few words at a time, the way CapCut's auto-captions look on Shorts and TikTok, with the word being said picked out. The subtitles file (`.srt`) is made either way.
+
+- **CapCut classic**: bold white capitals with a black outline and a soft shadow, up to three words at a time, the word being said in colour and popping up a little; each new set of words rises into place.
+- **Highlight box**: the same capitals, up to four words, with a rounded box in colour behind the word being said.
+- **Minimal**: the words as written, up to six on two lines, on a dark see-through band, the word being said in colour. Calmer, for long videos.
+- **Colour** of the word being said: yellow (the default), green, red, purple, or white to pick out nothing. **Letters**: Arial Black (the default), Segoe UI Black, Impact or Comic Sans, all in Windows. A picture of the style chosen shows under the choice, over one of the project's pictures.
+- **Where**: in the lower middle of the picture, about two thirds down in portrait (clear of the Shorts and TikTok buttons) and four fifths down in landscape. A page of words that's too wide goes on two lines, then gets smaller.
+- **Timing**: a new set of words starts after a sentence, a pause, or about a second and a half of speech. When each word is said comes from the line's sound: each comma and full stop is lined up with a pause in it, and the words between are spread over the speech between those pauses by their length. On the 11-minute sample, its 211 commas and full stops landed on their pauses (half exactly, 9 in 10 within 0.02 s), where spreading the words alone was off by 0.36 s in the middle and up to 0.8 s by the end of a long line. With the speech recognizer installed (Settings → Voice, the add-on that lines up your own recordings) each word is heard where it's said instead. The times are kept next to each line's audio and worked out again only when the line changes.
+- **Making it**: captions are drawn into each chapter's video, so turning them on, or changing the style, draws the video again. They add well under a millisecond a frame (0.6 ms at 1080p). The 11-minute sample took about 5 minutes with them on the GPU encoder. With captions off, chapters already made are reused as before.
+
+## Shorts
+
+**Shorts** (New project, How its video looks: **Also cut the video into Shorts**; or the Video tab → Captions and Shorts) cuts the finished video into parts of up to 1 minute, 90 seconds or 3 minutes, saved in the output folder's `shorts` folder (`recap - Short 01.mp4` and on); the Video tab lists them under the player to watch.
+
+- **Where it's cut**: each Short is as long as it can be and ends in the middle of a pause between two narration lines, never mid-sentence (and never in its first 40%, so none is very short; the last one is what's left). The 11-minute sample made 13 one-minute Shorts: 12 of 48 to 59 seconds, and a last one of 20.
+- **"Part 1", "Part 2"…** in big white capitals at the top of each, unless turned off in the Video tab.
+- They're cut from the finished video, so the captions and background music come with them. Each is encoded again (the cuts don't fall on the video's keyframes): about a minute for the 13. Shorts made before for the same video are replaced.
+- **Portrait** suits Shorts, TikTok and Reels best; a landscape video's Shorts stay landscape. YouTube takes Shorts of up to 3 minutes.
+
 ## Export for video editors
 
 **Export for editors…** (after the step buttons, in advanced mode) saves the ticked chapters (none ticked = all) as an OpenTimelineIO timeline to finish the recap in a video editor: `recap (for DaVinci Resolve).otioz` or `recap (for editors).otioz` in the output folder. An `.otioz` is a zip holding the timeline and all its media, so it can be moved to another computer. The timeline has:

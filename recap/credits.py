@@ -24,6 +24,12 @@ Your choices count most: a piece with the same picture as one you put back stays
 picture as one you left out goes (in chapters added later too). A chapter that's only a notice
 (postponed, a hiatus, a season break: short, with a notice's words) is left out whole.
 
+What's found is checked by kind (kinds): each picture once, with its copies in other chapters, so one
+choice keeps or leaves out them all. Make the recap waits for that before the script (pipeline's
+_credits_hold) unless the project trusts what's found. A piece is checked once you chose for it
+(credits_kept), or it followed an earlier choice, or the wait was resumed without checking it
+(credits_seen); blank pieces go with the pages around them and aren't asked about.
+
 From each end, the left-out block runs to the last of the group's pages, carrying on past at most two
 other pieces between them (a chapter number or credits list that changes each time), or four once their
 text has been read and none could be dialogue (the covers of the group's other series, between its
@@ -143,9 +149,10 @@ def _titled(text: str, title: list[str]) -> bool:
                                         for t in title)
 
 
-def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=None) -> dict:
+def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=None, followed=None) -> dict:
     """{chapter id: [ids of the pieces to leave out]} for chapter_ids (default: all), comparing them with
-    every chapter of the project. progress(fraction); cancelled() stops it (InterruptedError)."""
+    every chapter of the project. progress(fraction); cancelled() stops it (InterruptedError). followed (a
+    set) gets the ids found because they're copies of a piece you left out."""
     by_ch = _groups(project["panels"])
     order = [c["id"] for c in project["chapters"] if c["id"] in by_ch]
     wanted = set(chapter_ids or order)
@@ -211,6 +218,8 @@ def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=
             card.add(pid)
         elif copy_of_choice[i] < 0 or ad[i] or repeated[i]:
             group.add(pid)
+            if copy_of_choice[i] < 0 and followed is not None:
+                followed.add(pid)
         if not ad[i] and _titled(said[i], title):
             named.add(pid)
     out = {}
@@ -318,6 +327,105 @@ def same(project: dict, project_dir, piece_id: str) -> list[str]:
     return out
 
 
+def blank(project_dir, piece) -> bool:
+    """A piece too even to tell from any other (or one that can't be read): it goes with the pages around it."""
+    f = _print_of(project_dir, piece)
+    return f is None or float(f[0].std()) < PLAIN
+
+
+def unchecked(piece) -> bool:
+    """Left out as the group's page, and not checked yet (see above)."""
+    return (bool(piece.get("credits")) and not piece.get("enabled", True) and "credits_kept" not in piece
+            and not piece.get("credits_seen"))
+
+
+def kinds(project: dict, project_dir, chapter_ids=None) -> list[dict]:
+    """The pieces found as the group's pages, by kind, to check them: each picture once (its copy in the
+    earliest chapter), with its copies in the other chapters, compared as find compares them, and a page cut
+    into pieces as one (pictures in the same chapters, with only blank or left-out pieces between them);
+    blank pieces aren't listed. Kinds with something not checked yet first, then the biggest. Each is {"ids",
+    "show" (the pieces shown: the earliest chapter's), "chapters" (how many it's in), "why", "open" (how many
+    aren't checked), "kept" (how many are used)}. chapter_ids: only the kinds with a piece in those chapters.
+    On five series, 1087 pieces left out came to 141 kinds, 904 to 105, 118 to 25."""
+    order = {c["id"]: k for k, c in enumerate(project["chapters"])}
+    by_ch = _groups(project["panels"])
+    found = [x for x in project["panels"] if x.get("credits") and not blank(project_dir, x)]
+    n = len(found)
+    parent = list(range(n))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    if n > 1:
+        prints = [_print_of(project_dir, x) for x in found]
+        raw = np.stack([f[0] for f in prints])
+        shape = np.array([f[1] for f in prints], np.float32)
+        norm = raw - raw.mean(axis=1, keepdims=True)
+        norm /= np.maximum(norm.std(axis=1, keepdims=True), 1e-6)
+        for start in range(0, n, 256):  # correlations a block at a time; the close ones checked fully
+            corr = norm[start:start + 256] @ norm.T / norm.shape[1]
+            for r in range(corr.shape[0]):
+                i = start + r
+                cand = np.nonzero((corr[r] > CORR) & (np.abs(shape - shape[i]) < SHAPE))[0]
+                cand = cand[cand > i]
+                for j in cand[np.abs(raw[cand] - raw[i]).mean(axis=1) < NEAR]:
+                    parent[root(int(j))] = root(i)
+    # a page cut into pieces: pictures in the same chapters, next to each other in each (past blank pieces
+    # and other left-out ones)
+    pos = {x["id"]: (cid, k) for cid, pans in by_ch.items() for k, x in enumerate(pans)}
+    where = {}  # picture -> {chapter: [positions]}
+    for i in range(n):
+        cid, k = pos[found[i]["id"]]
+        where.setdefault(root(i), {}).setdefault(cid, []).append(k)
+
+    def beside(a, b):
+        for cid, mine in where[a].items():
+            pans = by_ch[cid]
+            if not any(all(pans[t].get("credits") for t in range(min(i, j) + 1, max(i, j)))
+                       for i in mine for j in where[b][cid]):
+                return False
+        return True
+
+    same_chapters = {}
+    for r in where:
+        same_chapters.setdefault(frozenset(where[r]), []).append(r)
+    for rs in same_chapters.values():
+        for x in range(len(rs)):
+            for y in range(x + 1, len(rs)):
+                if root(rs[x]) != root(rs[y]) and beside(rs[x], rs[y]):
+                    parent[root(rs[x])] = root(rs[y])
+    groups = {}
+    for i in range(n):
+        groups.setdefault(root(i), []).append(found[i])
+    want = set(chapter_ids) if chapter_ids else None
+    out = []
+    for members in groups.values():
+        if want is not None and not any(x["chapter"] in want for x in members):
+            continue
+        members.sort(key=lambda x: (order.get(x["chapter"], 0), pos[x["id"]][1]))
+        chapters = len({x["chapter"] for x in members})
+        said = next((m for m in (TEXT.search(x.get("text") or "") for x in members) if m), None)
+        if said:
+            why = f'Says "{said.group(0).strip()}"'
+        elif chapters > 1:
+            why = "Repeats at the start or end of chapters"
+        elif notice_only(by_ch.get(members[0]["chapter"], [])):
+            why = "In a chapter that's only a notice"
+        else:
+            why = "Next to the scan group's pages"
+        show = [x["id"] for x in members if x["chapter"] == members[0]["chapter"]]
+        out.append({"ids": [x["id"] for x in members], "show": show, "chapters": chapters, "why": why,
+                    "open": sum(unchecked(x) for x in members), "kept": sum(bool(x.get("enabled", True)) for x in members),
+                    "first": order.get(members[0]["chapter"], 0)})
+    out.sort(key=lambda k: (not k["open"], -len(k["ids"]), k["first"]))
+    for k in out:
+        del k["first"]
+    return out
+
+
 def choose(project: dict, ids, enabled: bool) -> list[dict]:
     """Use or leave out these pieces as you chose for one of them (its copies in other chapters): left
     out, they're marked as the scan group's pages; either way the choice stands when they're found again,
@@ -339,11 +447,11 @@ def ad_of(piece) -> bool:
     return bool(TEXT.search(piece.get("text") or ""))
 
 
-def apply(project: dict, found: dict) -> int:
+def apply(project: dict, found: dict, followed=()) -> int:
     """Leave the found pieces out (unticked, marked "credits"), first putting back the ones left out
     before in those chapters. A credit piece you ticked or unticked yourself (credits_kept) stays as
-    you set it. Scan groups made mostly of left-out pieces are set aside. Returns how many pieces are
-    left out now."""
+    you set it, and one found as a copy of a piece you left out (followed) counts as your choice too.
+    Scan groups made mostly of left-out pieces are set aside. Returns how many pieces are left out now."""
     off = {i for ids in found.values() for i in ids}
     n = 0
     for x in project["panels"]:
@@ -354,6 +462,8 @@ def apply(project: dict, found: dict) -> int:
             x.pop("credits", None)
         if x["id"] in off:
             x["enabled"], x["credits"] = False, True
+            if x["id"] in followed:
+                x["credits_kept"] = False
             n += 1
     left_out = {x["id"] for x in project["panels"] if x.get("credits")}
     for g in (project.get("scan") or {}).get("groups", []):

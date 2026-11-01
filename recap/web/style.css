@@ -382,6 +382,19 @@ dialog.wide-dialog { width: min(1040px, 94vw); }
 .credit-piece button { position: absolute; bottom: 4px; right: 4px; }
 .credit-piece.kept { outline-color: var(--accent); }
 .credit-piece.kept .piece-tag { background: var(--accent); }
+/* one of each kind (credits.kinds): its picture, where it is and why, and a choice for all its copies */
+.kinds-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.credit-piece.kind { display: flex; flex-direction: column; outline-style: solid; outline-color: var(--line); }
+.credit-piece.kind.open { outline-color: var(--warn); }
+.credit-piece.kind.open .piece-tag { background: var(--warn); }
+.credit-piece.kind.kept { outline-color: var(--accent); }
+.credit-piece.kind:not(.open):not(.kept) .piece-tag { background: var(--muted); }
+.kind-pics { height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
+.credit-piece.kind .kind-pics img { width: 100%; height: auto; min-height: 0; flex: 0 1 auto; object-fit: contain; }
+.kind-why { font-size: 12px; line-height: 1.35; padding: 6px 8px 0; color: var(--muted); flex: 1; }
+.kind-why b { color: var(--text); font-weight: 600; }
+.kind-actions { display: flex; gap: 6px; padding: 6px 8px 8px; }
+.credit-piece.kind .kind-actions button { position: static; flex: 1; }
 
 /* black boxes (YouTube-safe projects): drawn over a piece where the video covers it */
 .boxed { position: relative; display: block; line-height: 0; }
@@ -460,3 +473,44 @@ body.advanced .sim { display: none !important; }
 body:not(.advanced) .hint.long:not(.open) {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer;
 }
+
+/* captions in the video (captions.py): a picture of the style chosen */
+.caption-preview { display: block; max-width: 240px; max-height: 240px; border-radius: 6px; border: 1px solid var(--line); }
+.caption-pick { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+
+/* getting chapters from a site (sources.py): the dialog, and Settings → Sources */
+.sources-form { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; max-height: 88vh; }
+.sources-form h2 { margin: 0; font-size: 17px; }
+#src-find, #src-series { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+#src-find[hidden], #src-series[hidden] { display: none; }
+.src-modes { display: flex; gap: 4px; }
+.src-modes button.on { border-color: var(--accent); color: var(--accent); }
+.src-row { display: flex; gap: 6px; }
+.src-row[hidden] { display: none; }
+.src-row input { flex: 1; min-width: 0; }
+.src-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; overflow: auto; max-height: 56vh; }
+.src-results:empty { display: none; }
+.src-card { display: flex; flex-direction: column; gap: 6px; padding: 6px; text-align: left; font-size: 13px; }
+.src-card img, .src-nocover { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 4px; background: var(--side); }
+.src-card span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.src-head { display: flex; gap: 14px; align-items: flex-start; }
+.src-head img { width: 96px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 4px; flex: none; }
+.src-head h3 { margin: 0 0 4px; font-size: 16px; }
+.src-head p { margin: 0 0 4px; font-size: 13px; max-height: 5.4em; overflow: auto; }
+#src-chapters { max-height: 40vh; }
+.src-none p { margin: 0; }
+.src-plugins, .src-repos { display: flex; flex-direction: column; gap: 4px; }
+.src-plugin { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+.src-plugin .muted, .src-plugin .error { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-repo { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.src-repo-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-repo-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px 12px; }
+.src-repo-list:empty { display: none; }
+.src-repo-add input { flex: 1; min-width: 0; }
+label.button-like {
+  display: inline-block; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
+}
+label.button-like:hover { border-color: var(--accent); }
+.new-tag { color: var(--accent); font-weight: 600; }
+.src-login input { flex: 1; min-width: 0; }
+#src-back { align-self: flex-start; }
