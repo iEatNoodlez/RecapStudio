@@ -763,6 +763,7 @@ def status(ollama_url: str = "http://localhost:11434"):
                    "models": [{"id": m, "name": n, "note": claude.MODEL_NOTES.get(m, "")} for m, n in claude.MODELS]},
         "writers": {k: {**cloud.key_status(k), "name": v["name"], "about": v["about"], "keys_url": v["keys_url"],
                         "default_model": v["default_model"]} for k, v in cloud.PROVIDERS.items()},
+        "redraw": {k: {"name": v["name"], "default_model": v["default_model"]} for k, v in youtube.REDRAW.items()},
         "elevenlabs": online_voices.key_status(),
     }
 
@@ -1306,21 +1307,53 @@ def edit_title(pid: str, title: str = Body(..., embed=True)):
 
 
 @app.post("/api/projects/{pid}/youtube/thumbnail")
-def redraw_thumbnail(pid: str, text: str = Body(..., embed=True), panel: str | None = Body(None, embed=True)):
-    """Draw the thumbnail again: with other words, or another of the pictures it was chosen from."""
+def redraw_thumbnail(pid: str, text: str | None = Body(None, embed=True), panel: str | None = Body(None, embed=True),
+                     pictures: list[str] | None = Body(None, embed=True), marks: list[dict] | None = Body(None, embed=True)):
+    """Draw the thumbnail again: with other words or marks, or other pictures from those it was chosen from (one
+    or two; panel: just that one). Marks on a picture taken out move to the one put in."""
     p = _project(pid)
     yt = p.get("youtube")
     if not yt:
         raise HTTPException(404, "No title has been suggested yet")
-    x = next((x for x in p["panels"] if x["id"] == (panel or yt["panel"])), None)
-    if x is None:
+    before = yt.get("pictures") or [yt["panel"]]
+    pics = list(dict.fromkeys(pictures or ([panel] if panel else before)))
+    byid = {x["id"]: x for x in p["panels"]}
+    if not 1 <= len(pics) <= 2 or any(i not in byid for i in pics):
         raise HTTPException(409, "That picture is gone (panels were detected again): suggest again")
+    text = (yt.get("text") or "") if text is None else text.strip()[:60]
+    added = [i for i in pics if i not in before]
+    marks = [{**m, "picture": m.get("picture") if m.get("picture") in pics or not added else added[0]}
+             for m in (yt.get("marks") or [] if marks is None else marks) if isinstance(m, dict)]
+    marks = youtube.tidy_marks(marks, pics)
     try:
-        file = youtube.draw(p, x, text)
+        drawn = youtube.draw(p, [byid[i] for i in pics], marks, text)
     except RuntimeError as e:
         raise HTTPException(409, str(e))
-    return store.update(pid, lambda q: q["youtube"].update(text=text.strip()[:60], panel=x["id"], file=file,
-                                                          created=time.time()))
+    return store.update(pid, lambda q: q["youtube"].update(text=text, pictures=pics, panel=pics[0], marks=marks,
+                                                          file=drawn["file"], created=time.time()))
+
+
+@app.post("/api/projects/{pid}/youtube/redraw")
+def redraw_with_ai(pid: str):
+    """Redraw with AI (youtube.redraw): an image model repaints the thumbnail as drawn now. Takes a minute."""
+    p = _project(pid)
+    if not p.get("youtube"):
+        raise HTTPException(404, "No title has been suggested yet")
+    try:
+        ai = youtube.redraw(p)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return store.update(pid, lambda q: q["youtube"].update(ai=ai))
+
+
+@app.get("/api/redraw/{provider}/models")
+def redraw_models(provider: str):
+    if provider not in youtube.REDRAW:
+        raise HTTPException(404, "Unknown service")
+    try:
+        return {"models": youtube.image_models(provider)}
+    except cloud.Problem as e:
+        raise HTTPException(502, f"Couldn't get the list of models: {e}")
 
 
 # ---- files -----------------------------------------------------------------

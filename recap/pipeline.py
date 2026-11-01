@@ -1665,8 +1665,9 @@ def _suggest_names(job, p) -> tuple[int, int, str]:
 
 def run_title(job):
     """After the script (Make the recap, when the project's settings say so; or Suggest again in the Video tab):
-    the writer suggests a YouTube title and the thumbnail's words and picture, and the thumbnail is drawn
-    (youtube.py). In Make the recap a failure is only noted: the recap goes on without one."""
+    the writer suggests a YouTube title and the thumbnail's pictures and marks, the thumbnail is drawn, and then
+    redrawn with AI when the project says so (youtube.py). In Make the recap a failure is only noted: the recap
+    goes on without one; a failed redraw is only noted either way."""
     pid = job["project"]
     p = store.load(pid)
     alone = job["steps"] == ["title"]
@@ -1683,8 +1684,17 @@ def run_title(job):
             raise
         traceback.print_exc()
         return _add_note(job, f"No title was suggested ({e})")
-    file = youtube.draw(p, next(x for x in p["panels"] if x["id"] == found["panel"]), found["text"])
-    store.update(pid, lambda q: q.update(youtube={**found, "file": file, "created": time.time()}))
+    byid = {x["id"]: x for x in p["panels"]}
+    drawn = youtube.draw(p, [byid[i] for i in found["pictures"]], found["marks"], found["text"])
+    store.update(pid, lambda q: q.update(youtube={**found, "file": drawn["file"], "created": time.time()}))
+    if p["settings"].get("redraw_thumbnail"):
+        job["message"] = "Redrawing the thumbnail with AI"
+        try:
+            ai = youtube.redraw(store.load(pid))
+        except Exception as e:  # the title and drawn thumbnail stand: only noted, even when suggested alone
+            traceback.print_exc()
+            return _add_note(job, f"The thumbnail wasn't redrawn with AI ({e})")
+        store.update(pid, lambda q: q["youtube"].update(ai=ai))
 
 
 def _suggest_title(job, p) -> dict:

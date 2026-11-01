@@ -34,8 +34,9 @@ DEFAULT_SETTINGS = {
     "find_characters": True,
     "characters_chapters": "first",
     "characters_review": "review",
-    # and after it, a YouTube title and thumbnail (youtube.py)
+    # and after it, a YouTube title and thumbnail (youtube.py), then the thumbnail redrawn by an image model
     "suggest_title": True,
+    "redraw_thumbnail": False,
     # script
     "ollama_url": "http://localhost:11434",
     "ollama_model": "",
@@ -54,6 +55,10 @@ DEFAULT_SETTINGS = {
     "deepseek_model": "deepseek-flash",
     "groq_model": "qwen/qwen3.8-27b",
     "mistral_model": "mistral-medium-latest",
+    # Redraw with AI (youtube.REDRAW): "" (off), "gemini" or "openrouter", on that service's key; and its model
+    # ("" for the service's default)
+    "redraw_provider": "",
+    "redraw_model": "",
     # narration prompt (see DEFAULT_PROMPT) and a free-form note for the next run
     "note": "",
     # voice: "kokoro" (on this computer), "edge" (Microsoft Edge's online voices) or "elevenlabs" (see online_voices.py)
@@ -110,6 +115,7 @@ GLOBAL_KEYS = {
     "temperature", "voice", "voice_provider", "edge_voice", "elevenlabs_voice", "elevenlabs_model", "speed",
     "use_gpu", "parallel_workers", "use_magi", "ocr_english", "video_encoder", "video_workers",
     "openrouter_model", "gemini_model", "deepseek_model", "groq_model", "mistral_model", "setup_done",
+    "redraw_provider", "redraw_model",
     "check_updates", "skip_version", "projects_dir",
 }
 # How each project's video looks: chosen when it's created (the New project dialog), changed in its Video tab.
@@ -121,7 +127,7 @@ VIDEO_KEYS = (
 )
 # what the New project dialog sets, besides those
 NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "webtoon_video", "youtube_safe", "find_characters",
-                                     "characters_chapters", "characters_review", "suggest_title"}
+                                     "characters_chapters", "characters_review", "suggest_title", "redraw_thumbnail"}
 GLOBAL_FILE = DATA_ROOT / "settings.json"
 
 DEFAULT_PROMPT = {

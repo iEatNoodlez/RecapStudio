@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Recap Studio</title>
+<link rel="icon" href="icon.ico">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -173,21 +174,31 @@
             <button type="button" class="ghost small boxes-open">See the boxes…</button>
             <span id="boxes-count" class="muted"></span></div>
           <label class="check"><input data-key="suggest_title" type="checkbox"> Suggest a title and thumbnail when the script is written</label>
-          <span class="hint">Your script writer reads the story and picks a clickbait title, a few others, the thumbnail's words and its picture; the thumbnail is drawn at 1280×720 into the output folder.</span>
+          <span class="hint">Your script writer reads the story and picks a clickbait title, a few others, one or two pictures for the thumbnail and what goes on them: yellow labels with arrows on the characters, a "?!" and a short speech bubble. The thumbnail is drawn at 1280×720 into the output folder.</span>
+          <label class="check"><input data-key="redraw_thumbnail" type="checkbox"> Then redraw it with AI</label>
+          <span class="hint">An image model repaints the thumbnail as one glossy illustration with the same characters and words, saved beside it as thumbnail_ai.jpg. It needs a service and its key in Settings → Thumbnail redraw, and costs a few cents each time.<span id="yt-ai-setup" class="warn"></span></span>
           <div id="yt-out" class="yt-out" hidden>
             <a id="yt-thumb-link" target="_blank" title="Open the thumbnail"><img id="yt-thumb" alt="Thumbnail"></a>
+            <figure id="yt-ai" class="yt-ai" hidden>
+              <a id="yt-ai-link" target="_blank" title="Open the AI version"><img id="yt-ai-img" alt="Redrawn with AI"></a>
+              <figcaption id="yt-ai-by" class="hint"></figcaption>
+            </figure>
             <div class="yt-side">
               <label>Title <span id="yt-count" class="muted"></span>
                 <span class="yt-row"><input id="yt-title" maxlength="100"><button type="button" id="yt-copy" class="ghost small">Copy</button></span></label>
               <div id="yt-alts" class="yt-alts"></div>
-              <label>Thumbnail words
+              <span class="field-head">On the thumbnail <span class="hint">Change the words, then Redraw. Empty takes one off.</span></span>
+              <div id="yt-marks" class="yt-marks"></div>
+              <label>Hook words <span class="hint">across the bottom, when no label finds its character</span>
                 <span class="yt-row"><input id="yt-text" maxlength="60"><button type="button" id="yt-redraw" class="ghost small">Redraw</button></span></label>
-              <span class="field-head">Picture <span class="hint">Click another to redraw with it.</span></span>
+              <span class="field-head">Pictures <span class="hint">Click one to use it or take it out: two at most, side by side.</span></span>
               <div id="yt-pics" class="yt-pics"></div>
               <span id="yt-by" class="hint"></span>
             </div>
           </div>
-          <div><button type="button" id="yt-suggest" class="ghost small">Suggest a title and thumbnail</button></div>
+          <div><button type="button" id="yt-suggest" class="ghost small">Suggest a title and thumbnail</button>
+            <button type="button" id="yt-ai-go" class="ghost small" hidden>Redraw with AI</button>
+            <span id="yt-ai-status" class="hint"></span></div>
         </fieldset>
       </div>
     </section>
@@ -330,6 +341,30 @@
           <label class="adv">Scenes per request <input data-key="panels_per_batch" type="number" min="1" max="20"></label>
           <label class="adv">Temperature <input data-key="temperature" type="number" step="0.1" min="0" max="2"></label>
         </div>
+      </fieldset>
+      <fieldset id="redraw-box">
+        <legend>Thumbnail redraw</legend>
+        <label>Service <select data-key="redraw_provider"><option value="">Off</option><option value="gemini">Google Gemini (Nano Banana)</option><option value="openrouter">OpenRouter (many image models, one key)</option></select></label>
+        <div id="redraw-opts">
+          <label>Model <input id="redraw-model" data-key="redraw_model" list="redraw-model-list" spellcheck="false" autocomplete="off">
+            <datalist id="redraw-model-list"></datalist></label>
+          <span id="redraw-model-note" class="hint"></span>
+          <div class="key-box">
+            <span class="field-head">API key</span>
+            <div id="redraw-key-status" class="muted"></div>
+            <div class="key-row" id="redraw-key-entry">
+              <input id="redraw-key" type="password" placeholder="Paste your key" autocomplete="off" spellcheck="false">
+              <button id="redraw-save-key" type="button">Save</button>
+            </div>
+            <div class="key-row" id="redraw-key-actions">
+              <button id="redraw-check-key" type="button" class="ghost small">Test key</button>
+              <button id="redraw-change-key" type="button" class="ghost small">Replace</button>
+              <button id="redraw-remove-key" type="button" class="ghost small danger">Remove</button>
+            </div>
+            <span class="hint" id="redraw-key-hint"></span>
+          </div>
+        </div>
+        <span class="hint">Redraw with AI (the Video tab's YouTube box) sends the drawn thumbnail and its pictures to an image model, which repaints them as one glossy illustration like the big recap channels' thumbnails. A few cents a picture, billed by the service. Image models may decline racier scenes; the drawn thumbnail always stays.</span>
       </fieldset>
       <fieldset id="voice-box">
         <legend>Voice</legend>

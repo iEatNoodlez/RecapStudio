@@ -220,8 +220,13 @@ function renderNew() {
     body.append(
       el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.suggest_title,
         onchange: (e) => { s.suggest_title = e.target.checked; renderNew(); } }), " Suggest a title and thumbnail when the script is written"),
-      el("span", { class: "hint" }, "Your script writer picks a clickbait title (and a few others), the thumbnail's words and its picture; " +
-        "Recap Studio draws the thumbnail. Both are in the Video tab, to change or suggest again."),
+      el("span", { class: "hint" }, "Your script writer picks a clickbait title (and a few others), one or two pictures for the thumbnail " +
+        "and its labels; Recap Studio draws it. Both are in the Video tab, to change or suggest again."),
+      s.suggest_title ? el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.redraw_thumbnail,
+        onchange: (e) => { s.redraw_thumbnail = e.target.checked; renderNew(); } }), " Then redraw the thumbnail with AI") : "",
+      s.suggest_title ? el("span", { class: s.redraw_thumbnail && redrawProblem() ? "hint warn" : "hint" },
+        "An image model repaints it as one glossy illustration, a few cents each time" +
+        (s.redraw_thumbnail && redrawProblem() ? `. Before it can, ${redrawProblem()}.` : ".")) : "",
       el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.youtube_safe,
         onchange: (e) => { s.youtube_safe = e.target.checked; } }), " YouTube-safe, for an age-restricted video"),
       el("span", { class: "hint" }, "For adult comics going on YouTube: sex scenes are written the way an R-rated film shows them, " +
@@ -233,7 +238,8 @@ function renderNew() {
         el("li", {}, !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
           (s.characters_review === "trust" ? "names added as suggested" : "names checked by you")),
         el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}`),
-        el("li", {}, s.suggest_title ? "A title and thumbnail suggested after the script" : "No title or thumbnail suggested")),
+        el("li", {}, s.suggest_title ? `A title and thumbnail suggested after the script${s.redraw_thumbnail ? ", then redrawn with AI" : ""}`
+          : "No title or thumbnail suggested")),
       el("p", { class: "muted" }, "Any of this can change later: the video and title in the project's Video tab, the kind of comic and the characters in its Project settings (advanced mode)."));
   }
   $("#new-body").replaceChildren(body);
@@ -363,6 +369,7 @@ function renderGlobal() {
   renderBoxSettings();
   renderGpuSettings();
   renderUpdate();
+  renderRedraw();
 }
 
 // ---- GPU support (ONNX Runtime's GPU build, with CUDA and cuDNN): downloaded on request, never shipped ----
@@ -1101,6 +1108,85 @@ $("#cloud-remove-key").addEventListener("click", async () => {
     { ok: "Remove", danger: true })) return;
   Object.assign(w, await api(`/api/writers/${p}/key`, { method: "DELETE" }));
   renderCloud();
+});
+
+// ---- Thumbnail redraw (youtube.REDRAW): an image model on the user's own key, the same key file as that
+// service's script writer ----
+const redrawModels = {};  // "gemini" -> [{id, name}]
+
+// what's missing before Redraw with AI can work, or null
+function redrawProblem() {
+  const p = globals && globals.redraw_provider;
+  if (!p || !env || !env.writers || !env.writers[p]) return "choose a service in Settings → Thumbnail redraw";
+  const w = env.writers[p];
+  return w.saved || w.env ? null : `add your ${w.name} key in Settings → Thumbnail redraw`;
+}
+
+function renderRedraw(message = null, ok = null) {
+  const p = globals.redraw_provider;
+  $("#redraw-opts").hidden = !p || !env.writers || !env.writers[p];
+  if ($("#redraw-opts").hidden) return;
+  const w = env.writers[p], r = env.redraw[p];
+  $("#redraw-model").placeholder = r.default_model || "Pick a model";
+  $("#redraw-model-list").replaceChildren(...(redrawModels[p] || []).map((m) => el("option", { value: m.id }, m.name)));
+  const has = w.saved || w.env;
+  $("#redraw-key-entry").hidden = has && !$("#redraw-key-entry").dataset.replacing;
+  $("#redraw-key-actions").hidden = !has;
+  $("#redraw-remove-key").hidden = !w.saved;
+  const status = $("#redraw-key-status");
+  status.className = ok === true ? "ok" : ok === false ? "bad" : "muted";
+  status.textContent = message || (w.saved ? "A key is saved on this PC."
+    : w.env ? `Using the ${w.env_name} environment variable.` : `No key yet. Get one at ${w.keys_url.replace("https://", "")}.`);
+  $("#redraw-key-hint").textContent = `Stored only on this PC (data\\${p}_key.txt), the same key ${w.name} writes scripts with. ` +
+    `Billed to your ${w.name} account.`;
+  if (has && !redrawModels[p]) loadRedrawModels(p);
+}
+
+async function loadRedrawModels(p) {
+  if (redrawModels[`${p}:loading`]) return;
+  redrawModels[`${p}:loading`] = true;
+  try {
+    redrawModels[p] = (await api(`/api/redraw/${p}/models`)).models;
+    $("#redraw-model-note").textContent = "";
+  } catch (e) {
+    redrawModels[p] = [];
+    $("#redraw-model-note").textContent = e.message;
+  } finally {
+    delete redrawModels[`${p}:loading`];
+  }
+  if (globals.redraw_provider === p) renderRedraw();
+}
+
+$("#redraw-save-key").addEventListener("click", async () => {
+  const p = globals.redraw_provider, key = $("#redraw-key").value.trim();
+  if (!p || !key) return;
+  try {
+    const r = await api(`/api/writers/${p}/key`, { method: "PUT", json: { key } });
+    $("#redraw-key").value = "";
+    delete $("#redraw-key-entry").dataset.replacing;
+    Object.assign(env.writers[p], { saved: r.saved, env: r.env });
+    delete redrawModels[p];
+    delete cloudModels[p];
+    renderRedraw(r.ok ? "Key saved and working." : `Key saved, but: ${r.message}`, r.ok);
+  } catch (e) { renderRedraw(e.message, false); }
+});
+$("#redraw-check-key").addEventListener("click", async () => {
+  const p = globals.redraw_provider;
+  renderRedraw("Checking…");
+  const r = await api(`/api/writers/${p}/check`, { method: "POST" });
+  renderRedraw(r.message, r.ok);
+});
+$("#redraw-change-key").addEventListener("click", () => {
+  $("#redraw-key-entry").dataset.replacing = "1";
+  renderRedraw();
+  $("#redraw-key").focus();
+});
+$("#redraw-remove-key").addEventListener("click", async () => {
+  const p = globals.redraw_provider, w = env.writers[p];
+  if (!await ask("Remove the API key?", `The saved key is deleted from this PC. ${w.name} can't redraw thumbnails` +
+    `${globals.llm_provider === p ? " or write scripts" : ""} until you add one again.`, { ok: "Remove", danger: true })) return;
+  Object.assign(w, await api(`/api/writers/${p}/key`, { method: "DELETE" }));
+  renderRedraw();
 });
 
 // ---- voice: Kokoro on this computer, or Microsoft Edge's / ElevenLabs' online voices ----
@@ -1926,25 +2012,61 @@ function renderJob() {
 }
 
 // ---- the YouTube title and thumbnail (Video tab): suggested after the script (youtube.py), or with Suggest ----
+const MARK_NAMES = { label: "Label", reaction: "Reaction", line: "Speech bubble" };
+let redrawing = false;  // Redraw with AI is waiting for the image model
+
 function renderYouTube() {
   const yt = current.youtube;
+  const busy = !!(current.job && ACTIVE.includes(current.job.status));
   $("#yt-out").hidden = !yt;
   $("#yt-suggest").textContent = yt ? "Suggest again" : "Suggest a title and thumbnail";
-  $("#yt-suggest").disabled = !!(current.job && ACTIVE.includes(current.job.status));
+  $("#yt-suggest").disabled = busy;
+  $("#yt-ai-go").hidden = !yt;
+  $("#yt-ai-go").disabled = busy || redrawing;
+  const why = redrawProblem();
+  $("#yt-ai-setup").textContent = current.settings.redraw_thumbnail && why ? ` Before it can, ${why}.` : "";
   if (!yt) return;
   const src = fileUrl(yt.file, Math.round(yt.created || 0));
   $("#yt-thumb").src = src;
   $("#yt-thumb-link").href = src;
+  $("#yt-ai").hidden = !yt.ai;
+  if (yt.ai) {
+    const ai = fileUrl(yt.ai.file, Math.round(yt.ai.created || 0));
+    $("#yt-ai-img").src = ai;
+    $("#yt-ai-link").href = ai;
+    $("#yt-ai-by").textContent = `Redrawn with AI by ${yt.ai.by} (${yt.ai.model})` +
+      (yt.ai.created < yt.created ? ", before the thumbnail's last change: Redraw with AI again to update it." : ".");
+  }
   if (document.activeElement !== $("#yt-title")) $("#yt-title").value = yt.title;
   $("#yt-count").textContent = `${$("#yt-title").value.length}/100`;
   if (document.activeElement !== $("#yt-text")) $("#yt-text").value = yt.text;
   $("#yt-alts").replaceChildren(...(yt.alternatives || []).filter((a) => a !== yt.title).map((a) =>
     el("button", { type: "button", class: "ghost small", title: "Use this title", onclick: () => saveTitle(a) }, a)));
+  const pics = yt.pictures || [yt.panel];
+  if (!editingIn($("#yt-marks"))) {
+    $("#yt-marks").replaceChildren(...(yt.marks || []).map((m, i) => el("label", { class: "yt-mark" },
+      el("span", { class: "muted" }, MARK_NAMES[m.kind] + (m.who ? ` · ${m.who}` : "") +
+        (pics.length > 1 ? ` (${pics.indexOf(m.picture) === 0 ? "left" : "right"} picture)` : "")),
+      el("input", { value: m.text, maxlength: m.kind === "line" ? 40 : m.kind === "reaction" ? 6 : 24, "data-i": i,
+        onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); redrawThumb(); } } }))));
+  }
   const byId = new Map(current.panels.map((x) => [x.id, x]));
   $("#yt-pics").replaceChildren(...(yt.candidates || []).map((id) => byId.get(id)).filter(Boolean).map((x) =>
-    el("img", { src: fileUrl(`panels/${x.file}`), class: x.id === yt.panel ? "on" : "", title: "Use this picture",
-      onclick: () => redrawThumb(x.id) })));
+    el("img", { src: fileUrl(`panels/${x.file}`), class: pics.includes(x.id) ? "on" : "",
+      title: pics.includes(x.id) ? (pics.length > 1 ? "Take this picture out" : "The thumbnail's picture") : "Use this picture",
+      onclick: () => togglePicture(x.id) })));
   $("#yt-by").textContent = yt.by ? `Suggested by ${yt.by}.` : "";
+}
+
+// a picture clicked: in or out of the thumbnail (one or two; a third takes the second's place)
+function togglePicture(id) {
+  const pics = [...(current.youtube.pictures || [current.youtube.panel])];
+  if (pics.includes(id)) {
+    if (pics.length === 1) return;
+    pics.splice(pics.indexOf(id), 1);
+  } else if (pics.length < 2) pics.push(id);
+  else pics[1] = id;
+  redrawThumb({ pictures: pics });
 }
 
 async function saveTitle(title) {
@@ -1954,15 +2076,36 @@ async function saveTitle(title) {
   } catch (e) { notify(e.message); }
 }
 
-async function redrawThumb(panel = null) {
+// draw the thumbnail again with the words as edited (and, from togglePicture, other pictures)
+async function redrawThumb(extra = {}) {
   $("#yt-redraw").disabled = true;
+  const marks = (current.youtube.marks || []).map((m, i) => {
+    const input = $(`#yt-marks input[data-i="${i}"]`);
+    return { ...m, text: input ? input.value.trim() : m.text };
+  }).filter((m) => m.text);
   try {
     current.youtube = (await api(`/api/projects/${current.id}/youtube/thumbnail`, { method: "POST",
-      json: { text: $("#yt-text").value, panel } })).youtube;
+      json: { text: $("#yt-text").value, marks, ...extra } })).youtube;
     renderYouTube();
   } catch (e) { notify(e.message); }
   $("#yt-redraw").disabled = false;
 }
+
+$("#yt-ai-go").addEventListener("click", async () => {
+  const why = redrawProblem();
+  if (why) return notify(`To redraw the thumbnail with AI, ${why}.`, "Not set up yet");
+  const pid = current.id;
+  redrawing = true;
+  renderYouTube();
+  $("#yt-ai-status").textContent = "Redrawing… (it can take a minute)";
+  try {
+    const p = await api(`/api/projects/${pid}/youtube/redraw`, { method: "POST" });
+    if (current && current.id === pid) current.youtube = p.youtube;
+  } catch (e) { notify(e.message, "Couldn't redraw it"); }
+  redrawing = false;
+  $("#yt-ai-status").textContent = "";
+  if (current && current.id === pid) renderYouTube();
+});
 
 $("#yt-title").addEventListener("change", (e) => saveTitle(e.target.value));
 $("#yt-title").addEventListener("input", (e) => { $("#yt-count").textContent = `${e.target.value.length}/100`; });

@@ -53,8 +53,10 @@ Type: filesandordirs; Name: "{app}\.claude\skills\recap-studio-narration"
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Recap Studio"; Filename: "{app}\Recap Studio.exe"
-Name: "{autodesktop}\Recap Studio"; Filename: "{app}\Recap Studio.exe"; Tasks: desktopicon
+; AppUserModelID: the id the app's window gives itself (recap\__main__.py APP_ID), so its taskbar button has the
+; app's icon and pinning it pins this shortcut
+Name: "{autoprograms}\Recap Studio"; Filename: "{app}\Recap Studio.exe"; AppUserModelID: "RecapStudio.App"
+Name: "{autodesktop}\Recap Studio"; Filename: "{app}\Recap Studio.exe"; Tasks: desktopicon; AppUserModelID: "RecapStudio.App"
 
 [Run]
 ; (as you, not as administrator, even after an install for everyone)

@@ -9,6 +9,7 @@ Claude Code writer starts.
 """
 import argparse
 import atexit
+import ctypes
 import json
 import logging
 import os
@@ -17,8 +18,15 @@ import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 import uvicorn
+
+ICON = Path(__file__).resolve().parent / "web" / "icon.ico"
+# Windows' id for the app: the window's taskbar button goes under it, with the app's icon, instead of under
+# pythonw.exe with Python's; the installer's shortcuts carry the same id (packaging\installer.iss), so pinning
+# the button pins Recap Studio
+APP_ID = "RecapStudio.App"
 
 
 def _free_port() -> int:
@@ -86,6 +94,10 @@ def main():
 
     import webview
 
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except (AttributeError, OSError):
+        pass  # (not Windows)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     while not server.started:
@@ -104,7 +116,7 @@ def main():
         return result[0] if result else None
 
     window.expose(pick_folder, pick_project_file)
-    webview.start()
+    webview.start(icon=str(ICON))  # (without one, the window takes pythonw.exe's)
     server.should_exit = True
 
 
