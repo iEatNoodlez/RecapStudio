@@ -1,4 +1,5 @@
-"""Local HTTP API and static UI. Binds to 127.0.0.1 only."""
+"""Local HTTP API and static UI. Binds to 127.0.0.1; with Phone access on, phone.py also serves it to the home
+network, where only a phone with the key gets through, and only to the phone page and what it uses."""
 import copy
 import io
 import os
@@ -12,14 +13,14 @@ import cv2
 import numpy as np
 import soundfile as sf
 from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 import anthropic
 
 from . import (charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu, importer, magi,
-               mcp, ocr, online_voices, package, panels, pipeline, scenes, script, store, tts, updates, video,
-               voiceover, youtube)
+               mcp, music, ocr, online_voices, package, panels, phone, pipeline, scenes, script, store, translate,
+               tts, updates, video, voiceover, youtube)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -37,12 +38,98 @@ async def _fresh_page(request, call_next):
     return response
 
 
+REFUSED = {
+    "not-home": "Recap Studio only answers phones on the same home network as the PC it runs on.",
+    "no-key": "This phone hasn't been linked: on the PC, open Recap Studio's Settings → Phone and scan the QR code "
+              "with this phone's camera.",
+    "not-here": "That's only on the PC: the phone page shows the recaps' progress and can pause or run them.",
+}
+
+
+@app.middleware("http")
+async def _phone_guard(request: Request, call_next):
+    """A request from another device (Phone access, phone.py): through only from a linked phone on the home network,
+    and only to the phone page and what it uses. The QR code's link sets the phone's cookie."""
+    host = request.client.host if request.client else ""
+    if phone.local(host):
+        return await call_next(request)
+    verdict = phone.check(request.method, request.url.path, host, request.cookies.get(phone.COOKIE),
+                          request.query_params.get("key"))
+    if verdict == "ok":
+        return await call_next(request)
+    if verdict == "pair":
+        response = RedirectResponse("/phone", status_code=303)
+        response.set_cookie(phone.COOKIE, request.query_params["key"], max_age=phone.KEEP_DAYS * 86400,
+                            httponly=True, samesite="lax")
+        return response
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": REFUSED[verdict]}, status_code=403)
+    return HTMLResponse(f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, '
+                        f'initial-scale=1"><title>Recap Studio</title><body style="font:16px system-ui;background:'
+                        f'#18181b;color:#e4e4e7;padding:24px"><h3>Recap Studio</h3><p>{REFUSED[verdict]}</p>',
+                        status_code=403)
+
+
 @app.on_event("startup")
 def _startup():
     store.move_old_layout()  # an installed copy that kept its data beside itself (__main__ does it first)
     store.name_folders()     # folders still named by project id take their project's name
     store.move_video_settings()  # video settings were app-wide until 0.1.1: each project keeps its own
     pipeline.start_worker()
+    phone.restore(app)       # Phone access, when it was on
+
+
+# ---- Phone access (phone.py): Settings → Phone on the PC, and the phone page ----
+
+@app.get("/api/phone")
+def phone_status():
+    return phone.status()
+
+
+@app.put("/api/phone")
+def phone_switch(enabled: bool = Body(..., embed=True)):
+    return phone.start(app) if enabled else phone.stop()
+
+
+@app.post("/api/phone/key")
+def phone_forget():
+    """Forget phones: the ones linked before have to scan the QR code again."""
+    return phone.new_key()
+
+
+@app.get("/api/phone/qr.png")
+def phone_qr():
+    return Response(phone.qr_png(), media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/phone")
+def phone_page():
+    return FileResponse(WEB_DIR / "phone.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/m/projects")
+def phone_projects():
+    out = []
+    for x in store.list_all():
+        try:
+            out.append(phone.summary(store.load(x["id"])))
+        except (KeyError, ValueError):
+            continue
+    return out
+
+
+@app.get("/api/m/projects/{pid}")
+def phone_project(pid: str):
+    return phone.summary(_project(pid), full=True)
+
+
+@app.put("/api/m/projects/{pid}/settings")
+def phone_settings(pid: str, settings: dict = Body(...)):
+    """The few project settings the phone can change."""
+    _project(pid)
+    own = {k: kind(v) for k, v in settings.items() if (kind := phone.PHONE_SETTINGS.get(k))}
+    store.update(pid, lambda p: p["settings"].update(own))
+    return phone.summary(_project(pid), full=True)
 
 
 def _project(pid: str) -> dict:
@@ -550,6 +637,62 @@ def remove_voiceover(pid: str, cid: str):
     return store.update(pid, apply)
 
 
+# ---- background music: the project's own tracks, in its music folder (see music.py) ----
+
+@app.post("/api/projects/{pid}/music")
+async def add_music(pid: str, files: list[UploadFile]):
+    """Add tracks to the end of the project's music (a name already there gets a number)."""
+    _project(pid)
+    folder = store.project_dir(pid) / "music"
+    folder.mkdir(exist_ok=True)
+    added, refused = [], []
+    for file in files:
+        name = os.path.basename(file.filename or "track")
+        if Path(name).suffix.lower() not in music.FORMATS:
+            refused.append(name)
+            continue
+        dest, n = folder / name, 1
+        while dest.exists():
+            n += 1
+            dest = folder / f"{Path(name).stem} ({n}){Path(name).suffix}"
+        with open(dest.with_name(dest.name + ".part"), "wb") as out:
+            while chunk := await file.read(1 << 20):
+                out.write(chunk)
+        dest.with_name(dest.name + ".part").replace(dest)
+        seconds = music.duration(dest)
+        if seconds <= 4 * music.FADE:
+            dest.unlink(missing_ok=True)
+            refused.append(name)
+            continue
+        added.append({"file": f"music/{dest.name}", "name": name, "seconds": round(seconds, 2)})
+    if not added and refused:
+        raise HTTPException(400, f"{', '.join(refused)}: not an audio file this can play "
+                                 f"({', '.join(music.FORMATS)}), or under {4 * music.FADE:g} seconds long")
+    return store.update(pid, lambda p: p.setdefault("music", []).extend(added))
+
+
+@app.delete("/api/projects/{pid}/music/{name}")
+def remove_music(pid: str, name: str):
+    _project(pid)
+    d = store.project_dir(pid)
+
+    def apply(p):
+        for t in [t for t in p.get("music") or [] if t["file"] == f"music/{name}"]:
+            (d / t["file"]).unlink(missing_ok=True)
+            p["music"].remove(t)
+    return store.update(pid, apply)
+
+
+@app.put("/api/projects/{pid}/music/order")
+def reorder_music(pid: str, files: list[str] = Body(..., embed=True)):
+    _project(pid)
+
+    def apply(p):
+        have = {t["file"]: t for t in p.get("music") or []}
+        p["music"] = [have[f] for f in files if f in have] + [t for f, t in have.items() if f not in files]
+    return store.update(pid, apply)
+
+
 @app.get("/api/addons/vosk")
 def vosk_status():
     return {**voiceover.DOWNLOAD.status(), "installed": voiceover.installed()}
@@ -640,6 +783,57 @@ def set_cover(pid: str, panel_id: str, boxes: list = Body(..., embed=True)):
                 return panel
         raise HTTPException(404, "Panel not found")
     return store.update(pid, apply)
+
+
+@app.put("/api/projects/{pid}/panels/{panel_id}/bubbles/{k}")
+def edit_translation(pid: str, panel_id: str, k: int, english: str | None = Body(None, embed=True),
+                     kind: str | None = Body(None, embed=True)):
+    """A translated text box's English or kind, as you correct it: the panel's text for the script follows.
+    Returns the panel."""
+    _project(pid)
+    if kind is not None and kind not in translate.KINDS:
+        raise HTTPException(400, f"kind must be one of {', '.join(translate.KINDS)}")
+
+    def apply(p):
+        panel = next((x for x in p["panels"] if x["id"] == panel_id), None)
+        boxes = (panel or {}).get("bubbles") or []
+        if not 0 <= k < len(boxes):
+            raise HTTPException(404, "That text box is gone (Read text ran again)")
+        if english is not None:
+            boxes[k]["english"] = english.strip()
+        if kind is not None:
+            boxes[k]["kind"] = kind
+        boxes[k]["edited"] = True
+        panel["text"] = translate.writer_text(boxes)
+        return copy.deepcopy(panel)
+    return store.update(pid, apply)
+
+
+@app.get("/api/addons/ocr-cjk")
+def cjk_status():
+    return ocr.CJK.status()
+
+
+@app.post("/api/addons/ocr-cjk/install")
+def cjk_install():
+    try:
+        return ocr.CJK.start()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/addons/ocr-cjk/cancel")
+def cjk_cancel():
+    ocr.CJK.cancel()
+    return ocr.CJK.status()
+
+
+@app.delete("/api/addons/ocr-cjk")
+def cjk_remove():
+    try:
+        return ocr.CJK.remove()
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 @app.get("/api/projects/{pid}/panels/{panel_id}/same")

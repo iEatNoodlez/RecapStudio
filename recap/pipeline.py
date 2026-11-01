@@ -16,14 +16,15 @@ import soundfile as sf
 
 import anthropic
 
-from . import (charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, naming, ocr,
-               online_voices, panels, scenes, package, script, store, textless, tts, video, voiceover, wording,
-               youtube)
+from . import (charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, music, naming, ocr,
+               online_voices, panels, scenes, package, script, store, textless, translate, tts, typeset, video,
+               voiceover, wording, youtube)
 
-STEPS = ["panels", "ocr", "characters", "script", "title", "audio", "video"]
+STEPS = ["panels", "ocr", "translate", "characters", "script", "title", "audio", "video"]
 STEP_LABELS = {
     "panels": "Detecting panels",
     "ocr": "Reading text",
+    "translate": "Translating",
     "characters": "Finding characters",
     "script": "Writing script",
     "title": "Suggesting a title",
@@ -195,6 +196,11 @@ def ocr_done(panel) -> bool:
     return bool(panel.get("ocr_done"))
 
 
+def translate_done(panel) -> bool:
+    """A raw comic's panel: read, and its text boxes translated as they read now (no text counts as done)."""
+    return ocr_done(panel) and (not panel.get("bubbles") or panel.get("translated") == translate.key(panel))
+
+
 def script_done(panel) -> bool:
     return bool(panel.get("script_done") or panel.get("narration"))
 
@@ -354,10 +360,11 @@ _END = object()
 STRIP_GROUP = 30  # webtoon pages stitched per detection pass, to bound memory use
 
 
-def _strip_pieces(p, pages, job=None, report=None, with_groups=False):
+def _strip_pieces(p, pages, job=None, report=None, with_groups=False, middle_cuts=False):
     """Detect a webtoon chapter's pieces. Each gets page, crop, group (unique in the
     chapter) and y0/y1: its rows in the chapter strip, with every page scaled to the
-    chapter's first page width (the strip the scrolling video shows)."""
+    chapter's first page width (the strip the scrolling video shows). middle_cuts: cut as
+    versions before 0.1.7 did (panels.detect_strip)."""
     width = pages[0]["w"]
     out, groups, offset, gbase = [], [], 0.0, 0
     for g in range(0, len(pages), STRIP_GROUP):
@@ -367,7 +374,7 @@ def _strip_pieces(p, pages, job=None, report=None, with_groups=False):
         imgs = [im for im in (panels.imread(store.page_path(p, x)) for x in chunk) if im is not None]
         if imgs:
             scale = width / imgs[0].shape[1]
-            res = panels.detect_strip(imgs, with_groups=with_groups)
+            res = panels.detect_strip(imgs, with_groups=with_groups, middle_cuts=middle_cuts)
             pieces, found_groups = res if with_groups else (res, [])
             for page_offset, crop, gi, a, b in pieces:
                 out.append({"page": g + page_offset, "crop": crop, "group": gbase + gi,
@@ -387,7 +394,8 @@ def recover_strip_positions(p, chapter) -> bool:
 
     Detection is re-run (read-only) and matched to the stored panel images by order
     and size: first against today's fine pieces, then against whole panels as
-    earlier versions cut them. Returns True when every panel got y0/y1."""
+    earlier versions cut them; and again with cuts as versions before 0.1.7 placed them.
+    Returns True when every panel got y0/y1."""
     from PIL import Image
     d = store.project_dir(p["id"])
     stored = [x for x in p["panels"] if x["chapter"] == chapter["id"]]
@@ -401,10 +409,13 @@ def recover_strip_positions(p, chapter) -> bool:
                 sizes.append((im.size[1], im.size[0]))
         except OSError:
             return False
-    pieces, groups = _strip_pieces(p, pages, with_groups=True)
-    for cand in ([(x["crop"].shape[:2], x["y0"], x["y1"]) for x in pieces],
-                 [(tuple(x["shape"]), x["y0"], x["y1"]) for x in groups]):
-        if len(cand) == len(stored) and all(tuple(c[0]) == s for c, s in zip(cand, sizes)):
+    for middle_cuts in (False, True):
+        pieces, groups = _strip_pieces(p, pages, with_groups=True, middle_cuts=middle_cuts)
+        cands = ([(x["crop"].shape[:2], x["y0"], x["y1"]) for x in pieces],
+                 [(tuple(x["shape"]), x["y0"], x["y1"]) for x in groups])
+        cand = next((c for c in cands if len(c) == len(stored)
+                     and all(tuple(k[0]) == s for k, s in zip(c, sizes))), None)
+        if cand:
             ranges = {x["id"]: (c[1], c[2]) for x, c in zip(stored, cand)}
 
             def apply(proj):
@@ -430,15 +441,24 @@ def run_ocr(job):
             return _nothing_to_do(job, "all panels already read")
     texts = {}
     missing = []  # panels whose image file is gone: left unread so they show up as not done
-    use_gpu = p["settings"].get("use_gpu", True)
+    s = p["settings"]
+    use_gpu = s.get("use_gpu", True)
 
-    english = ocr.use_english(p["settings"])  # the English model, when downloaded and switched on
+    english = ocr.use_english(s)  # the English model, when downloaded and switched on
+    lang = ocr.language(s)  # a raw comic: each bubble kept with its box and original text, for Translate
+    if lang != "en" and targets:
+        _cjk_reader(job)
+    kind, joiner, rtl = ocr.model_for(s), "" if lang in ("zh", "ja") else " ", s.get("reading_direction") == "rtl"
 
     def read(panel):
         img = panels.imread(d / "panels" / panel["file"])
-        return None if img is None else ocr.read_text(img, use_gpu=use_gpu, english=english)
+        if img is None:
+            return None
+        if lang == "en":
+            return ocr.read_text(img, use_gpu=use_gpu, english=english)
+        return ocr.read_bubbles(img, kind, joiner, rtl, use_gpu=use_gpu)
 
-    for i, (panel, text) in enumerate(_in_parallel(job, targets, read, _workers(p["settings"], "ocr"))):
+    for i, (panel, text) in enumerate(_in_parallel(job, targets, read, _workers(s, "ocr"))):
         if text is None:
             missing.append(panel)
         else:
@@ -446,7 +466,10 @@ def run_ocr(job):
         job["progress"] = (i + 1) / max(1, len(targets))
         job["message"] = f"Reading text: panel {i + 1}/{len(targets)}"
         if (i + 1) % 20 == 0 or i + 1 == len(targets):
-            _merge(pid, "text", dict(texts), mark="ocr_done")
+            if lang == "en":
+                _merge(pid, "text", dict(texts), mark="ocr_done")
+            else:
+                _merge_bubbles(pid, dict(texts))
             texts.clear()
     if missing:
         names = {c["id"]: c["name"] for c in p["chapters"]}
@@ -456,6 +479,104 @@ def run_ocr(job):
     if magi_chapters:
         _run_magi(job, pid, magi_chapters)
     _leave_out_credits(job, pid, list({x["chapter"] for x in targets}))  # the text can find more of them
+
+
+def _cjk_reader(job):
+    """The Korean, Chinese and Japanese text reader (ocr.CJK), downloaded first when it isn't yet."""
+    if ocr.CJK.installed():
+        return
+    try:
+        ocr.CJK.start()
+    except ValueError:
+        pass  # (already downloading)
+    while True:
+        st = ocr.CJK.status()
+        if st["installed"]:
+            return
+        if st["state"] == "error":
+            raise RuntimeError(f"The text reader for Korean, Chinese and Japanese didn't download: {st['error']}")
+        if st["state"] != "installing":
+            raise RuntimeError("The text reader for Korean, Chinese and Japanese wasn't downloaded")
+        if job["cancel"]:
+            ocr.CJK.cancel()
+            raise Cancelled()
+        job["message"] = f"Downloading the text reader for Korean, Chinese and Japanese: {st['message']}"
+        job["progress"] = st["progress"]
+        time.sleep(0.5)
+
+
+def _merge_bubbles(pid, found: dict):
+    """A raw comic's text as read: each panel's bubbles, their original text together as source_text. A panel
+    whose bubbles read as before keeps their translation; otherwise its English text waits for Translate."""
+    def apply(proj):
+        for panel in proj["panels"]:
+            if panel["id"] not in found:
+                continue
+            old = panel.get("bubbles") or []
+            new = found[panel["id"]]
+            same = [b.get("text") for b in old] == [b["text"] for b in new]
+            for b, before in zip(new, old if same else []):
+                b.update({k: before[k] for k in ("kind", "english") if k in before})
+            panel["bubbles"] = new
+            panel["source_text"] = "\n".join(b["text"] for b in new)
+            panel["ocr_done"] = True
+            if not same:
+                panel["text"] = ""
+                panel.pop("translated", None)
+    store.update(pid, apply)
+
+
+def run_translate(job):
+    """A raw comic (the project's language isn't English): the script writer translates each chapter's text
+    boxes (translate.py). Each panel's text becomes the English, for the script and the rest."""
+    pid = job["project"]
+    p = store.load(pid)
+    s = p["settings"]
+    lang = ocr.language(s)
+    if lang == "en":
+        return _nothing_to_do(job, "the comic is in English")
+    targets = [x for x in _targets(job, p) if x.get("bubbles")]
+    if _skip_done(job):
+        targets = [x for x in targets if not translate_done(x)]
+    if not targets:
+        return _nothing_to_do(job, "the text read is all translated")
+    chapters = [c for c in _chapters(job, p) if any(x["chapter"] == c["id"] for x in targets)]
+    label = naming.writer_label(s)
+    ask = None
+    if s.get("llm_provider") == "claude_code":
+        from . import claude_code
+        ask = claude_code.TranslateAsker(job, p)  # one Claude Code agent translates every chapter
+    missed, ok = 0, False
+    try:
+        for ci, c in enumerate(chapters):
+            _check(job)
+            job["progress"] = ci / len(chapters)
+            job["message"] = (f"Translating from {ocr.LANGUAGES[lang]} with {label}: {c['name']} "
+                              f"({ci + 1}/{len(chapters)})")
+            found, n = translate.chapter(store.load(pid), c, [x for x in targets if x["chapter"] == c["id"]],
+                                         ask=ask)
+            missed += n
+            _save_translation(pid, found)
+        ok = True
+    finally:
+        if ask:
+            ask.close(ok=ok)
+    if missed:
+        _add_note(job, f"{missed} text box{'es' if missed != 1 else ''} got no translation, even when asked again "
+                       "(the Script tab shows them)")
+
+
+def _save_translation(pid, found: dict):
+    def apply(proj):
+        for x in proj["panels"]:
+            boxes = found.get(x["id"])
+            if boxes is None or len(boxes) != len(x.get("bubbles") or []):
+                continue
+            for b, t in zip(x["bubbles"], boxes):
+                b.update(kind=t["kind"], english=t["english"])
+            x["text"] = translate.writer_text(x["bubbles"])
+            x["translated"] = translate.key(x)
+    store.update(pid, apply)
 
 
 # ---- the scan group's pages at the start and end of chapters (see credits.py) ----------
@@ -931,6 +1052,7 @@ def _api_chapter(job, p, chapter, groups, write, label, narrate, budget=claude.P
                 raise ValueError(f"panel image missing: {x['file']}")
             guesses = magi.describe(x.get("speakers"))  # Magi's, when it has run on this chapter
             pieces.append({"id": x["id"], "img": img, "text": x.get("text", ""), "speakers": guesses,
+                           "translated": bool(x.get("bubbles")),
                            "tokens": claude.piece_tokens(img, x.get("text", "") + guesses),
                            "images": claude.piece_images(img)})
         items.append(pieces)
@@ -1256,7 +1378,9 @@ def video_items(p, d, chapter, recover=None, prepare=None) -> tuple[list, bool]:
                 covered = [x for x in pieces if x.get("enabled", True) and cover.boxes(x)]
                 _locate(p, pages, [x for x in covered if "at" not in x] if prepare else [])
                 strip["covers"] = [r for x in covered if "at" in x for r in cover.in_strip(x)]
-            return _prepared(p, d, [strip], prepare), True
+            if typesets(p["settings"]) and prepare:  # where each piece with text sits in the strip, for its English
+                _locate(p, pages, [x for x in pieces if x.get("bubbles") and "at" not in x])
+            return _prepared(p, d, [strip], prepare, pieces), True
         planned = False
     items = [{  # one clip per scene: its pieces stacked, with the head's narration and voice
         "type": "scene",
@@ -1265,7 +1389,7 @@ def video_items(p, d, chapter, recover=None, prepare=None) -> tuple[list, bool]:
         "narration": g[0].get("narration", ""),
         **({"covers": [cover.boxes(x) for x in g]} if p["settings"].get("youtube_safe") else {}),
     } for g in scenes.groups(pieces)]
-    return _prepared(p, d, items, prepare), planned
+    return _prepared(p, d, items, prepare, pieces), planned
 
 
 def _locate(p, pages, pieces):
@@ -1300,10 +1424,19 @@ def _strip_runs(pieces) -> list[list[dict]]:
     return out
 
 
-def _prepared(p, d, items, prepare):
-    """items with the pictures Settings → Video asks for (see video_items)."""
+def typesets(s) -> bool:
+    """A translated comic whose video shows the English in the pictures (typeset.py)."""
+    return bool(s.get("typeset")) and ocr.language(s) != "en"
+
+
+def _prepared(p, d, items, prepare, pieces):
+    """items with the pictures Settings → Video asks for (see video_items); pieces: the chapter's panels."""
     s = p["settings"]
-    if s.get("remove_text"):  # first, so subjects are found in the pictures as the video shows them
+    if typesets(s):  # the English in place of the text it translates (instead of removing the text)
+        typeset.attach(items, p, d, pieces, compute=prepare is not None, workers=_workers(s, "ocr"),
+                       progress=prepare and (lambda done, total: prepare("putting the English in the pictures",
+                                                                         done, total)))
+    elif s.get("remove_text"):  # first, so subjects are found in the pictures as the video shows them
         textless.attach(items, d, compute=prepare is not None, settings=s, workers=_workers(s, "ocr"),
                         progress=prepare and (lambda done, total: prepare("removing the text from the pictures",
                                                                           done, total)))
@@ -1367,6 +1500,8 @@ def _video_plan(job, p, d, chapters, doing):
         raise RuntimeError("No panels to render. Import pages and detect panels first.")
     if p["settings"].get("remove_text") and len(chapters) == len(p["chapters"]):
         textless.prune(d, [it for ch in plan for it in ch["items"]])  # copies of pictures no longer used
+    if typesets(p["settings"]) and len(chapters) == len(p["chapters"]):
+        typeset.prune(d, [it for ch in plan for it in ch["items"]])
     if p["settings"].get("youtube_safe") and len(chapters) == len(p["chapters"]):
         cover.prune(d, [it for ch in plan for it in ch["items"]])
     return plan, not_scrolling
@@ -1388,10 +1523,13 @@ def run_video(job):
     s = p["settings"]  # joining a second of video, as a share of drawing one (for the bar)
     join_cost = estimates.seconds_per_unit("join") / (
         estimates.seconds_per_unit(estimates.key("video", s)) * int(s.get("fps") or 30))
+    tracks = music.tracks(p) if s.get("background_music") else []
+    bed = (lambda seconds: (music.playlist(p, seconds, d / "render" / "music"), float(s.get("music_volume", 0.25)))
+           ) if tracks else None
     result = video.render_chapters(plan, lambda seconds: _video_parts(p, plan, chapters, seconds), d / "output",
                                    d / "render", s,
                                    prog, lambda: job["cancel"], status=lambda note: how.update(note=f" ({note})"),
-                                   between=lambda: _check(job), join_cost=join_cost)
+                                   between=lambda: _check(job), join_cost=join_cost, music=bed)
     job["join_time"] = result["join_time"]  # left out of the drawing speed _learn_speed takes from this step
     estimates.learn("join", result["joined"], result["join_time"])
     outs = result["parts"]
@@ -1409,6 +1547,10 @@ def run_video(job):
                      f"made {result['made']}")
     if len(outs) > 1:
         notes.append(f"Saved as {len(outs)} parts")
+    if tracks:
+        notes.append(f"With background music ({len(tracks)} track{'s' if len(tracks) != 1 else ''})")
+    elif s.get("background_music"):
+        notes.append("Background music is on, but the project has no tracks yet: add them in the Video tab")
     if not_scrolling:
         notes.append("Shown as scenes instead of scrolling (detect panels again to scroll): "
                      + ", ".join(not_scrolling[:5]) + (" …" if len(not_scrolling) > 5 else ""))
@@ -1712,7 +1854,8 @@ def _suggest_title(job, p) -> dict:
     return found
 
 
-RUNNERS = {"panels": run_panels, "ocr": run_ocr, "characters": run_characters, "script": run_script,
+RUNNERS = {"panels": run_panels, "ocr": run_ocr, "translate": run_translate, "characters": run_characters,
+           "script": run_script,
            "title": run_title, "audio": run_audio, "video": run_video,
            "scan": run_scan, "editors": run_editors, "voiceover": run_voiceover, "package": run_package,
            "credits": run_credits, "names": run_names, "boxes": run_boxes}

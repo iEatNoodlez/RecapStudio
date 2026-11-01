@@ -23,6 +23,9 @@ DEFAULT_SETTINGS = {
     # panel detection
     "layout": "auto",                # "auto", "webtoon" (one long strip) or "pages" (comic/manga pages)
     "reading_direction": "ltr",      # "ltr" (western/webtoon) or "rtl" (manga)
+    # the comic's language (ocr.LANGUAGES): "en", or "ko", "zh", "ja" for a raw comic, read in that language
+    # and translated into English by the script writer (translate.py)
+    "language": "en",
     "min_panel_frac": 0.08,          # smallest panel side, as a fraction of page width
     "webtoon_video": "scroll",       # webtoon chapters: "scroll" the whole strip, or show "scenes" one by one
     "leave_out_credits": True,       # leave out the scan group's credits, notices and ads at chapters' ends (credits.py)
@@ -90,6 +93,12 @@ DEFAULT_SETTINGS = {
     # scenes that zoom aim at "center", or at the "subject" found by the optional U2-Net-p add-on (focus.py)
     "motion_focus": "center",
     "remove_text": False,            # paint the text in speech bubbles and captions out of the pictures (textless.py)
+    # a translated comic: put the English in the pictures in place of the original text (typeset.py)
+    "typeset": False,
+    # background music under the narration: the project's own tracks (music.py), each evened out in loudness,
+    # then at this volume (1.0: about as loud as the narration)
+    "background_music": False,
+    "music_volume": 0.25,
     # run text reading and the voice on the NVIDIA GPU when available (falls back to the CPU)
     "use_gpu": True,
     "parallel_workers": 0,           # panels / lines worked on at once; 0 = automatic
@@ -123,10 +132,10 @@ GLOBAL_KEYS = {
 VIDEO_KEYS = (
     "orientation", "resolution", "fps", "video_style", "motion", "motion_focus", "remove_text", "min_panel_seconds",
     "pad_seconds", "transition_seconds", "video_split", "video_split_chapters", "video_split_hours", "editor_export",
-    "editor_transition",
+    "editor_transition", "background_music", "music_volume", "typeset",
 )
 # what the New project dialog sets, besides those
-NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "webtoon_video", "youtube_safe", "find_characters",
+NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "language", "webtoon_video", "youtube_safe", "find_characters",
                                      "characters_chapters", "characters_review", "suggest_title", "redraw_thumbnail"}
 GLOBAL_FILE = DATA_ROOT / "settings.json"
 

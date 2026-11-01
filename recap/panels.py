@@ -104,6 +104,57 @@ def _split(gray, box, bg, min_gap, rtl, depth=0):
     return [box]
 
 
+def _lettering(gray: np.ndarray, width: int) -> tuple[np.ndarray, np.ndarray]:
+    """The rows of a strip that hold lettering, one block of rows for each caption's or bubble's text (gray: the
+    strip, every second column). Letters are found by their strokes, dark on light or light on dark, against
+    what's right around them (a white caption box on a dark panel too). A line of text is a run of letter-high
+    marks side by side (letters, or whole words where the letters touch), wider than it's tall; lines close under
+    each other are one block. Cut through, a piece would hold half a line, which reads badly and shows as half a
+    caption in a still.
+
+    Lines set tight touch, and a bubble's text is then one mark several lines tall: kept when it fills a fifth of
+    its box (an English test webtoon's were 0.27-0.5; a bubble's outline, which a cut may cross, 0.03). Dense line
+    art that tall is kept with it, and isn't cut through either.
+
+    Returns (rows, inner): rows has a margin around each block, inner only a few rows (a flat row beside
+    lettering has no ink to cut, and may be a narrow gutter)."""
+    rows = np.zeros(gray.shape[0], bool)
+    inner = rows.copy()
+    k = max(9, round(0.02 * width))  # wider than a letter's stroke
+    near = cv2.getStructuringElement(cv2.MORPH_RECT, (max(5, k // 2), k))
+    strokes = ((cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, near) > 80)
+               | (cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, near) > 80)).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(strokes, connectivity=8)
+    if n < 2:
+        return rows, inner
+    big = 0.12 * width  # a line of lettering is no taller (a shout drawn as part of the art can be)
+    w, h = stats[:, 2] * 2, stats[:, 3]
+    fill = stats[:, 4] / np.maximum(1, stats[:, 2] * h)
+    letter = (h >= 5) & (w <= 6 * big) & ((h <= big) | ((h <= 3 * big) & (fill >= 0.2)))
+    letter[0] = False
+    marks = letter[labels]
+    # a line: its marks run together across the gaps between letters and words (and a Korean syllable's
+    # stacked parts), wider than tall. (The marks are thin, a letter's strokes: the strip's solid shapes aren't
+    # among them)
+    gap = max(3, round(0.02 * width))  # in halved columns: 0.04 of the width
+    run = cv2.dilate(marks.astype(np.uint8), np.ones((5, gap), np.uint8))
+    m, _, lstats, _ = cv2.connectedComponentsWithStats(run, connectivity=8)
+    found = [(int(lstats[j, 1]), int(lstats[j, 1] + lstats[j, 3])) for j in range(1, m)
+             if (lstats[j, 2] - gap) * 2 >= 1.5 * min(lstats[j, 3], big)]
+    blocks = []  # lines less than half a line apart: one caption's or bubble's (a gutter is wider)
+    for top, bottom in sorted(found):
+        size = bottom - top
+        if blocks and size <= big and blocks[-1][2] <= big and top - blocks[-1][1] < 0.5 * min(size, blocks[-1][2]):
+            blocks[-1][1:] = [max(blocks[-1][1], bottom), size]
+        else:
+            blocks.append([top, bottom, size])
+    pad = max(2, round(0.1 * big))
+    for top, bottom, _ in blocks:
+        rows[max(0, top - pad):bottom + pad] = True
+        inner[max(0, top - 4):bottom + 4] = True
+    return rows, inner
+
+
 def is_webtoon(sizes: list[tuple[int, int]]) -> bool:
     """Tall, same-width pages are slices of one long vertical strip."""
     if not sizes:
@@ -113,7 +164,8 @@ def is_webtoon(sizes: list[tuple[int, int]]) -> bool:
     return ratios[len(ratios) // 2] > 1.8 and len(widths) <= max(1, len(sizes) // 10 + 1)
 
 
-def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_groups: bool = False):
+def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_groups: bool = False,
+                 middle_cuts: bool = False):
     """Treat pages as one continuous vertical strip and cut it at flat rows.
 
     Gutters in webtoons are often gradients, so a gutter row only needs to be
@@ -127,19 +179,41 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
     a speech bubble), so no panel boundary is missed; `group` numbers the panels
     the heuristics above would have made, and consecutive pieces with the same
     group are shown together until someone (Claude or the user) regroups them.
+
+    The strip isn't cut through lettering (_lettering: a caption's or bubble's lines of text): a line of text
+    in a white caption is mostly one color too. A mostly-one-color band is cut at its cleanest row.
+    middle_cuts: at the band's middle, lettering or not, as versions before 0.1.7 cut (for matching projects
+    they cut).
     """
     W = images[0].shape[1]
     pages = [im if im.shape[1] == W else cv2.resize(im, (W, int(im.shape[0] * W / im.shape[1])))
              for im in images]
-    flat, mostly = [], []
+    flat, mostly, off, grays = [], [], [], []
     for im in pages:
         g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32)[:, ::2]
         flat.append(g.std(axis=1) < STD_THRESH)
         # share of each row that is one color (gutters crossed by a bubble or effect)
         med = np.median(g, axis=1, keepdims=True)
-        mostly.append((np.abs(g - med) < 10).mean(axis=1) > 0.8)
+        same = np.abs(g - med) < 10
+        mostly.append(same.mean(axis=1) > 0.8)
+        off.append((~same).sum(axis=1))
+        grays.append(g.astype(np.uint8))
     flat = np.concatenate(flat)
     mostly = np.concatenate(mostly)
+    off = np.concatenate(off)
+    if not middle_cuts:
+        text, inner = _lettering(np.vstack(grays), W)
+        flat &= ~inner
+        mostly &= ~text
+    del grays
+
+    def band_cut(s, e):
+        """Where to cut the mostly-one-color rows s..e-1: the cleanest row nearest the middle."""
+        mid = (s + e) // 2
+        if middle_cuts:
+            return mid
+        least = int(off[s:e].min())
+        return min((y for y in range(s, e) if off[y] <= least + 2), key=lambda y: abs(y - mid))
     offsets = np.cumsum([0] + [im.shape[0] for im in pages])
     total = int(offsets[-1])
 
@@ -190,7 +264,7 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
                 run_start = None
         if best is None:
             return [[a, b]]
-        cut = (best[0] + best[1]) // 2
+        cut = band_cut(*best)
         return split_tall(a, cut) + split_tall(cut, b)
 
     raw = [list(s) for s in segs_raw]
@@ -212,7 +286,7 @@ def detect_strip(images: list[np.ndarray], min_height_frac: float = 0.35, with_g
                 run_start = y
             elif not m and run_start is not None:
                 if y - run_start >= min_gap:
-                    cands.append((run_start + y) // 2)
+                    cands.append(band_cut(run_start, y))
                 run_start = None
         cuts, last = [], a
         for c in sorted(set(cands)):

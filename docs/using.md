@@ -75,6 +75,7 @@ Each estimate is the work a step would do (pages, panels, chapters or scenes, na
 ## Limits
 
 - Panel detection is rule-based, not a trained model. It handles clean gutters and webtoon strips well. Borderless or overlapping art may come out as one large panel, which the video still pans across.
+- A webtoon strip is cut into pieces at its gutters and across the white space inside panels, but not through lettering: a caption's or bubble's lines stay in one piece, so a still never shows half a caption and the text is read whole. On seven test chapters (six English, one Korean) this took the cuts through a line of text from 144 to 33; what's left is mostly sound effects, titles drawn as art and scan sites' watermarks, plus a few lines whose letters touch their bubble's outline. Projects detected with an earlier version keep their pieces until **Detect panels** runs again.
 - OCR is tuned for English and Chinese text. Other languages may need a different RapidOCR model.
 - Without an NVIDIA GPU, the Kokoro voice and text reading run on the CPU: expect a couple of seconds per line or panel. Without any GPU encoder (NVIDIA, AMD or Intel), video export runs at roughly half speed.
 - Not tried for real: AMD's and Intel's video encoders (no such card here), Resolve's own transitions in Resolve itself, and Groq, Mistral and ElevenLabs with real keys (stand-in servers only).

@@ -252,7 +252,8 @@ def _content(chapter: str, pieces: list[dict], context: str, fixed: list[dict] |
             blocks.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}})
         text = (p["text"] or "").strip()
         blocks.append({"type": "text", "text": (
-            f"Text read from piece {i} (OCR, may contain errors): {json.dumps(text)}" if text
+            f"Piece {i}'s text, translated into English: {json.dumps(text)}" if text and p.get("translated")
+            else f"Text read from piece {i} (OCR, may contain errors): {json.dumps(text)}" if text
             else f"No text was read from piece {i}.")})
         if p.get("speakers"):
             blocks.append({"type": "text", "text": f"Speaker guesses for piece {i}: {p['speakers']}"})

@@ -36,6 +36,7 @@ MODEL_ID = "claude-code"  # what claude.ask is told the model is (the agents' mo
 MODELS = [("opus", "Opus"), ("sonnet", "Sonnet")]  # Claude Code's names for the latest of each
 NAMES = "character names"  # the "chapter" the naming agent asks for
 TITLE = "youtube title"  # and the title's
+TRANSLATION = "translation"  # and the translating agent's (a raw comic's text, chapter by chapter)
 # the narration skill: inside the app's folder when installed or cloned from GitHub, next to it in the dev setup
 SKILL = next((d for d in (store.ROOT / ".claude" / "skills" / "recap-studio-narration",
                           store.ROOT.parent / ".claude" / "skills" / "recap-studio-narration") if d.is_dir()),
@@ -805,6 +806,11 @@ def TitleAsker(job, project) -> Asker:
     return Asker(job, project, "title", TITLE, TITLE_BRIEF, youtube.SCHEMA, youtube.problem)
 
 
+def TranslateAsker(job, project) -> Asker:
+    from . import translate
+    return Asker(job, project, "translation", TRANSLATION, TRANSLATE_BRIEF, translate.SCHEMA, translate.problem)
+
+
 def _names_schema():
     from . import naming
     return naming.SCHEMA
@@ -840,6 +846,26 @@ checked at once: SAVED, or FIX with what to correct.
 3. Call next_request again: there may be another part.
 
 Follow the instructions exactly; never invent a name the text doesn't give. Don't do anything else in the app.
+"""
+
+TRANSLATE_BRIEF = """You translate the text of the comic "{series}" into English, for Recap Studio's narrated recap of it. \
+Recap Studio is the user's app that turns comics into narrated recap videos. It hands you its requests through \
+its MCP tools (server "{server}"):
+
+1. Call next_request with chapter "{chapter}". It answers with one of:
+   - NEXT <request>: a request to answer: part of a chapter. It names the files to read.
+   - FIX <request> and a problem: your answer wasn't taken. Correct it and submit again.
+   - WAITING: nothing yet; call it again.
+   - CHAPTER DONE: everything is saved. Give a one-line report and stop.
+   - CHAPTER FAILED or STOPPED: stop, and report what it said.
+2. Answer a request: read prompt.md and the instructions (system.md) it names, and EVERY picture, several per \
+message, in parallel: each shows a piece of the comic with its text boxes outlined and numbered. If a picture \
+doesn't show (for example "[media removed]"), don't answer from the text alone: stop and report PICTURES MISSING.
+   Then call submit_answer with the request and your answer, a JSON object in the shape prompt.md gives, with \
+every box. It's checked at once: SAVED, or FIX with what to correct.
+3. Call next_request again: there are usually more parts, one chapter after another.
+
+Follow the instructions exactly. Don't do anything else in the app.
 """
 
 TITLE_BRIEF = """You suggest the YouTube title and thumbnail for Recap Studio's narrated recap of the comic "{series}". \

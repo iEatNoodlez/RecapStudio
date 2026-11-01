@@ -255,6 +255,22 @@ dialog::backdrop { background: rgba(0, 0, 0, .5); }
 #yt-ai-img { width: 100%; max-width: 480px; aspect-ratio: 16 / 9; display: block; border-radius: 6px; border: 1px solid var(--line); }
 .yt-marks { display: flex; flex-direction: column; gap: 4px; }
 .yt-marks:empty { display: none; }
+.phone-pair { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.phone-pair img { background: #fff; border-radius: 6px; padding: 4px; image-rendering: pixelated; }
+.phone-steps { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+.phone-steps code { overflow-wrap: anywhere; }
+.translation { font-size: 13px; }
+.translation summary { cursor: pointer; color: var(--muted); }
+.translation.warn summary { color: var(--warn); }
+.tr-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; align-items: center; margin-top: 4px; }
+.tr-src { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-volume { display: flex; align-items: center; gap: 8px; }
+.music-volume input { flex: 1; min-width: 0; }
+.music-list { display: flex; flex-direction: column; gap: 8px; }
+.music-list:empty { display: none; }
+.music-track { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 4px 6px; align-items: center; }
+.music-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.music-track audio { grid-column: 1 / -1; width: 100%; height: 30px; }
 .yt-mark { display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; }
 
 .panels-head h2 { font-size: 16px; margin: 10px 0; }

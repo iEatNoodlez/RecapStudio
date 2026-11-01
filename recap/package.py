@@ -2,8 +2,8 @@
 
 The file is a zip: project.json, a manifest (recap-project.json) and the project's own files: its pages
 (including pages imported from a folder, which the app otherwise reads where they are, so the file
-doesn't depend on that folder), panels, voice lines, character pictures, the character scan, recordings
-and the scenes' subjects. What the app makes again from those is left out: the rendered video and its
+doesn't depend on that folder), panels, voice lines, character pictures, the character scan, recordings,
+background music and the scenes' subjects. What the app makes again from those is left out: the rendered video and its
 pieces, the videos for editors and the pictures without text. Opening a file makes a new project
 (the original, if it's still here, is left alone).
 """
@@ -18,7 +18,7 @@ from . import store
 
 FORMAT, VERSION = "recap-studio-project", 1
 MANIFEST = "recap-project.json"
-FOLDERS = ("pages", "panels", "audio", "characters", "scan", "voiceover")  # kept as they are
+FOLDERS = ("pages", "panels", "audio", "characters", "scan", "voiceover", "music")  # kept as they are
 FILES = ("focus.json",)
 SUFFIX = ".recap"
 

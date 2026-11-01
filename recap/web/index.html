@@ -61,6 +61,7 @@
         <!-- numbered by renderSteps(); Characters shows only when the character scan models are installed -->
         <button data-steps="panels" data-label="Detect panels">1 · Detect panels</button>
         <button data-steps="ocr" data-label="Read text">2 · Read text</button>
+        <button id="step-translate" data-steps="translate" data-label="Translate" hidden title="Your script writer translates the text read into English (a comic in Korean, Chinese or Japanese)">Translate</button>
         <button id="step-characters" data-label="Characters" hidden title="Find the characters with Scan for characters, then name them (Make the recap does this before the script)">Characters</button>
         <button data-steps="script" data-label="Write script">3 · Write script</button>
         <button data-steps="audio" data-label="Voice">4 · Voice</button>
@@ -153,6 +154,8 @@
             <select data-key="fps" data-type="number"><option value="60">60 fps</option><option value="50">50 fps</option><option value="30">30 fps</option><option value="25">25 fps</option><option value="24">24 fps</option><option value="20">20 fps</option><option value="15">15 fps</option><option value="12">12 fps</option><option value="10">10 fps</option><option value="5">5 fps (stills)</option></select></label>
           <label class="adv">Pan and zoom toward
             <select data-key="motion_focus" id="focus-select"><option value="center">The middle of the scene</option><option value="subject">The scene's main subject (needs the subject finder, Settings → Video)</option></select></label>
+          <label id="typeset-row" class="check" hidden><input data-key="typeset" type="checkbox"> Put the English in the pictures (a translated comic)</label>
+          <span id="typeset-hint" class="hint" hidden>The original text in speech bubbles and captions is painted out and the English lettered in its place, sized to fit the bubble; signs get a small English caption over them, and sound effects stay as drawn. Check the translation in the Script tab first: what's in the pictures is what it says there.</span>
           <label class="check adv"><input data-key="remove_text" type="checkbox"> Remove the text from the pictures (speech bubbles and captions)</label>
           <span class="hint adv">The text is found by the same reader as Read text and painted over where it sits on a plain background, as in speech bubbles and caption boxes. Text drawn over the artwork (sound effects, signs) and bubbles with busy surroundings are left. The first video made this way reads every picture again (about as long as Read text); the cleaned pictures are then kept in the project's textless folder and reused.</span>
           <label class="adv">Minimum seconds per scene <input data-key="min_panel_seconds" type="number" step="0.1" min="0.5"></label>
@@ -164,6 +167,17 @@
           <label id="split-hours-row" class="adv">Hours per video, at most <input data-key="video_split_hours" type="number" step="0.5" min="0.5" max="48"></label>
           <span class="hint adv">Each part gets its own subtitles and YouTube chapter list. YouTube takes up to 12 hours per video. Chapters already rendered are reused, so changing how the video is split, or re-rendering after editing a chapter, only makes what changed.</span>
           <span class="hint">Automatic scrolls webtoon chapters and pans and zooms other comics. Smaller sizes render much faster: 720p has under half the pixels of 1080p, 360p about a ninth.</span>
+        </fieldset>
+        <fieldset id="music-box">
+          <legend>Background music</legend>
+          <label class="check"><input data-key="background_music" type="checkbox"> Play music under the narration</label>
+          <label>Volume <span class="music-volume"><input id="music-volume" data-key="music_volume" data-type="number" type="range" min="0.05" max="1" step="0.05"><span id="music-volume-out" class="muted"></span></span></label>
+          <div id="music-list" class="music-list"></div>
+          <span id="music-warn" class="hint warn" hidden>Add a track for the music to play: without one the video is made without music.</span>
+          <div><button type="button" id="music-add" class="ghost small">Add music…</button>
+            <input id="music-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma" multiple hidden>
+            <span id="music-status" class="hint"></span></div>
+          <span class="hint">Your own tracks play in this order, then again from the first until the video ends, each evened out in loudness and fading into the next. Use music you're allowed to put on YouTube, such as tracks from the YouTube Audio Library, or the video may be claimed. It's added when the chapters are joined, so changing it only joins the video again, without drawing anything. The narration file (recap.wav) and Export for editors leave it out.</span>
         </fieldset>
         <fieldset>
           <legend>YouTube</legend>
@@ -234,6 +248,9 @@
           <select data-key="layout"><option value="auto">Auto-detect</option><option value="webtoon">Webtoon (long vertical strip)</option><option value="pages">Comic / manga pages</option></select></label>
         <label>Reading direction
           <select data-key="reading_direction"><option value="ltr">Left to right / webtoon</option><option value="rtl">Right to left (manga)</option></select></label>
+        <label>Language of its text
+          <select data-key="language"><option value="en">English</option><option value="ko">Korean (translated into English)</option><option value="zh">Chinese (translated into English)</option><option value="ja">Japanese (translated into English)</option></select></label>
+        <span class="hint">A comic in Korean, Chinese or Japanese is read in that language, then your script writer translates it into English (the Translate step) before the script is written. Changing it applies when the text is read again.</span>
         <label>Smallest panel (fraction of page width)
           <input data-key="min_panel_frac" type="number" step="0.01" min="0.01" max="0.9"></label>
         <label>Webtoon video (when Settings → Video → Style is Automatic)
@@ -473,6 +490,20 @@
           <button type="button" id="ocr-remove" class="ghost small danger">Remove the English model</button>
         </div>
         <div id="ocr-error" class="error"></div>
+        <span class="hint">For comics in Korean, Chinese or Japanese (a project's language): PaddleOCR's PP-OCRv5 text finder and readers (Apache 2.0), 35 MB into data\addons\ocr_cjk, not part of the app. Read text downloads it the first time a project in one of those languages is read; or get it now.</span>
+        <div id="cjk-off" class="magi-part">
+          <button type="button" id="cjk-download">Download the Korean, Chinese and Japanese reader (35 MB)</button>
+        </div>
+        <div id="cjk-busy" class="magi-part" hidden>
+          <span id="cjk-stage"></span>
+          <div class="bar"><div id="cjk-bar"></div></div>
+          <button type="button" id="cjk-cancel" class="ghost small">Cancel download</button>
+        </div>
+        <div id="cjk-on" class="magi-part" hidden>
+          <span class="ok">Downloaded: Korean, Chinese and Japanese comics are read with it.</span>
+          <button type="button" id="cjk-remove" class="ghost small danger">Remove it</button>
+        </div>
+        <div id="cjk-error" class="error"></div>
       </fieldset>
       <fieldset id="cs-box" class="adv">
         <legend>Character scan models</legend>
@@ -514,6 +545,21 @@
           <div class="bar"><div id="projects-move-bar"></div></div>
         </div>
         <span id="storage-other" class="hint adv"></span>
+      </fieldset>
+      <fieldset id="phone-box">
+        <legend>Phone</legend>
+        <label class="check"><input id="phone-on" type="checkbox"> Open Recap Studio on my phone (this Wi-Fi only)</label>
+        <span class="hint">See how your recaps are going and why one stopped, pause it, or run it again, from a phone on the same Wi-Fi as this PC while Recap Studio is open here. Only your home network can reach it, not the internet.</span>
+        <div id="phone-pair" class="phone-pair" hidden>
+          <img id="phone-qr" alt="QR code that opens Recap Studio on your phone" width="176" height="176">
+          <div class="phone-steps">
+            <b>Scan it with your phone's camera</b>
+            <span class="hint">It opens <code id="phone-url"></code> with a key the phone keeps as a small cookie, so it only needs scanning once (typing the address in doesn't link a phone).</span>
+            <span class="hint warn">If Windows asks whether to let Recap Studio on networks, allow it on private networks, or your phone can't connect.</span>
+            <div><button type="button" id="phone-forget" class="ghost small" title="A new code: phones that scanned the old one have to scan again">Forget phones</button></div>
+          </div>
+        </div>
+        <div id="phone-error" class="error"></div>
       </fieldset>
       <fieldset id="update-box">
         <legend>Updates</legend>

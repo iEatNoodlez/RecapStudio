@@ -167,8 +167,15 @@ function renderNew() {
   if (page === "comic") {
     const name = el("input", { value: newName, placeholder: "The series' name", oninput: (e) => { newName = e.target.value; },
       onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); $("#new-next").click(); } } });
+    const lang = el("select", { onchange: (e) => { s.language = e.target.value; renderNew(); } },
+      ...Object.entries(LANGUAGES).map(([v, t]) => el("option", { value: v }, v === "en" ? t : `${t} (a raw, translated into English)`)));
+    lang.value = s.language || "en";
     body.append(el("label", {}, "Name ", name), el("span", { class: "field-head" }, "What kind of comic is it?"),
-      choiceList("new-kind", KINDS, kindOf(s), (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }));
+      choiceList("new-kind", KINDS, kindOf(s), (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }),
+      el("label", {}, "What language is its text in? ", lang),
+      isRaw(s) ? el("span", { class: "hint" }, `The text is read in ${LANGUAGES[s.language]} and your script writer translates it ` +
+        "into English, a chapter at a time, before writing the narration. The first time, Recap Studio downloads a text " +
+        "reader for Korean, Chinese and Japanese (about 35 MB).") : "");
     setTimeout(() => name.focus(), 0);
   } else if (page === "characters") {
     body.append(
@@ -213,7 +220,16 @@ function renderNew() {
       el("label", {}, "Resolution ", select("resolution", [[1080, "1080p (full HD)"], [720, "720p"], [480, "480p"], [360, "360p"]])),
       el("label", {}, "Frame rate ", select("fps", [[60, "60 fps"], [50, "50 fps"], [30, "30 fps"], [25, "25 fps"], [24, "24 fps"],
         [20, "20 fps"], [15, "15 fps"], [12, "12 fps"], [10, "10 fps"], [5, "5 fps (stills)"]])),
-      line);
+      line,
+      isRaw(s) ? el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.typeset,
+        onchange: (e) => { s.typeset = e.target.checked; } }), " Put the English in the pictures") : "",
+      isRaw(s) ? el("span", { class: "hint" }, `The ${LANGUAGES[s.language]} in speech bubbles and captions is painted out and the ` +
+        "translation lettered in its place; signs get a small English caption, and sound effects stay as drawn. " +
+        "Otherwise the pictures keep their original text and the narration tells the story.") : "",
+      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.background_music,
+        onchange: (e) => { s.background_music = e.target.checked; } }), " Background music under the narration"),
+      el("span", { class: "hint" }, "Your own tracks, added in the project's Video tab once it's made: they play in turn " +
+        "until the video ends, evened out in loudness. Use music you're allowed to put on YouTube."));
     speed();
   } else {
     const kind = KINDS.find((k) => k[0] === kindOf(s))[1];
@@ -234,10 +250,12 @@ function renderNew() {
       el("span", { class: "hint warn" }, "It can make mistakes: read the script and look over the boxes before you upload."),
       el("span", { class: "field-head" }, "Summary"),
       el("ul", { class: "setup-summary" },
-        el("li", {}, `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "kind of comic told from the pages" : kind.toLowerCase()}`),
+        el("li", {}, `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "kind of comic told from the pages" : kind.toLowerCase()}` +
+          (isRaw(s) ? `, in ${LANGUAGES[s.language]}, translated into English${s.typeset ? " (also in the pictures)" : ""}` : "")),
         el("li", {}, !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
           (s.characters_review === "trust" ? "names added as suggested" : "names checked by you")),
-        el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}`),
+        el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}` +
+          (s.background_music ? ", with background music" : "")),
         el("li", {}, s.suggest_title ? `A title and thumbnail suggested after the script${s.redraw_thumbnail ? ", then redrawn with AI" : ""}`
           : "No title or thumbnail suggested")),
       el("p", { class: "muted" }, "Any of this can change later: the video and title in the project's Video tab, the kind of comic and the characters in its Project settings (advanced mode)."));
@@ -345,7 +363,56 @@ function renderSettings() {
   $("#split-chapters-row").hidden = current.settings.video_split !== "chapters";
   $("#split-hours-row").hidden = current.settings.video_split !== "hours";
   $("#focus-select").querySelector("option[value=subject]").disabled = !focusInstalled;
+  $("#typeset-row").hidden = $("#typeset-hint").hidden = !isRaw(current.settings);
+  renderMusic();
 }
+
+// ---- background music (music.py): the project's own tracks, in the order they play ----
+
+function renderMusic() {
+  const tracks = current.music || [], on = !!current.settings.background_music;
+  $("#music-volume-out").textContent = `${Math.round((current.settings.music_volume ?? 0.25) * 100)}%`;
+  $("#music-warn").hidden = !on || tracks.length > 0;
+  const move = (i, by) => {
+    const order = tracks.map((t) => t.file);
+    order.splice(i + by, 0, ...order.splice(i, 1));
+    musicChange(api(`/api/projects/${current.id}/music/order`, { method: "PUT", json: { files: order } }));
+  };
+  $("#music-list").replaceChildren(...tracks.map((t, i) => el("div", { class: "music-track" },
+    el("span", { class: "music-name", title: t.name }, `${i + 1}. ${t.name} `, el("span", { class: "muted" }, clock(t.seconds))),
+    el("button", { type: "button", class: "ghost small", title: "Play it earlier", disabled: i === 0, onclick: () => move(i, -1) }, "↑"),
+    el("button", { type: "button", class: "ghost small", title: "Play it later", disabled: i === tracks.length - 1,
+      onclick: () => move(i, 1) }, "↓"),
+    el("button", { type: "button", class: "ghost small danger", title: "Remove this track", onclick: () => musicChange(
+      api(`/api/projects/${current.id}/music/${encodeURIComponent(t.file.slice("music/".length))}`, { method: "DELETE" })) },
+    "✕"),
+    el("audio", { controls: true, preload: "none", src: fileUrl(t.file.split("/").map(encodeURIComponent).join("/")) }))));
+}
+
+async function musicChange(request) {
+  try {
+    const p = await request;
+    if (current && current.id === p.id) {
+      current.music = p.music;
+      renderMusic();
+    }
+  } catch (e) { notify(e.message); }
+}
+
+$("#music-volume").addEventListener("input", (e) => {
+  $("#music-volume-out").textContent = `${Math.round(Number(e.target.value) * 100)}%`;
+});
+$("#music-add").addEventListener("click", () => $("#music-file").click());
+$("#music-file").addEventListener("change", async (e) => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f, f.name);
+  $("#music-status").textContent = `Adding ${plural(files.length, "track")}…`;
+  await musicChange(api(`/api/projects/${current.id}/music`, { method: "POST", body: fd }));
+  $("#music-status").textContent = "";
+});
 
 function renderGlobal() {
   if (!globals) return;
@@ -365,6 +432,8 @@ function renderGlobal() {
   renderMagi();
   renderCharscanSettings();
   renderOcrSettings();
+  renderCjkSettings();
+  loadPhone();
   renderFocusSettings();
   renderBoxSettings();
   renderGpuSettings();
@@ -507,6 +576,55 @@ $("#ocr-remove").addEventListener("click", async () => {
   catch (e) { $("#ocr-error").textContent = e.message; }
 });
 
+// ---- Phone access (phone.py): the phone page on the home network, linked by a QR code ----
+
+function renderPhone(st) {
+  $("#phone-on").checked = !!st.enabled;
+  $("#phone-pair").hidden = !st.running;
+  $("#phone-url").textContent = st.address || "";
+  if (st.running) $("#phone-qr").src = `/api/phone/qr.png?t=${Date.now()}`;
+  $("#phone-error").textContent = st.error || "";
+}
+async function loadPhone() {
+  try { renderPhone(await api("/api/phone")); } catch { /* (an older server) */ }
+}
+$("#phone-on").addEventListener("change", async (e) => {
+  try { renderPhone(await api("/api/phone", { method: "PUT", json: { enabled: e.target.checked } })); }
+  catch (err) { $("#phone-error").textContent = err.message; }
+});
+$("#phone-forget").addEventListener("click", async () => {
+  if (!await ask("Forget phones?", "A new code is made: phones that scanned the old one can't open Recap Studio until they scan the new one.",
+    { ok: "Forget them" })) return;
+  renderPhone(await api("/api/phone/key", { method: "POST" }));
+});
+
+// ---- the Korean, Chinese and Japanese text reader (ocr.CJK): downloaded on request or by Read text, never shipped ----
+
+let cjkPoll = null;
+async function renderCjkSettings(st = null) {
+  clearTimeout(cjkPoll);
+  try { st = st || await api("/api/addons/ocr-cjk"); } catch { return; }
+  const busy = st.state === "installing";
+  $("#cjk-off").hidden = st.installed || busy;
+  $("#cjk-busy").hidden = !busy;
+  $("#cjk-on").hidden = !st.installed || busy;
+  $("#cjk-stage").textContent = st.message;
+  $("#cjk-bar").style.width = `${Math.round((st.progress || 0) * 100)}%`;
+  $("#cjk-error").textContent = st.state === "error" ? `${st.message}: ${st.error}` : "";
+  if (busy) cjkPoll = setTimeout(() => renderCjkSettings(), 700);
+}
+$("#cjk-download").addEventListener("click", async () => {
+  try { renderCjkSettings(await api("/api/addons/ocr-cjk/install", { method: "POST" })); }
+  catch (e) { $("#cjk-error").textContent = e.message; }
+});
+$("#cjk-cancel").addEventListener("click", async () => renderCjkSettings(await api("/api/addons/ocr-cjk/cancel", { method: "POST" })));
+$("#cjk-remove").addEventListener("click", async () => {
+  if (!await ask("Remove the Korean, Chinese and Japanese reader?", "Text already read and translated is kept. Reading a comic " +
+    "in one of those languages downloads it again.", { ok: "Remove", danger: true })) return;
+  try { renderCjkSettings(await api("/api/addons/ocr-cjk", { method: "DELETE" })); }
+  catch (e) { $("#cjk-error").textContent = e.message; }
+});
+
 // ---- Magi add-on (speaker detection): downloaded on request, never shipped with the app ----
 
 let magiPoll = null;
@@ -556,8 +674,16 @@ $("#magi-remove").addEventListener("click", async () => {
 // With the scan models installed, Characters is a step of its own (after Read text, where Make the recap finds
 // them); without them the step bar is as before. Steps are numbered by what is shown.
 const scanReady = () => !!(env && env.charscan && env.charscan.installed);
+// a comic in Korean, Chinese or Japanese, translated by the script writer (translate.py)
+const LANGUAGES = { en: "English", ko: "Korean", zh: "Chinese", ja: "Japanese" };
+const isRaw = (s) => !!s && (s.language || "en") !== "en";
+// a panel's text boxes all translated (as pipeline.translate_done: Read text again drops the English of boxes
+// that read differently)
+const translated = (p) => (p.bubbles || []).every((b) => "english" in b);
+
 function renderSteps() {
   $("#step-characters").hidden = !scanReady();
+  $("#step-translate").hidden = !current || !isRaw(current.settings);
   let n = 0;
   for (const b of document.querySelectorAll(".steps button[data-label]")) {
     if (!b.hidden) b.textContent = `${++n} · ${b.dataset.label}`;
@@ -917,6 +1043,8 @@ document.querySelectorAll(".proj-settings [data-key]").forEach((input) => {
     const p = await api(`/api/projects/${current.id}/settings`, { method: "PUT", json: { [input.dataset.key]: readInput(input) } });
     current.settings = p.settings;
     if (input.dataset.key === "youtube_safe") renderPanels();
+    if (input.dataset.key === "language") render();  // (the Translate step, the translation in the Script tab)
+    if (input.closest("#music-box")) renderMusic();
     if (input.closest("#video-settings")) {  // (the split rows, the line above the steps, the time left)
       renderSettings();
       renderAppLine();
@@ -1631,13 +1759,14 @@ function sceneGroups(panels) {
 
 function chapterStats() {
   const stats = {};
-  for (const c of current.chapters) stats[c.id] = { pages: 0, panels: 0, text: 0, scenes: 0, script: 0, lines: 0, voice: 0 };
+  for (const c of current.chapters) stats[c.id] = { pages: 0, panels: 0, text: 0, untranslated: 0, scenes: 0, script: 0, lines: 0, voice: 0 };
   for (const pg of current.pages) if (stats[pg.chapter]) stats[pg.chapter].pages++;
   for (const p of current.panels) {
     const s = stats[p.chapter];
     if (!s || !p.enabled) continue;
     s.panels++;
     if (p.ocr_done || p.text) s.text++;
+    if (!translated(p)) s.untranslated++;
   }
   for (const g of sceneGroups(current.panels)) {
     const s = stats[g[0].chapter];
@@ -1752,6 +1881,7 @@ $("#job-wording").addEventListener("click", () => {
 // One word on how far a chapter is (simple mode's chapter list)
 function chapterStatus(s) {
   if (!s.panels) return { kind: "new", text: "Not started" };
+  if (s.untranslated && !s.script) return { kind: "todo", text: "Needs translation" };
   if (s.script < s.scenes) return { kind: "todo", text: s.script ? `Script ${s.script} of ${s.scenes}` : "Needs script" };
   if (s.voice < s.lines) return { kind: "ready", text: s.voice ? `Voice ${s.voice} of ${s.lines}` : "Script ready" };
   return { kind: "done", text: "Voiced" };
@@ -1883,6 +2013,7 @@ async function runSteps(steps, only = null, mode = "missing") {
 const STEP_INFO = {
   panels: { name: "Detect panels", unit: "chapter", redo: "replaces their panels, along with the text, narration and voice of those panels" },
   ocr: { name: "Read text", unit: "panel", redo: "reads the text of every panel again" },
+  translate: { name: "Translate", unit: "panel", redo: "translates every text box again, replacing English you corrected" },
   script: { name: "Write script", unit: "scene", redo: "rewrites all narration, including lines you edited by hand, and clears their voice audio. With Claude it also regroups the pieces into scenes" },
   audio: { name: "Voice", unit: "narration line", redo: "regenerates the voice for every line" },
 };
@@ -1895,6 +2026,10 @@ function stepProgress(step) {
     return { total: chapters.length, done: chapters.filter((c) => has.has(c.id)).length };
   }
   if (step === "ocr") return { total: panels.length, done: panels.filter((p) => p.ocr_done).length };
+  if (step === "translate") {
+    const read = panels.filter((p) => (p.bubbles || []).length);
+    return { total: read.length, done: read.filter(translated).length };
+  }
   const heads = sceneGroups(current.panels).filter((g) => inScope(g[0].chapter)).map((g) => g[0]);
   if (step === "script") return { total: heads.length, done: heads.filter((p) => p.script_done || p.narration).length };
   const lines = heads.filter((p) => (p.narration || "").trim());
@@ -1906,7 +2041,7 @@ async function runStep(step) {
   if (!info) return runSteps([step]);  // rendering always re-renders
   const { total, done } = stepProgress(step);
   if (!total) {
-    const before = { ocr: "Detect panels", script: "Detect panels", audio: "Write script" }[step];
+    const before = { ocr: "Detect panels", translate: "Read text", script: "Detect panels", audio: "Write script" }[step];
     return notify(`Nothing to do yet. Run ${before} first.`, info.name);
   }
   if (!done) return runSteps([step]);
@@ -1931,7 +2066,7 @@ async function runStep(step) {
 // project says) before the script; after it, a YouTube title and thumbnail when the project asks for them.
 $("#go").addEventListener("click", async () => {
   if (!current.chapters.length) return $("#import-folder").click();
-  runSteps(["panels", "ocr", "characters", "script", "title", "audio", "video"], null, "missing");
+  runSteps(["panels", "ocr", "translate", "characters", "script", "title", "audio", "video"], null, "missing");
 });
 
 document.querySelectorAll(".steps button[data-steps]").forEach((b) =>
@@ -2236,8 +2371,39 @@ function sceneCard(g, n, firstInChapter) {
   const guesses = g.flatMap((p) => p.speakers || []);
   const who = guesses.length ? el("div", { class: "speakers adv", title: "Magi's guesses at who says each line (often wrong)" },
     ...guesses.map((s) => el("div", {}, el("b", {}, `${s.who}: `), s.text))) : null;
-  c.append(sel, pieces, el("div", { class: "fields" }, meta, narration, ocr, who));
+  const tr = isRaw(current.settings) && g.some((p) => (p.bubbles || []).length) ? translationBox(g) : null;
+  c.append(sel, pieces, el("div", { class: "fields" }, meta, narration, tr, ocr, who));
   return c;
+}
+
+// ---- a raw comic's translation (translate.py): each text box's original, its kind and its English, to correct ----
+
+const KIND_NAMES = { speech: "Speech", thought: "Thought", narration: "Caption", sign: "Sign", sfx: "Sound effect", none: "Not text" };
+
+function translationBox(g) {
+  const rows = [];
+  let missing = 0;
+  for (const p of g) {
+    (p.bubbles || []).forEach((b, k) => {
+      if (!("english" in b)) missing++;  // (an empty answer is the writer's: nothing to say there)
+      const kind = el("select", { title: "What kind of text it is: sound effects and what isn't text stay out of the script, " +
+        "and only speech, thoughts and captions are lettered into their bubble", onchange: (e) => saveBubble(p, k, { kind: e.target.value }) },
+      ...Object.entries(KIND_NAMES).map(([v, t]) => el("option", { value: v }, t)));
+      kind.value = b.kind || "speech";
+      const english = el("input", { value: b.english || "", placeholder: "english" in b ? "(nothing)" : "Not translated yet",
+        onchange: (e) => saveBubble(p, k, { english: e.target.value }) });
+      rows.push(el("div", { class: "tr-row" }, kind, el("span", { class: "tr-src", title: b.text }, b.text), english));
+    });
+  }
+  return el("details", { class: "translation" + (missing ? " warn" : "") },
+    el("summary", {}, `Translation · ${rows.length} text box${rows.length === 1 ? "" : "es"}` +
+      (missing ? ` · ${missing} not translated` : "")), ...rows);
+}
+
+async function saveBubble(p, k, change) {
+  try {
+    Object.assign(p, await api(`/api/projects/${current.id}/panels/${p.id}/bubbles/${k}`, { method: "PUT", json: change }));
+  } catch (e) { notify(e.message); }
 }
 
 // Show a full-screen overlay above everything, including an open dialog: a modal dialog sits in the

@@ -30,42 +30,51 @@ INSIDE = 0.5      # share of the text's own box in that colour too (letters are 
                   # was something else, e.g. the panel around a bubble the text sits at the edge of
 
 
+def erase_group(out: np.ndarray, img: np.ndarray, g: list, vertical: bool = False) -> dict | None:
+    """Paint one group of text lines (boxes x0, y0, x1, y1, ...) out of out (img: the picture as it was) when it
+    sits on a plain background. Returns {"box", "bg" (its colour), "ink" (the letters' colour), "flat"}, or None
+    when it was left (text over the artwork). vertical: the lines are columns, so their size is their width."""
+    h, w = img.shape[:2]
+    lh = float(np.median([(l[2] - l[0]) if vertical else (l[3] - l[1]) for l in g]))
+    pad = max(2, round(0.12 * lh))
+    ring = max(3, round(0.3 * lh))
+    x0, y0 = max(0, int(min(l[0] for l in g)) - pad), max(0, int(min(l[1] for l in g)) - pad)
+    x1, y1 = min(w, int(np.ceil(max(l[2] for l in g))) + pad), min(h, int(np.ceil(max(l[3] for l in g))) + pad)
+    X0, Y0, X1, Y1 = max(0, x0 - ring), max(0, y0 - ring), min(w, x1 + ring), min(h, y1 + ring)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    around = np.ones((Y1 - Y0, X1 - X0), bool)
+    around[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0] = False
+    band = img[Y0:Y1, X0:X1][around]
+    if not len(band):
+        return None
+    bg = np.median(band, axis=0)
+    plain = float((np.abs(band.astype(np.int16) - bg).max(axis=1) < NEAR).mean())
+    if plain < PLAIN:
+        return None  # text over the artwork: left as it is
+    box = out[y0:y1, x0:x1]
+    letters = (np.abs(box.astype(np.int16) - bg).max(axis=2) >= NEAR).astype(np.uint8)
+    if 1 - letters.mean() < INSIDE:
+        return None
+    ink = np.median(img[y0:y1, x0:x1][letters > 0], axis=0) if letters.any() else 255 - bg
+    letters = cv2.dilate(letters, np.ones((3, 3), np.uint8), iterations=max(1, round(lh / 12)))
+    if plain >= FLAT:
+        box[letters > 0] = bg.astype(np.uint8)
+    else:  # a shaded background: fill the letters in from what's around them
+        region = out[Y0:Y1, X0:X1]
+        mask = np.zeros(region.shape[:2], np.uint8)
+        mask[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0] = letters
+        out[Y0:Y1, X0:X1] = cv2.inpaint(region, mask, 3, cv2.INPAINT_TELEA)
+    return {"box": (x0, y0, x1, y1), "bg": bg, "ink": ink, "flat": plain >= FLAT}
+
+
 def _erase(img: np.ndarray, lines: list[tuple]) -> tuple[np.ndarray, int]:
     """The picture with the text on plain backgrounds painted over, and how many bubbles that was."""
     out = img.copy()
-    h, w = img.shape[:2]
     done = 0
     for g in ocr.groups(lines):
-        lh = float(np.median([l[3] - l[1] for l in g]))
-        pad = max(2, round(0.12 * lh))
-        ring = max(3, round(0.3 * lh))
-        x0, y0 = max(0, int(min(l[0] for l in g)) - pad), max(0, int(min(l[1] for l in g)) - pad)
-        x1, y1 = min(w, int(np.ceil(max(l[2] for l in g))) + pad), min(h, int(np.ceil(max(l[3] for l in g))) + pad)
-        X0, Y0, X1, Y1 = max(0, x0 - ring), max(0, y0 - ring), min(w, x1 + ring), min(h, y1 + ring)
-        if x1 <= x0 or y1 <= y0:
-            continue
-        around = np.ones((Y1 - Y0, X1 - X0), bool)
-        around[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0] = False
-        band = img[Y0:Y1, X0:X1][around]
-        if not len(band):
-            continue
-        bg = np.median(band, axis=0)
-        plain = float((np.abs(band.astype(np.int16) - bg).max(axis=1) < NEAR).mean())
-        if plain < PLAIN:
-            continue  # text over the artwork: left as it is
-        box = out[y0:y1, x0:x1]
-        letters = (np.abs(box.astype(np.int16) - bg).max(axis=2) >= NEAR).astype(np.uint8)
-        if 1 - letters.mean() < INSIDE:
-            continue
-        letters = cv2.dilate(letters, np.ones((3, 3), np.uint8), iterations=max(1, round(lh / 12)))
-        if plain >= FLAT:
-            box[letters > 0] = bg.astype(np.uint8)
-        else:  # a shaded background: fill the letters in from what's around them
-            region = out[Y0:Y1, X0:X1]
-            mask = np.zeros(region.shape[:2], np.uint8)
-            mask[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0] = letters
-            out[Y0:Y1, X0:X1] = cv2.inpaint(region, mask, 3, cv2.INPAINT_TELEA)
-        done += 1
+        if erase_group(out, img, g):
+            done += 1
     return out, done
 
 

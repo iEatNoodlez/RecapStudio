@@ -878,11 +878,12 @@ def render_reel(segments, lengths, path: Path, settings, encoder_args, workers, 
 
 
 def render_chapters(chapters, split, out_dir: Path, cache_dir: Path, settings, progress=None, cancelled=None,
-                    status=None, between=None, join_cost=JOIN_COST) -> dict:
+                    status=None, between=None, join_cost=JOIN_COST, music=None) -> dict:
     """chapters: [{"id", "name", "items", "weight"}] in order (weight: about how long its video runs).
     Makes the pieces that are missing (reusing the rest); then split([seconds of each chapter]) ->
     [(file stem, [chapter indexes])] decides the parts from the chapters' exact lengths, and each part
     is joined into out_dir: <stem>.mp4, <stem>.srt, <stem>.wav and "<stem> - YouTube chapters.txt".
+    music(seconds) -> (concat list, volume) puts background music under each part (see music.py).
     between() runs before each chapter (Pause takes effect there); status(note) says what's happening.
     progress(fraction) shares the bar between drawing and joining by how long each should take: join_cost
     is how long joining a second of video takes, as a share of drawing one.
@@ -942,7 +943,7 @@ def render_chapters(chapters, split, out_dir: Path, cache_dir: Path, settings, p
         j0, span = joined, sum(seconds[i] for i in idx)
         outs.append(_join_part(ffmpeg, stem, [(chapters[i]["name"], bases[i]) for i in idx], out_dir, cancelled,
                                (lambda f, j0=j0, span=span: progress(drawn_at + (1 - drawn_at) * (j0 + f * span) / whole))
-                               if progress else None))
+                               if progress else None, music))
         joined += span
     _clean_cache(cache_dir, {chapters[i]["id"]: bases[i].name for i in order})
     if progress:
@@ -963,9 +964,19 @@ def _concat_line(path: Path) -> str:
     return "file '" + path.resolve().as_posix().replace("'", "'\\''") + "'\n"
 
 
-def _join_part(ffmpeg, stem, pieces, out_dir: Path, cancelled=None, progress=None) -> dict:
+def _music_mix(volume: float, seconds: float) -> str:
+    """The filter putting the music (input 2) under the narration (input 1): the music at its volume, fading in
+    at the start and out at the end, the two added (not averaged, which would halve the voice) and kept from
+    clipping."""
+    return (f"[1:a]pan=stereo|c0=c0|c1=c0,aresample=48000[voice];"
+            f"[2:a]volume={volume:.3f},afade=t=in:d=2,afade=t=out:st={max(0.0, seconds - 3):.3f}:d=3[music];"
+            "[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[a]")
+
+
+def _join_part(ffmpeg, stem, pieces, out_dir: Path, cancelled=None, progress=None, music=None) -> dict:
     """Join chapter pieces [(name, base)] into one video, copying the video as it is and encoding the
-    narration once, plus its subtitles and a YouTube chapter list (paste it into the description).
+    narration once (with music(seconds) -> (concat list, volume): the music under it), plus its subtitles
+    and a YouTube chapter list (paste it into the description). <stem>.wav stays the narration alone.
     progress(fraction) follows ffmpeg's position in the video."""
     out_dir.mkdir(parents=True, exist_ok=True)
     infos = [json.loads(_piece_file(b, "json").read_text(encoding="utf-8")) for _, b in pieces]
@@ -985,8 +996,13 @@ def _join_part(ffmpeg, stem, pieces, out_dir: Path, cancelled=None, progress=Non
     listing.write_text("".join(_concat_line(_piece_file(b, "mp4")) for _, b in pieces), encoding="utf-8")
     video = out_dir / f"{stem}.mp4"
     tmp = out_dir / f"{stem}.joining.mp4"
+    bed = music(total) if music else None
+    audio = ["-map", "0:v", "-map", "1:a"]
+    if bed:
+        audio = ["-f", "concat", "-safe", "0", "-i", str(bed[0]), "-filter_complex", _music_mix(bed[1], total),
+                 "-map", "0:v", "-map", "[a]"]
     cmd = [ffmpeg, "-y", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-f", "concat", "-safe", "0",
-           "-i", str(listing), "-i", str(wav), "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac",
+           "-i", str(listing), "-i", str(wav), *audio, "-c:v", "copy", "-c:a", "aac",
            "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(tmp)]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NO_WINDOW)
     at = [0.0]  # seconds of video written so far, from ffmpeg's progress lines ("out_time_us=...")

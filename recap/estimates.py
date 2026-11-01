@@ -32,6 +32,7 @@ DEFAULTS = {
                           # mostly encoding the narration on one CPU thread)
     "names": 2.2,         # per scan group, suggesting names (Claude Opus 5.5: 30 groups in 65 s)
     "title": 45.0,        # a YouTube title and thumbnail: one request (a guess until it has run)
+    "translate": 40.0,    # per chapter, a raw comic's text translated (a guess until it has run)
 }
 # video frames per second, by encoder and resolution (two scrolling chapters, 2 drawing processes)
 VIDEO_FPS = {("gpu", 1080): 255, ("gpu", 720): 471, ("gpu", 480): 608, ("gpu", 360): 673,
@@ -40,7 +41,8 @@ STILLS_SPEEDUP = 1.3      # stills are drawn once per scene
 CHARS_PER_SECOND = 17.5   # the voice at speed 1.0, measured over 3,843 lines
 # before a chapter has a script: about one narration line per three panels, ~179 characters each
 LINES_PER_PANEL, CHARS_PER_LINE = 0.32, 179
-UNITS = {"panels": "page", "ocr": "panel", "scan": "panel", "characters": "panel", "title": "request", "audio": "narration line", "video": "frame"}
+UNITS = {"panels": "page", "ocr": "panel", "translate": "chapter", "scan": "panel", "characters": "panel",
+         "title": "request", "audio": "narration line", "video": "frame"}
 
 
 def _speeds() -> dict:
@@ -69,6 +71,8 @@ def key(step: str, settings: dict) -> str:
         return f"scan:{_device(settings)}"
     if step == "title":
         return "title"
+    if step == "translate":
+        return f"translate:{settings.get('llm_provider', 'ollama')}"
     if step == "script":
         provider = settings.get("llm_provider", "ollama")
         if provider == "ollama":
@@ -89,6 +93,8 @@ def seconds_per_unit(k: str) -> float:
         return learned
     if k.startswith("script:") and k != "script:ollama":
         return DEFAULTS["script:api"]
+    if k.startswith("translate:"):
+        return DEFAULTS["translate"]
     if k.startswith("editors:baked:"):  # until an export has been timed: as fast as the video
         return seconds_per_unit(k.removeprefix("editors:baked:"))
     if k.startswith("video:"):
@@ -132,6 +138,11 @@ def work(step: str, project: dict, chapters: list[str] | None, missing: bool,
         read = panels + [x for x in project["panels"] if x["chapter"] in chosen and x.get("credits")
                          and not x.get("enabled", True)]
         return sum(1 for x in read if not (missing and pipeline.ocr_done(x))), "panel"
+    if step == "translate":  # a raw comic's text, a chapter per request (translate.py)
+        from . import ocr
+        if ocr.language(s) == "en":
+            return 0, "chapter"
+        return len({x["chapter"] for x in panels if not (missing and pipeline.translate_done(x))}), "chapter"
     if step == "scan":
         return len(panels), "panel"
     if step == "characters":  # Make the recap's scan, in a project never scanned

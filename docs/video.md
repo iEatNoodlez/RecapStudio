@@ -32,6 +32,16 @@ Chapters detected before this feature get their positions in the strip recovered
 
 When Claude writes a scrolling chapter, it's told the chapter is one continuous scroll, so it can write lines that cover a few quick panels instead of narrating every fragment.
 
+## Background music
+
+Turn on **Background music under the narration** in New project (How its video looks), or in the project's Video tab, and add your own tracks there with **Add music…** (MP3, WAV, M4A, AAC, FLAC, OGG, Opus or WMA). They play in the order listed (↑ and ↓ change it), then again from the first until the video ends; each part of a split video starts the list again. The music fades in at the start and out at the end.
+
+- **Even loudness.** Each track is converted once (48 kHz stereo, kept in the project's `render\music` folder) with its loudness evened out to the same level, so a loudly mastered song doesn't drown the narration and a quiet one doesn't vanish, and its ends fade so one track gives way to the next. **Volume** then sets the music against the voice: 25% (the default) puts it about 13 dB under the narration.
+- **Quick to change.** The music is mixed in when the chapters are joined, so turning it on or off, changing the tracks or the volume, then **Make the video again** only joins the video again (about half a minute for an 11-minute video), without drawing anything.
+- **Left out:** the narration file (`recap.wav`) and **Export for editors** stay voice only, so the music can be laid in the editor instead.
+- **Your music, your rights.** Nothing is bundled. Use music you're allowed to put on YouTube, such as tracks from the YouTube Audio Library, or the video may get a Content ID claim.
+- Tracks are part of the project: **Save as file** takes them along. Ones under 6 seconds aren't taken.
+
 ## Export for video editors
 
 **Export for editors…** (after the step buttons, in advanced mode) saves the ticked chapters (none ticked = all) as an OpenTimelineIO timeline to finish the recap in a video editor: `recap (for DaVinci Resolve).otioz` or `recap (for editors).otioz` in the output folder. An `.otioz` is a zip holding the timeline and all its media, so it can be moved to another computer. The timeline has:

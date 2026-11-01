@@ -88,12 +88,13 @@ Your script writer also suggests a clickbait title, a few others, and a thumbnai
 | Step | What it does | With |
 |---|---|---|
 | Panels | Cuts the pages into panels. Webtoons are stitched into one strip and cut at the gutters. | OpenCV |
-| Text | Reads the speech bubbles and captions. | RapidOCR |
+| Text | Reads the speech bubbles and captions, in English, Korean, Chinese or Japanese. | RapidOCR; PaddleOCR's PP-OCRv5 for Korean, Chinese and Japanese (optional download) |
+| Translate | Translates a Korean, Chinese or Japanese comic into English, and can letter the English into the bubbles. | Your script writer |
 | Characters | Finds who's who and suggests their names. | DeepGHS's detectors and CCIP, the WD tagger (optional download) |
 | Script | Writes the narration a chapter at a time, from the pictures and the text. | A local model (Ollama), Claude Code on your Claude plan, or Claude, Gemini, OpenRouter, DeepSeek, Groq or Mistral with your own key |
 | Voice | Reads the narration aloud, or uses your own recording. | Kokoro on your PC, Microsoft Edge's voices, or ElevenLabs |
 | Title | Suggests a clickbait title and draws a labelled thumbnail, which an image model can repaint. | Your script writer; Gemini or OpenRouter image models |
-| Video | Scrolls webtoons, pans and zooms other comics, crossfades, and writes subtitles. | OpenCV and ffmpeg |
+| Video | Scrolls webtoons, pans and zooms other comics, crossfades, adds your background music and writes subtitles. | OpenCV and ffmpeg |
 
 ## Costs and privacy
 
@@ -103,6 +104,7 @@ Everything runs on your PC unless you choose an online service. A local model wi
 
 - **Speed**: with an NVIDIA card, text reading and the voice run several times faster (GPU support, a 1.3 GB download, offered in setup). An NVIDIA, AMD or Intel card also speeds up video encoding.
 - **Space**: projects are saved in `Documents\Recap Studio`, one folder each. A recap takes several GB.
+- **Your phone**: scan a QR code in Settings to check the recaps from a phone on the same Wi-Fi, and run again one that stopped. Only your home network can reach it.
 - **YouTube-safe**: for an age-restricted upload of an adult comic, this tones down sex scenes and covers nudity with black boxes. It can make mistakes, so check the video before you upload.
 
 ## Documentation
@@ -112,10 +114,12 @@ The [docs](docs/README.md) cover every feature in detail:
 - [Install, files and updates](docs/install.md)
 - [Using Recap Studio](docs/using.md)
 - [Script writers and the prompt](docs/script-writers.md)
+- [Korean, Chinese and Japanese comics](docs/translation.md)
 - [Characters](docs/characters.md)
 - [Voice](docs/voice.md)
 - [Video](docs/video.md)
 - [YouTube title, thumbnail and YouTube-safe](docs/youtube.md)
+- [Your phone](docs/phone.md)
 - [The scan group's pages](docs/scan-group-pages.md)
 - [Performance and the GPU](docs/performance.md)
 
