@@ -82,8 +82,9 @@
       <button type="button" role="tab" data-tab="script">Script</button>
       <button type="button" role="tab" data-tab="characters">Characters</button>
       <button type="button" role="tab" data-tab="video">Video</button>
+      <button type="button" role="tab" data-tab="youtube">YouTube</button>
       <button type="button" role="tab" data-tab="prompt" class="adv">Prompt</button>
-      <button type="button" role="tab" data-tab="project" class="adv">Project settings</button>
+      <button type="button" role="tab" data-tab="project">Project settings</button>
     </nav>
 
     <section class="tab-page" data-page="chapters">
@@ -198,40 +199,57 @@
           <label id="shorts-label-row" class="check"><input data-key="shorts_label" type="checkbox"> "Part 1", "Part 2"… at the top of each</label>
           <span class="hint">Once the video is made, it's cut into parts that end in a pause between two lines, in the output folder's shorts folder: an 11-minute recap makes 13 one-minute Shorts. Portrait suits Shorts, TikTok and Reels best. YouTube takes Shorts of up to 3 minutes; TikTok and Reels longer.</span>
         </fieldset>
+      </div>
+    </section>
+
+    <!-- the YouTube title and thumbnail (youtube.py), at the full width, and what the project does for YouTube -->
+    <section class="tab-page yt-page proj-settings" data-page="youtube">
+      <div id="yt-empty" class="empty-note">No title or thumbnail yet. <b>Suggest a title and thumbnail</b> has your script writer read the story and pick them; Make the recap does it after the script when it's ticked below.</div>
+      <div id="yt-out" class="yt-out" hidden>
+        <div class="yt-top">
+          <div class="yt-pic-col">
+            <a id="yt-thumb-link" target="_blank" title="Open the thumbnail"><img id="yt-thumb" alt="Thumbnail"></a>
+            <figure id="yt-ai" class="yt-ai" hidden>
+              <a id="yt-ai-link" target="_blank" title="Open the AI version"><img id="yt-ai-img" alt="Redrawn with AI"></a>
+              <figcaption id="yt-ai-by" class="hint"></figcaption>
+            </figure>
+          </div>
+          <div class="yt-side">
+            <label><span>Title <span id="yt-count" class="muted"></span></span>
+              <span class="yt-row"><input id="yt-title" maxlength="100"><button type="button" id="yt-copy" class="ghost small">Copy</button></span></label>
+            <div class="yt-alts-box"><span class="field-head">Other titles <span class="hint">Click one to use it.</span></span>
+              <div id="yt-alts" class="yt-alts"></div></div>
+            <label><span>Hook words <span class="hint">across the bottom, when no label finds its character</span></span>
+              <span class="yt-row"><input id="yt-text" maxlength="60"><button type="button" id="yt-redraw" class="ghost small">Redraw</button></span></label>
+            <span id="yt-by" class="hint"></span>
+          </div>
+        </div>
+        <div class="yt-below">
+          <span class="field-head">On the thumbnail <span class="hint">Change the words, then Redraw. Empty takes one off.</span></span>
+          <div id="yt-marks" class="yt-marks"></div>
+          <span class="field-head">Pictures <span class="hint">Click one to use it or take it out: two at most, side by side.</span></span>
+          <div id="yt-pics" class="yt-pics"></div>
+        </div>
+      </div>
+      <div class="yt-actions"><button type="button" id="yt-suggest" class="ghost">Suggest a title and thumbnail</button>
+        <button type="button" id="yt-ai-go" class="ghost" hidden>Redraw with AI</button>
+        <span id="yt-ai-status" class="hint"></span></div>
+      <div class="settings">
         <fieldset>
-          <legend>YouTube</legend>
+          <legend>Title and thumbnail</legend>
+          <label class="check"><input data-key="suggest_title" type="checkbox"> Suggest a title and thumbnail when the script is written</label>
+          <span class="hint">Your script writer reads the story and picks a clickbait title, a few others, one or two pictures for the thumbnail and what goes on them: yellow labels with arrows on the characters, a "?!" and a short speech bubble. The thumbnail is drawn at 1280×720 into the output folder.</span>
+          <label class="check"><input data-key="redraw_thumbnail" type="checkbox"> Then redraw it with AI</label>
+          <span class="hint">An image model repaints the thumbnail as one glossy illustration with the same characters and words, saved beside it as thumbnail_ai.jpg. It needs a service and its key in Settings → Thumbnail redraw, and costs a few cents each time.<span id="yt-ai-setup" class="warn"></span></span>
+        </fieldset>
+        <fieldset>
+          <legend>YouTube-safe</legend>
           <label class="check"><input data-key="youtube_safe" type="checkbox"> YouTube-safe, for an age-restricted video</label>
           <span class="hint">Sex scenes are written the way an R-rated film shows them: kissing, undressing and that they had sex, said plainly, but no explicit acts, body detail or orgasms. Forced scenes are named once and told through what they leave behind. Black boxes cover nudity in the video. They come from the box finder (Settings → Video), from the script writer as it writes, and from you: click a piece and drag over what to cover. Changing this doesn't rewrite a script already written; redo the chapters to get the milder wording.</span>
           <span class="hint warn">This can make mistakes: boxes on things that don't need covering, a spot left uncovered, or wording that goes too far. Double-check all of it before you upload: watch the whole video and read the script.</span>
           <div><button type="button" id="find-boxes" class="ghost small adv">Find boxes now</button>
             <button type="button" class="ghost small boxes-open">See the boxes…</button>
             <span id="boxes-count" class="muted"></span></div>
-          <label class="check"><input data-key="suggest_title" type="checkbox"> Suggest a title and thumbnail when the script is written</label>
-          <span class="hint">Your script writer reads the story and picks a clickbait title, a few others, one or two pictures for the thumbnail and what goes on them: yellow labels with arrows on the characters, a "?!" and a short speech bubble. The thumbnail is drawn at 1280×720 into the output folder.</span>
-          <label class="check"><input data-key="redraw_thumbnail" type="checkbox"> Then redraw it with AI</label>
-          <span class="hint">An image model repaints the thumbnail as one glossy illustration with the same characters and words, saved beside it as thumbnail_ai.jpg. It needs a service and its key in Settings → Thumbnail redraw, and costs a few cents each time.<span id="yt-ai-setup" class="warn"></span></span>
-          <div id="yt-out" class="yt-out" hidden>
-            <a id="yt-thumb-link" target="_blank" title="Open the thumbnail"><img id="yt-thumb" alt="Thumbnail"></a>
-            <figure id="yt-ai" class="yt-ai" hidden>
-              <a id="yt-ai-link" target="_blank" title="Open the AI version"><img id="yt-ai-img" alt="Redrawn with AI"></a>
-              <figcaption id="yt-ai-by" class="hint"></figcaption>
-            </figure>
-            <div class="yt-side">
-              <label>Title <span id="yt-count" class="muted"></span>
-                <span class="yt-row"><input id="yt-title" maxlength="100"><button type="button" id="yt-copy" class="ghost small">Copy</button></span></label>
-              <div id="yt-alts" class="yt-alts"></div>
-              <span class="field-head">On the thumbnail <span class="hint">Change the words, then Redraw. Empty takes one off.</span></span>
-              <div id="yt-marks" class="yt-marks"></div>
-              <label>Hook words <span class="hint">across the bottom, when no label finds its character</span>
-                <span class="yt-row"><input id="yt-text" maxlength="60"><button type="button" id="yt-redraw" class="ghost small">Redraw</button></span></label>
-              <span class="field-head">Pictures <span class="hint">Click one to use it or take it out: two at most, side by side.</span></span>
-              <div id="yt-pics" class="yt-pics"></div>
-              <span id="yt-by" class="hint"></span>
-            </div>
-          </div>
-          <div><button type="button" id="yt-suggest" class="ghost small">Suggest a title and thumbnail</button>
-            <button type="button" id="yt-ai-go" class="ghost small" hidden>Redraw with AI</button>
-            <span id="yt-ai-status" class="hint"></span></div>
         </fieldset>
       </div>
     </section>
@@ -261,6 +279,7 @@
     </section>
 
     <section class="tab-page settings proj-settings" data-page="project" id="settings">
+      <p class="hint settings-note">These settings belong to this project. The script writer and voice are set for all projects in <button type="button" class="link-btn open-global">Settings</button>.</p>
       <fieldset>
         <legend>Panels</legend>
         <label>Layout
@@ -270,18 +289,20 @@
         <label>Language of its text
           <select data-key="language"><option value="en">English</option><option value="ko">Korean (translated into English)</option><option value="zh">Chinese (translated into English)</option><option value="ja">Japanese (translated into English)</option></select></label>
         <span class="hint">A comic in Korean, Chinese or Japanese is read in that language, then your script writer translates it into English (the Translate step) before the script is written. Changing it applies when the text is read again.</span>
-        <label>Smallest panel (fraction of page width)
+        <label class="adv">Smallest panel (fraction of page width)
           <input data-key="min_panel_frac" type="number" step="0.01" min="0.01" max="0.9"></label>
-        <label>Webtoon video (when Settings → Video → Style is Automatic)
-          <select data-key="webtoon_video"><option value="scroll">Scroll down the whole chapter (narration follows the scroll)</option><option value="scenes">Show scenes one at a time</option></select></label>
+        <label>A webtoon's video
+          <select data-key="webtoon_video"><option value="scroll">Scroll down the whole chapter</option><option value="scenes">Show scenes one at a time</option></select></label>
+        <span class="hint">When the Video tab's Style is Automatic. Scrolling, the narration follows the strip down.</span>
       </fieldset>
       <fieldset>
         <legend>Characters</legend>
         <label class="check"><input data-key="find_characters" type="checkbox"> Find the characters before the script (Make the recap)</label>
         <label>Scan
-          <select data-key="characters_chapters"><option value="first">The first 5 chapters it writes (quicker: the main cast shows up early)</option><option value="all">Every chapter it writes (finds everyone, takes longer)</option></select></label>
+          <select data-key="characters_chapters"><option value="first">The first 5 chapters it writes</option><option value="all">Every chapter it writes</option></select></label>
         <label>Suggested names
-          <select data-key="characters_review"><option value="review">Let me check them (it waits for you)</option><option value="trust">Trust them (added as suggested, no waiting)</option></select></label>
+          <select data-key="characters_review"><option value="review">Let me check them</option><option value="trust">Trust them</option></select></label>
+        <span class="hint">The first 5 chapters is quicker: the main cast shows up early; every chapter finds everyone, and takes longer. Checking the names makes Make the recap wait for you; trusted ones are added as suggested.</span>
         <span class="hint">In a project that hasn't been scanned yet and has no named characters, Make the recap scans for the characters after reading the text, and your script writer suggests their names. Needs the character scan (the Characters tab).</span>
       </fieldset>
       <fieldset>
@@ -289,11 +310,11 @@
         <label class="check"><input data-key="leave_out_credits" type="checkbox"> Leave out the scan group's pages at the start and end of chapters</label>
         <span class="hint">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages: found after Detect panels, and again after Read text, because they repeat across chapters or their text says so. They're unticked in the scene list (tick one to keep it) and cut out of the video.</span>
         <label>Before the script
-          <select data-key="credits_review"><option value="review">Let me check them (one of each kind; it waits for you)</option><option value="trust">Leave them out as found (no waiting)</option></select></label>
+          <select data-key="credits_review"><option value="review">Let me check them</option><option value="trust">Leave them out as found</option></select></label>
+        <span class="hint">Checking shows one of each kind, and Make the recap waits for you; left out as found, it doesn't wait.</span>
         <div><button type="button" id="find-credits" class="ghost small">Find them now</button>
           <button type="button" class="ghost small credits-open">Check what was left out…</button></div>
       </fieldset>
-      <p class="hint settings-note">These settings belong to this project. The script writer, voice and video are set for all projects in <button type="button" class="link-btn open-global">Settings</button>.</p>
     </section>
   </section>
 </main>
@@ -301,13 +322,17 @@
 <dialog id="global-dialog">
   <form method="dialog" class="global-form">
     <div class="global-head">
-      <h2>Settings <span class="hint">These apply to every project.<span class="sim"> Advanced mode (bottom left) shows the rest.</span></span></h2>
+      <h2>Settings <span class="hint">These apply to every project.</span></h2>
+      <input id="gs-find" type="search" placeholder="Find a setting" aria-label="Find a setting" autocomplete="off">
       <span class="global-head-buttons">
         <button type="button" id="rerun-setup" class="ghost">Run setup again</button>
         <button value="close" class="ghost">Close</button>
       </span>
     </div>
-    <div class="settings">
+    <!-- one section at a time, picked in the list (app.js, renderSettingsNav): the app's own, then the plugins' -->
+    <div class="gs-body">
+    <nav id="gs-nav" class="gs-nav" aria-label="Settings sections"></nav>
+    <div class="settings gs-pages" id="gs-pages">
       <fieldset>
         <legend>Script writer</legend>
         <label>Writer
@@ -380,30 +405,6 @@
           <label class="adv">Temperature <input data-key="temperature" type="number" step="0.1" min="0" max="2"></label>
         </div>
       </fieldset>
-      <fieldset id="redraw-box">
-        <legend>Thumbnail redraw</legend>
-        <label>Service <select data-key="redraw_provider"><option value="">Off</option><option value="gemini">Google Gemini (Nano Banana)</option><option value="openrouter">OpenRouter (many image models, one key)</option></select></label>
-        <div id="redraw-opts">
-          <label>Model <input id="redraw-model" data-key="redraw_model" list="redraw-model-list" spellcheck="false" autocomplete="off">
-            <datalist id="redraw-model-list"></datalist></label>
-          <span id="redraw-model-note" class="hint"></span>
-          <div class="key-box">
-            <span class="field-head">API key</span>
-            <div id="redraw-key-status" class="muted"></div>
-            <div class="key-row" id="redraw-key-entry">
-              <input id="redraw-key" type="password" placeholder="Paste your key" autocomplete="off" spellcheck="false">
-              <button id="redraw-save-key" type="button">Save</button>
-            </div>
-            <div class="key-row" id="redraw-key-actions">
-              <button id="redraw-check-key" type="button" class="ghost small">Test key</button>
-              <button id="redraw-change-key" type="button" class="ghost small">Replace</button>
-              <button id="redraw-remove-key" type="button" class="ghost small danger">Remove</button>
-            </div>
-            <span class="hint" id="redraw-key-hint"></span>
-          </div>
-        </div>
-        <span class="hint">Redraw with AI (the Video tab's YouTube box) sends the drawn thumbnail and its pictures to an image model, which repaints them as one glossy illustration like the big recap channels' thumbnails. A few cents a picture, billed by the service. Image models may decline racier scenes; the drawn thumbnail always stays.</span>
-      </fieldset>
       <fieldset id="voice-box">
         <legend>Voice</legend>
         <label>Voice service
@@ -468,6 +469,30 @@
           <div id="boxes-error" class="error"></div>
         </div>
       </fieldset>
+      <fieldset id="redraw-box">
+        <legend>Thumbnail redraw</legend>
+        <label>Service <select data-key="redraw_provider"><option value="">Off</option><option value="gemini">Google Gemini (Nano Banana)</option><option value="openrouter">OpenRouter (many image models, one key)</option></select></label>
+        <div id="redraw-opts">
+          <label>Model <input id="redraw-model" data-key="redraw_model" list="redraw-model-list" spellcheck="false" autocomplete="off">
+            <datalist id="redraw-model-list"></datalist></label>
+          <span id="redraw-model-note" class="hint"></span>
+          <div class="key-box">
+            <span class="field-head">API key</span>
+            <div id="redraw-key-status" class="muted"></div>
+            <div class="key-row" id="redraw-key-entry">
+              <input id="redraw-key" type="password" placeholder="Paste your key" autocomplete="off" spellcheck="false">
+              <button id="redraw-save-key" type="button">Save</button>
+            </div>
+            <div class="key-row" id="redraw-key-actions">
+              <button id="redraw-check-key" type="button" class="ghost small">Test key</button>
+              <button id="redraw-change-key" type="button" class="ghost small">Replace</button>
+              <button id="redraw-remove-key" type="button" class="ghost small danger">Remove</button>
+            </div>
+            <span class="hint" id="redraw-key-hint"></span>
+          </div>
+        </div>
+        <span class="hint">Redraw with AI (a project's YouTube tab) sends the drawn thumbnail and its pictures to an image model, which repaints them as one glossy illustration like the big recap channels' thumbnails. A few cents a picture, billed by the service. Image models may decline racier scenes; the drawn thumbnail always stays.</span>
+      </fieldset>
       <fieldset class="adv">
         <legend>Performance</legend>
         <label class="check"><input data-key="use_gpu" type="checkbox"> Use the NVIDIA GPU for text reading and voice</label>
@@ -510,7 +535,7 @@
         </div>
         <div id="bubbles-error" class="error"></div>
       </fieldset>
-      <fieldset id="plugins-box">
+      <fieldset id="plugins-box" data-nav="Manage plugins">
         <legend>Plugins</legend>
         <span class="hint">Plugins add features to Recap Studio. They only come from Recap Studio's own plugin list, made alongside the app, and run inside it. Installing, switching on or off and removing take effect the next time Recap Studio starts.</span>
         <div id="plg-restart" class="key-row" hidden><span class="hint warn">Restart Recap Studio to use the changes.</span><button type="button" id="plg-restart-go" class="ghost small">Restart now</button></div>
@@ -520,7 +545,7 @@
         <div class="key-row"><button type="button" id="plg-show" class="ghost small">Show the plugins</button></div>
         <div id="plg-error" class="error"></div>
       </fieldset>
-      <fieldset id="sources-box">
+      <fieldset id="sources-box" data-nav="Sources">
         <legend>Sources (getting chapters from sites)</legend>
         <span class="hint">Recap Studio comes with no scrapers and no links to any. Bring your own: a plugin (a Python file for a site, from a file or a plugin list someone shares), gallery-dl, or a Suwayomi server with its extensions. Then a project's Chapters tab has Get chapters from a site.</span>
         <span class="hint warn">A plugin is a program: it runs on this PC with your permissions. Add only plugins from people you trust, and only get chapters you're allowed to.</span>
@@ -582,7 +607,7 @@
         <span id="cs-info" class="hint"></span>
         <button type="button" id="cs-remove" class="ghost small danger" hidden>Remove models</button>
       </fieldset>
-      <fieldset id="magi-box" class="adv">
+      <fieldset id="magi-box" class="adv" data-nav="Speaker detection">
         <legend>Speaker detection (optional add-on)</legend>
         <span class="hint">Magi v2 guesses who says each line while text is read, matching people to the pictures you add to your characters (the Characters tab, advanced mode). The script writer is told these are guesses: in testing Magi named the right speaker about 6 times in 10.</span>
         <div id="magi-off" class="magi-part">
@@ -642,6 +667,7 @@
           <button type="button" id="update-notes" class="link-btn">Releases on GitHub</button>
         </span>
       </fieldset>
+    </div>
     </div>
   </form>
 </dialog>

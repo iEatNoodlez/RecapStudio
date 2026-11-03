@@ -33,7 +33,7 @@ The **Prompt** tab (advanced mode) and the **Characters** tab control how the sc
 
 For each batch of panels the model gets those instructions, the last few narration lines for continuity, the text read from each panel and (with **Show panel images to the model** on, and a vision model like gemma) the panel images. Everything goes in one message: in testing, gemma ignored rules such as past tense when they were sent as a separate system message.
 
-Project settings (per project, in advanced mode) cover layout (auto / webtoon / pages), reading direction and the webtoon video; the project's Video tab covers the video's format, resolution, frame rate, style, timing and crossfades; Settings (app-wide) cover the script writer, voice and speed, and the video encoder.
+Project settings (per project) cover layout (auto / webtoon / pages), reading direction and the webtoon video; the project's Video tab covers the video's format, resolution, frame rate, style, timing and crossfades; Settings (app-wide) cover the script writer, voice and speed, and the video encoder.
 
 To delete a project, hover it in the sidebar and click the trash icon (or use **Delete** at the top of an open project). This removes the project's panels, audio and videos; folders you imported from are never touched. A project can't be deleted while a job is running on it.
 

@@ -521,6 +521,7 @@ function renderGlobal() {
   renderGpuSettings();
   renderUpdate();
   renderRedraw();
+  renderSettingsNav();
 }
 
 // ---- GPU support (ONNX Runtime's GPU build, with CUDA and cuDNN): downloaded on request, never shipped ----
@@ -1935,7 +1936,7 @@ $("#src-link").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.p
 $("#src-link-go").addEventListener("click", openSourceLink);
 $("#src-more").addEventListener("click", () => srcMore && srcMore());
 $("#src-back").addEventListener("click", () => { showSourceStep("find"); $("#src-go").disabled = true; });
-$("#src-open-settings").addEventListener("click", () => { srcDlg.close(); renderGlobal(); $("#global-dialog").showModal(); });
+$("#src-open-settings").addEventListener("click", () => { srcDlg.close(); openSettings("Sources"); });
 
 async function showResults(key, load, page = 1) {
   $("#src-status").textContent = page === 1 ? `Asking ${srcName(key)}…` : "Loading more…";
@@ -2581,7 +2582,7 @@ function renderJob() {
   box.classList.toggle("paused", j.status === "paused");
 }
 
-// ---- the YouTube title and thumbnail (Video tab): suggested after the script (youtube.py), or with Suggest ----
+// ---- the YouTube title and thumbnail (the YouTube tab): suggested after the script (youtube.py), or with Suggest ----
 const MARK_NAMES = { label: "Label", reaction: "Reaction", line: "Speech bubble" };
 let redrawing = false;  // Redraw with AI is waiting for the image model
 
@@ -2589,6 +2590,7 @@ function renderYouTube() {
   const yt = current.youtube;
   const busy = !!(current.job && ACTIVE.includes(current.job.status));
   $("#yt-out").hidden = !yt;
+  $("#yt-empty").hidden = !!yt;
   $("#yt-suggest").textContent = yt ? "Suggest again" : "Suggest a title and thumbnail";
   $("#yt-suggest").disabled = busy;
   $("#yt-ai-go").hidden = !yt;
@@ -3065,7 +3067,7 @@ $("#more").addEventListener("click", () => { shown += PAGE; renderPanels(); });
 // Simple mode shows what most projects need; Advanced mode (bottom of the sidebar) shows every step, setting and
 // tool: anything marked .adv. Chapter selection only counts in advanced mode (chosenIds).
 
-const ADV_TABS = ["prompt", "project"];
+const ADV_TABS = ["prompt"];
 const isAdvanced = () => document.body.classList.contains("advanced");
 const stored = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch { /* not remembered */ } };
@@ -3092,7 +3094,55 @@ function applyMode(on) {
   store("advanced", on ? "1" : "");
   showTab(tab);
   if (current) { shown = PAGE; render(); }
+  if ($("#global-dialog").open) renderSettingsNav();
 }
+
+// Settings shows one section at a time, picked in the list on its left: the app's own sections, then Plugins (the
+// list of plugins, and each plugin's own section, RecapStudio.addSettings). Find a setting narrows the list to the
+// sections that have the words. Sections that are hidden, or need Advanced mode, aren't listed.
+let settingsSection = stored("settings-section") || "";
+const sectionName = (fs) => fs.dataset.nav || fs.querySelector("legend").textContent.trim();
+
+function renderSettingsNav() {
+  const all = [...document.querySelectorAll("#gs-pages > fieldset")];
+  const words = $("#gs-find").value.trim().toLowerCase();
+  const listed = all.filter((fs) => !fs.hidden && (isAdvanced() || !fs.classList.contains("adv"))
+    && (!words || fs.textContent.toLowerCase().includes(words)));
+  if (!listed.some((fs) => sectionName(fs) === settingsSection)) settingsSection = listed.length ? sectionName(listed[0]) : "";
+  for (const fs of all) fs.classList.toggle("gs-on", listed.includes(fs) && sectionName(fs) === settingsSection);
+  const item = (fs) => el("button", { type: "button", class: sectionName(fs) === settingsSection ? "on" : "",
+    "aria-current": sectionName(fs) === settingsSection ? "page" : null, onclick: () => showSettings(sectionName(fs)) },
+  sectionName(fs));
+  const own = listed.filter((fs) => !fs.dataset.plugin && fs.id !== "plugins-box");
+  const plugins = listed.filter((fs) => fs.id === "plugins-box").concat(listed.filter((fs) => fs.dataset.plugin)
+    .sort((a, b) => sectionName(a).localeCompare(sectionName(b))));
+  const more = isAdvanced() ? [] : all.filter((fs) => !fs.hidden && fs.classList.contains("adv")).map(sectionName);
+  $("#gs-nav").replaceChildren(...[
+    own.length ? el("span", { class: "gs-group" }, "Recap Studio") : null, ...own.map(item),
+    plugins.length ? el("span", { class: "gs-group" }, "Plugins") : null, ...plugins.map(item),
+    listed.length ? null : el("span", { class: "muted gs-note" }, "No setting has those words."),
+    more.length && !words ? el("span", { class: "hint gs-note" },
+      `Advanced mode adds ${more.slice(0, -1).join(", ")}${more.length > 1 ? " and " : ""}${more[more.length - 1]}.`) : null,
+  ].filter(Boolean));
+}
+
+function showSettings(name) {
+  settingsSection = name;
+  store("settings-section", name);
+  renderSettingsNav();
+  $("#gs-pages").scrollTop = 0;
+}
+
+// Settings opened at a section (its name in the list), from elsewhere in the app
+function openSettings(name) {
+  renderGlobal();
+  loadStorage();
+  if (name) { $("#gs-find").value = ""; showSettings(name); }
+  $("#global-dialog").showModal();
+}
+
+$("#gs-find").addEventListener("input", () => { renderSettingsNav(); $("#gs-pages").scrollTop = 0; });
+$("#gs-find").addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });  // (not Close)
 $("#advanced-mode").addEventListener("change", (e) => applyMode(e.target.checked));
 applyMode(stored("advanced") === "1");
 
@@ -4176,11 +4226,12 @@ window.RecapStudio = {
     if (title) $("#new-name").title = title;
     if (button) $("#new-project button[type=submit]").textContent = button;
   },
-  // a section of its own in Settings; render(box) runs each time Settings is drawn
+  // a section of its own in Settings (listed under Plugins); render(box) runs each time Settings is drawn
   addSettings(title, render) {
     const box = el("div", {});
-    $("#plugins-box").after(el("fieldset", {}, el("legend", {}, title), box));
+    $("#plugins-box").after(el("fieldset", { "data-plugin": "1" }, el("legend", {}, title), box));
     pluginSettings.push({ box, render });
+    if ($("#global-dialog").open) { render(box); renderSettingsNav(); }  // (Settings opened before the plugin loaded)
   },
 };
 

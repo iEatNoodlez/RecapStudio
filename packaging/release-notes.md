@@ -7,26 +7,6 @@ Copies on 0.1.x update to Lite. To move to Full Suite, install its setup over Li
 
 ## What's new
 
-- **Plugins** (Settings → Plugins): install plugins from Recap Studio's own list, switch them on and off, update or remove them, then **Restart now** to use the changes. Plugins can add steps, settings, buttons, languages and file types. What each one does: https://github.com/iEatNoodlez/RecapStudio/blob/main/docs/plugins.md
-- **Full Suite's plugins**:
-  - Find the series;
-  - New chapters on a schedule;
-  - the Overnight queue;
-  - the Watched folder;
-  - When a video is done (copy it, run a command, tell your phone, Discord or Slack);
-  - Post to YouTube;
-  - Branding;
-  - Recaps in Spanish;
-  - Reading Spanish comics;
-  - EPUB comics.
-
-  The series sources Find the series searches aren't built in yet: add AniList, Kitsu or MangaUpdates in Settings → Plugins.
-- **The edition in the window's title**, the sidebar and Settings → Updates, for example "Recap Studio Lite {version}". Each copy updates to its own edition's file.
-- **Text read the right way up:** English and Korean lines are no longer turned over and read backwards ("NO" read as "ON"). Chapters already read keep their old text until Read text is run again with Redo.
-- **Tall webtoon pieces:** a line that crosses the edge between two reading chunks is now read once and in full.
-- **Claude Code as the script writer** no longer fails on translated Korean, Chinese and Japanese comics.
-- **Make the recap's last note** keeps the earlier steps' notes, and the scan group's pages are noted once.
-- **Scan group pages in Spanish** (traducción, reclutamiento and the like) are found too.
-- **YouTube titles** that run past YouTube's 100 characters lose their "| Manga Recap" ending, or are cut after a whole word, instead of ending partway through a word ("| Resumen de m").
-- **Classic captions:** the word being said no longer runs into the words beside it, and a long word at the edge of a line is no longer clipped.
-- **Pause during the last chapter** now holds the render before the chapters are joined, instead of carrying on to the end. The Overnight queue's stop time pauses this way too.
+- **Settings, one section at a time:** a list on the left holds the app's own sections, then **Plugins**, with each plugin's own section. **Find a setting** narrows the list to the sections that have the words you type.
+- **A YouTube tab:** the suggested title and thumbnail at the full width, with the other titles, the words on the thumbnail and bigger pictures to pick from. YouTube-safe and the title and thumbnail options are there too. The Video tab keeps the video and how it's made.
+- **Project settings without Advanced mode:** a project's layout, the language of its text, how its characters and the scan group's pages are found, and each plugin's choice for it are now in reach for everyone. Only the smallest panel size still needs Advanced mode. Its dropdowns no longer cut off their own options.

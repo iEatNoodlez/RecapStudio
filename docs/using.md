@@ -45,7 +45,7 @@ Panel detection cuts webtoon strips finely, at every gap between panels, includi
 ## Settings
 
 - **⚙ Settings** (bottom of the sidebar) holds the app-wide choices shared by every project: the script writer (a local model, Claude Code, Claude, OpenRouter, Google Gemini, DeepSeek, Groq or Mistral, with models, API keys and the Ollama connection), the voice, the video encoder and the thumbnail redraw. **Run setup again** at its top reopens the first-run setup. They're stored in `data\settings.json`. The line under the step buttons shows what's in use.
-- **Project settings** (a tab of each project, in advanced mode) holds what differs per series: layout, reading direction and smallest panel size. The **Prompt** and **Characters** tabs are per project too, and so is YouTube-safe (the **Video** tab).
+- **Project settings** (a tab of each project) holds what differs per series: layout, reading direction, the language of its text, how characters and the scan group's pages are found, and each plugin's choice for the project (smallest panel size in advanced mode). The **Prompt** (advanced mode) and **Characters** tabs are per project too, and so is YouTube-safe (the **YouTube** tab).
 
 ## Pause and resume
 
