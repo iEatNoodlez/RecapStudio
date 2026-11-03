@@ -227,6 +227,25 @@ class Chapter:
         self.proc, self.logs, self.launches = None, [], 0
 
 
+def _pieces(blocks: list[dict]) -> dict:
+    """A narration request's pieces (claude._content's blocks between its first and last): number -> {"imgs": its
+    pictures, a tall piece's slices top to bottom; "lines": its text blocks}. A piece starts at its header ("Piece 3:"
+    or "Piece 3 (tall, ..."), not at a translated comic's "Piece 3's text, translated into English"."""
+    pieces, cur = {}, None
+    for b in blocks:
+        if b["type"] == "image":
+            data = np.frombuffer(base64.b64decode(b["source"]["data"]), np.uint8)
+            pieces[cur]["imgs"].append(cv2.imdecode(data, cv2.IMREAD_COLOR))
+            continue
+        m = re.match(r"Piece (\d+)(?::| \(tall)", b["text"])
+        if m:
+            cur = int(m.group(1))
+            pieces[cur] = {"imgs": [], "lines": []}
+        else:
+            pieces[cur]["lines"].append(b["text"])
+    return pieces
+
+
 def _span(scene) -> str:
     """A scene's pieces as the agent sees them: P3, or P3-P7."""
     a, b = int(scene["first_piece"]), int(scene["last_piece"])
@@ -383,18 +402,7 @@ class Run:
         """claude.narrate's request for part of a chapter, answered by its agent (the answer's JSON text)."""
         blocks = params["messages"][0]["content"]
         head, tail = blocks[0]["text"], blocks[-1]["text"]
-        pieces, cur = {}, None
-        for b in blocks[1:-1]:
-            if b["type"] == "image":
-                data = np.frombuffer(base64.b64decode(b["source"]["data"]), np.uint8)
-                pieces[cur]["imgs"].append(cv2.imdecode(data, cv2.IMREAD_COLOR))
-                continue
-            m = re.match(r"Piece (\d+)", b["text"])
-            if m:
-                cur = int(m.group(1))
-                pieces[cur] = {"imgs": [], "lines": []}
-            else:
-                pieces[cur]["lines"].append(b["text"])
+        pieces = _pieces(blocks[1:-1])
         n = len(pieces)
         r = self._new_request(ch)
         system = self.dir / "system.md"

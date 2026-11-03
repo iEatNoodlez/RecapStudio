@@ -253,13 +253,14 @@ def _lined_up(words: list[str], audio: np.ndarray, rate: int) -> list[list]:
     return out
 
 
-def words(text: str, audio: np.ndarray, rate: int, path=None) -> list[list]:
+def words(text: str, audio: np.ndarray, rate: int, path=None, listen: bool = True) -> list[list]:
     """[[word as shown, start, end]] for a narration line read in audio (seconds from its start). path: the
-    line's audio file, next to which they're kept."""
+    line's audio file, next to which they're kept. listen=False: never the (English) speech recognizer, for
+    narration in another language (the captions_listen setting a plugin can set)."""
     shown = _shown(text)
     if not shown or audio is None or not len(audio):
         return []
-    use = heard()
+    use = heard() and listen
     cache = Path(f"{path}.words.json") if path else None
     key = [VERSION, text, len(audio), use]
     if cache and cache.exists():
@@ -336,12 +337,15 @@ class Captions:
             self._fonts[size] = ImageFont.truetype(self.font, size)
         return self._fonts[size]
 
+    def _grow(self, width):
+        """How far a word this wide reaches out on each side when it's the one being said."""
+        return (self.style["pop"] - 1) / 2 * width
+
     def _gaps(self, widths, size):
         """Room after each word but the last: a space, and room for the word being said to grow (or for the
         box behind it)."""
         space = self._f(size).getlength(" ") + (0.3 * size if self.style["box"] else 0)
-        grow = (self.style["pop"] - 1) / 2
-        return [space + 0.5 * grow * max(a, b) for a, b in zip(widths, widths[1:])]  # (one grows at a time)
+        return [space + self._grow(max(a, b)) for a, b in zip(widths, widths[1:])]  # (one grows at a time)
 
     def _width(self, widths, size):
         return sum(widths) + sum(self._gaps(widths, size))
@@ -383,7 +387,8 @@ class Captions:
         line_h = round(size * 1.18)
         stroke = max(1, round(st["outline"] * size)) if st["outline"] else 0
         pad = stroke + round(size * 0.35)
-        w = int(max(self._width([x for _, x in line], size) for line in lines)) + 2 * pad
+        padx = pad + round(self._grow(max(x for line in lines for _, x in line)))  # (a line's first or last word too)
+        w = int(max(self._width([x for _, x in line], size) for line in lines)) + 2 * padx
         h = line_h * len(lines) + 2 * pad
         img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         shade = Image.new("RGBA", (w, h), (0, 0, 0, 0)) if st["shadow"] else None

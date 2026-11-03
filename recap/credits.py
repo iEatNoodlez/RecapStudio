@@ -20,6 +20,9 @@ next to one (or to the series' words drawn with the group's banner), or not next
 group's words. The title alone isn't enough: the group's header names the series too (so a piece with
 the group's name or address on it is never the title card).
 
+A raw's own text counts before Translate when it's in the Latin alphabet (a Spanish scan group's pages say
+"traducción", "Discord" and "estamos reclutando"); a Korean, Chinese or Japanese one's waits for its English.
+
 Your choices count most: a piece with the same picture as one you put back stays, and one with the same
 picture as one you left out goes (in chapters added later too). A chapter that's only a notice
 (postponed, a hiatus, a season break: short, with a notice's words) is left out whole.
@@ -58,7 +61,8 @@ TEXT = re.compile(
     r"patreon|patrons?\b|discord|ko-?fi|read ?(chapters? ?|it ?)?early|early ?access|scanlat|translat(or|ion|ed ?by)"
     r"|proof ?read|typeset|redraw|\bcleaner\b|clean(ing|ed) ?by|quality ?check|raw ?provider"
     r"|recruit(ing|ment)|we.?re ?recruit|support ?(us|our)|join ?(our|us ?on) ?(discord|server|team|patreon)"
-    r"|other ?series|collab|series ?we ?do|(visit|read)\w* .{0,40}\.(com|org|net)\b", re.I)
+    r"|other ?series|collab|series ?we ?do|(visit|read)\w* .{0,40}\.(com|org|net)\b"
+    r"|traducci[oó]n|traductor|reclutamiento|estamos ?reclutando|lee ?antes ?en", re.I)  # (Spanish, as in English)
 # the group's watermark, on story panels too: not a sign of its pages, and not the story's words
 WATERMARK = re.compile(r"\S*(scans?\b|\w\.(org|com|net|gg|io)\b|https?:|www\.)\S*", re.I)
 # the series' own cards and notes (OCR garbles "continued": "be e continuec")
@@ -66,7 +70,7 @@ SERIES = re.compile(
     r"contin(ue|uec|ueo)|to ?be ?con|the ?end\b|origina\w* ?work|adaptation|colou?r(ing|ist)|(story|\btext) ?[/:-]"
     r"|\bart ?[/:-]|\bart ?by|script ?[/:-]|illustrat\w* ?by|written ?by|creator|managed ?by|copyright|©"
     r"|all ?rights|discretion|episode ?\d|#\s?\d|season ?\d|next ?(week|episode|season)|will ?r\w?turn"
-    r"|thanks? ?(you ?)?for ?reading|hiatus|postpone|^\W*fin\W*$", re.I)
+    r"|thanks? ?(you ?)?for ?reading|hiatus|postpone|^\W*fin\W*$|continuar[aá]", re.I)
 STOP = {"the", "and", "with", "from", "that", "this", "your"}
 # a notice-only chapter: at most this many pieces (story chapters had 55 or more in three series), with
 # a notice's words in its text (and an apology, which story characters make too, only as a second sign)
@@ -112,6 +116,16 @@ def _print_of(project_dir, piece):
     if hit[1] is None:
         return None
     return hit[1][0].astype(np.float32) / 255, hit[1][1]
+
+
+def _said(piece) -> str:
+    """A piece's words: its text, or before Translate, a raw's own text when it's in the Latin alphabet."""
+    text = piece.get("text") or ""
+    source = piece.get("source_text") or ""
+    if text or not source:
+        return text
+    letters = [c for c in source if c.isalpha()]
+    return source if letters and sum(c < "\u0250" for c in letters) >= 0.8 * len(letters) else ""
 
 
 def _words(text: str) -> list[str]:
@@ -176,7 +190,7 @@ def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=
             usable[i] = float(f[0].std()) >= PLAIN
         if progress and i % 50 == 0:
             progress(0.8 * i / max(1, len(items)))
-    said = [it[3].get("text") or "" for it in items]
+    said = [_said(it[3]) for it in items]
     ad = np.array([bool(TEXT.search(t)) for t in said])
     series = np.array([series_card(t) for t in said])
     # your choices: a piece you put back (+1) or left out (-1), whose copies elsewhere follow
@@ -236,7 +250,7 @@ def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=
         for _ in range(2):
             for pos in sorted(ends):
                 pid = pans[pos]["id"]
-                text = pans[pos].get("text") or ""
+                text = _said(pans[pos])
                 few = pid in read and pid not in talk and len(_words(text)) <= 3  # a scrap: "!!", "T IV NT TIN"
                 if pid in card or pid in blank or not (pid in named or pid in group or few) or ad_of(pans[pos]):
                     continue
@@ -249,7 +263,7 @@ def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=
                         near.append(j)
                 by_card = [j for j in near if pans[j]["id"] in card]
                 # (the series' words drawn with the group's banner still mark its title as the card's)
-                by_words = by_card + [j for j in near if SERIES.search(pans[j].get("text") or "")]
+                by_words = by_card + [j for j in near if SERIES.search(_said(pans[j]))]
                 if (pid in named and (by_words or not any(ad_of(pans[j]) for j in near))
                         or any(scene_of[j] == scene_of[pos] for j in by_card)):
                     card.add(pid)
@@ -282,7 +296,7 @@ def find(project: dict, project_dir, chapter_ids=None, progress=None, cancelled=
                 pid = pans[j]["id"]
                 if pid not in blank:
                     if (extra >= GAP or j not in ends or pid in card  # (the watermark alone: a story panel)
-                            or (pid in read and pid not in group and (pans[j].get("text") or "").strip())):
+                            or (pid in read and pid not in group and _said(pans[j]).strip())):
                         break
                     extra += 1
                 idx.append(j)
@@ -298,7 +312,7 @@ def notice_only(pieces) -> bool:
     break): short, with a notice's words once its text is read. Story chapters are longer."""
     if not pieces or len(pieces) > SHORT:
         return False
-    said = [x.get("text") or "" for x in pieces]
+    said = [_said(x) for x in pieces]
     strong = sum(bool(NOTICE.search(t)) for t in said)
     return strong >= 1 and strong + sum(bool(SORRY.search(t)) for t in said) >= 2
 
@@ -407,7 +421,7 @@ def kinds(project: dict, project_dir, chapter_ids=None) -> list[dict]:
             continue
         members.sort(key=lambda x: (order.get(x["chapter"], 0), pos[x["id"]][1]))
         chapters = len({x["chapter"] for x in members})
-        said = next((m for m in (TEXT.search(x.get("text") or "") for x in members) if m), None)
+        said = next((m for m in (TEXT.search(_said(x)) for x in members) if m), None)
         if said:
             why = f'Says "{said.group(0).strip()}"'
         elif chapters > 1:
@@ -444,7 +458,7 @@ def choose(project: dict, ids, enabled: bool) -> list[dict]:
 
 def ad_of(piece) -> bool:
     """The group's words in a piece's text."""
-    return bool(TEXT.search(piece.get("text") or ""))
+    return bool(TEXT.search(_said(piece)))
 
 
 def apply(project: dict, found: dict, followed=()) -> int:

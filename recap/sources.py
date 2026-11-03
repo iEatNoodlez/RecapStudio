@@ -1,9 +1,12 @@
-"""Getting chapters from websites, through sources members bring: the app ships no scrapers and no links to any.
+"""Getting chapters from websites, through sources members bring: the app ships no scrapers and no links to any
+site's chapters.
 
 Three kinds of source, all optional:
 - plugins: a Python file per site (docs/sources.md says how to write one), added from a file or installed from a
   plugin list: a link to an index of plugins, each with its checksum, that a member hosts. A plugin is code and runs on
-  this PC with the member's permissions; each runs in a process of its own (plugin_host.py).
+  this PC with the member's permissions; each runs in a process of its own (plugin_host.py). A plugin with
+  CHAPTERS = False only gives series' details (and characters(), when it has one): Recap Studio's own list
+  (plugins.OFFICIAL_LIST) has those for services with public APIs, such as AniList, and no scrapers.
 - gallery-dl: the command-line downloader, when the member has installed it (never part of the app: it's GPL).
 - Suwayomi: a Suwayomi-Server the member runs, which runs Mihon/Tachiyomi extensions; reached over its GraphQL API.
 
@@ -32,11 +35,12 @@ import requests
 from PIL import Image
 
 from . import importer, store
+from . import plugins as plugins_  # feature plugins (plugins() here lists the source plugins)
 
 PLUGINS_DIR = store.DATA_ROOT / "plugins"
 STATE_FILE = PLUGINS_DIR / "plugins.json"
 API = 1                      # RECAP_PLUGIN: the plugin interface this app speaks
-META = {"RECAP_PLUGIN", "NAME", "VERSION", "SITES", "LANGUAGE", "NSFW", "LISTS", "HEADERS", "DELAY"}
+META = {"RECAP_PLUGIN", "NAME", "VERSION", "SITES", "LANGUAGE", "NSFW", "LISTS", "HEADERS", "DELAY", "CHAPTERS"}
 CALL_TIMEOUT = 90            # seconds a plugin call may take
 MAX_FILE = 1 << 20           # a plugin file or a plugin list, at most
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -77,7 +81,8 @@ def read_plugin(text: str) -> dict:
         raise SourceError("It isn't a Recap Studio plugin (those start with RECAP_PLUGIN = 1)")
     if meta["RECAP_PLUGIN"] != API:
         raise SourceError(f"It's written for plugin version {meta['RECAP_PLUGIN']}; this app takes version {API}")
-    missing = [f"{f}()" for f in ("series", "pages") if f not in funcs]
+    chapters = meta.get("CHAPTERS", True) is not False  # False: a series' details only (AniList, say), no chapters
+    missing = [f"{f}()" for f in ("series", "pages") if f not in funcs and (f == "series" or chapters)]
     if missing:
         raise SourceError(f"It has no {' or '.join(missing)}")
     name = meta.get("NAME")
@@ -101,6 +106,7 @@ def read_plugin(text: str) -> dict:
         "sites": [s.lower().removeprefix("www.") for s in sites], "language": str(meta.get("LANGUAGE", ""))[:10],
         "nsfw": bool(meta.get("NSFW", False)), "lists": [{"id": x["id"], "name": x["name"]} for x in lists],
         "headers": headers, "delay": float(meta.get("DELAY", 0) or 0), "search": "search" in funcs,
+        "chapters": chapters, "characters": "characters" in funcs,
         "about": doc.strip().split("\n\n")[0].replace("\n", " ")[:300],
     }
 
@@ -300,8 +306,18 @@ def _number(x) -> float | None:
         return None
 
 
+KINDS = ("webtoon", "manga", "comic")  # what kind of comic a source can say a series is
+
+
+def _extra(x: dict) -> dict:
+    """The details a source may add to a series: its kind (one of KINDS) and the year it started."""
+    year = _number(x.get("year"))
+    return {"kind": x.get("kind") if x.get("kind") in KINDS else "",
+            "year": int(year) if year and 1800 < year < 3000 else None}
+
+
 def _items(result, headers=None, base="") -> dict:
-    """Search or list results as {"items": [{"ref", "title", "cover", "summary"}], "more"}."""
+    """Search or list results as {"items": [{"ref", "title", "cover", "summary", "kind", "year"}], "more"}."""
     more = False
     if isinstance(result, dict):
         more, result = bool(result.get("more")), result.get("items", [])
@@ -310,8 +326,32 @@ def _items(result, headers=None, base="") -> dict:
         if isinstance(x, dict) and (x.get("url") or x.get("ref")) and x.get("title"):
             items.append({"ref": _text(x.get("ref") or x.get("url"), 2000), "url": _text(x.get("url"), 2000),
                           "title": _text(x["title"], 200), "summary": _text(x.get("summary"), 600),
-                          "cover": image_link(x.get("cover"), headers, base)})
+                          "cover": image_link(x.get("cover"), headers, base), **_extra(x)})
     return {"items": items[:200], "more": more}
+
+
+ROLES = ("main", "supporting", "background")
+
+
+def _characters(found, headers=None) -> list[dict]:
+    """A series' characters, as a source gives them: [{"name", "aliases", "gender", "role", "description",
+    "picture"}], the main ones first."""
+    out = []
+    for x in found if isinstance(found, list) else []:
+        if not (isinstance(x, dict) and _text(x.get("name"), 100)):
+            continue
+        aliases = x.get("aliases") or []
+        aliases = [a for a in (aliases.split(",") if isinstance(aliases, str) else aliases) if isinstance(a, str)]
+        name = _text(x["name"], 100)
+        aliases = [a for a in dict.fromkeys(_text(a, 100) for a in aliases) if a and a.lower() != name.lower()][:12]
+        role = str(x.get("role") or "").lower()
+        out.append({"name": name, "aliases": aliases,
+                    "gender": x.get("gender") if x.get("gender") in ("female", "male") else "",
+                    "role": role if role in ROLES else "", "description": _text(x.get("description"), 600),
+                    "picture": image_link(x.get("picture"), headers)})
+    order = {r: i for i, r in enumerate(ROLES)}
+    out.sort(key=lambda c: order.get(c["role"], len(ROLES)))  # (a stable sort: the source's order within a role)
+    return out[:200]
 
 
 def _chapters(found) -> list[dict]:
@@ -338,7 +378,7 @@ def _series(found, ref, headers=None, base="") -> dict:
     chapters = _chapters(found.get("chapters"))
     return {"ref": ref, "url": _text(found.get("url") or (ref if ref.startswith("http") else ""), 2000),
             "title": _text(found.get("title"), 200) or "Untitled", "summary": _text(found.get("summary"), 1500),
-            "cover": image_link(found.get("cover"), headers, base), "chapters": chapters}
+            "cover": image_link(found.get("cover"), headers, base), "chapters": chapters, **_extra(found)}
 
 
 def available() -> list[dict]:
@@ -349,10 +389,11 @@ def available() -> list[dict]:
         if p["enabled"] and not p.get("error"):
             out.append({"key": f"plugin:{p['id']}", "kind": "plugin", "name": p["name"], "language": p["language"],
                         "nsfw": p["nsfw"], "sites": p["sites"], "search": p["search"], "lists": p["lists"],
-                        "link": True})
+                        "link": p["chapters"], "chapters": p["chapters"], "characters": p["characters"]})
     if gallery_dl.program():
         out.append({"key": "gallery-dl", "kind": "gallery-dl", "name": "gallery-dl (any site it supports)",
-                    "language": "", "nsfw": False, "sites": [], "search": False, "lists": [], "link": True})
+                    "language": "", "nsfw": False, "sites": [], "search": False, "lists": [], "link": True,
+                    "chapters": True, "characters": False})
     try:
         out += suwayomi.sources()
     except SourceError:
@@ -375,7 +416,7 @@ def for_link(url: str) -> dict:
     if not host:
         return {}
     for p in plugins():
-        if p["enabled"] and not p.get("error") and any(_on_site(host, s) for s in p["sites"]):
+        if p["enabled"] and not p.get("error") and p["chapters"] and any(_on_site(host, s) for s in p["sites"]):
             return {"key": f"plugin:{p['id']}", "ref": url}
     try:
         found = suwayomi.for_link(url, host)
@@ -425,6 +466,15 @@ def series(key: str, ref: str) -> dict:
     if kind == "suwayomi":
         return suwayomi.series(rest, ref)
     return gallery_dl.series(ref)
+
+
+def characters(key: str, ref: str) -> list[dict]:
+    """A series' characters, from a plugin that has characters() (Find the series fills a project's from them)."""
+    kind, rest = _kind(key)
+    p = _plugin(rest) if kind == "plugin" else None
+    if not p or not p["characters"]:
+        raise SourceError(f"{p['name'] if p else key} doesn't list characters")
+    return _characters(_host(rest).call("characters", ref), p["headers"])
 
 
 def _pages(key: str, ref: str) -> tuple[list[dict], float]:
@@ -586,17 +636,17 @@ def check_all() -> None:
 
 # ---- plugin lists (repositories) ----------------------------------------------------------------------------------
 
-def _fetch_file(url: str) -> bytes:
+def _fetch_file(url: str, most: int = MAX_FILE) -> bytes:
     if urlparse(url).scheme not in ("http", "https"):
         raise SourceError("A plugin list's link starts with http:// or https://")
     try:
         r = requests.get(url, headers={"User-Agent": "RecapStudio"}, timeout=30, stream=True)
         r.raise_for_status()
-        data = r.raw.read(MAX_FILE + 1, decode_content=True)
+        data = r.raw.read(most + 1, decode_content=True)
     except requests.RequestException as e:
         raise SourceError(f"Couldn't get {url}: {e}")
-    if len(data) > MAX_FILE:
-        raise SourceError(f"{url} is over 1 MB")
+    if len(data) > most:
+        raise SourceError(f"{url} is over {most >> 20} MB")
     return data
 
 
@@ -608,37 +658,55 @@ def _index(url: str) -> dict:
 
 
 def repo(url: str) -> dict:
-    """A plugin list: {"name", "url", "plugins": [...]} with what's installed and what has an update."""
+    """A plugin list: {"name", "url", "official", "plugins": [...]} with what's installed and what has an update.
+    Feature plugins ("kind": "feature", plugins.py) are only listed from Recap Studio's own list."""
     index = _index(url)
     if not isinstance(index, dict) or not isinstance(index.get("plugins"), list):
         raise SourceError("That link isn't a plugin list (it has no \"plugins\")")
-    mine = {p["id"]: p for p in plugins()}
+    official = url == plugins_.OFFICIAL_LIST
+    mine = {"source": {p["id"]: p for p in plugins()}, "feature": {p["id"]: p for p in plugins_.found()}}
     out = []
     for x in index["plugins"]:
         if not (isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("file"), str)
                 and isinstance(x.get("sha256"), str)):
             continue
+        kind = "feature" if x.get("kind") == "feature" else "source"
+        if kind == "feature" and not official:
+            continue
         pid = plugin_id(x["id"])
-        have = mine.get(pid)
-        out.append({"id": pid, "name": _text(x.get("name") or pid, 80), "version": _text(x.get("version"), 20),
+        have = mine[kind].get(pid)
+        version = _text(x.get("version"), 20)
+        out.append({"id": pid, "kind": kind, "name": _text(x.get("name") or pid, 80), "version": version,
                     "summary": _text(x.get("summary"), 300), "language": _text(x.get("language"), 10),
                     "nsfw": bool(x.get("nsfw")), "sites": [str(s) for s in x.get("sites", [])][:20],
+                    "too_new": kind == "feature" and isinstance(x.get("api"), int) and x["api"] > plugins_.API,
                     "installed": have.get("version") if have else None,
-                    "update": bool(have) and have.get("version") != _text(x.get("version"), 20)})
-    return {"name": _text(index.get("name") or urlparse(url).hostname, 80), "url": url, "plugins": out}
+                    "update": bool(have) and have.get("version") != version})
+    return {"name": _text(index.get("name") or urlparse(url).hostname, 80), "url": url, "official": official,
+            "plugins": out}
 
 
 def install(url: str, pid: str) -> dict:
-    """Install (or update) a plugin from a plugin list, checked against the list's checksum."""
+    """Install (or update) a plugin from a plugin list, checked against the list's checksum. A feature plugin only
+    from Recap Studio's own list."""
     index = _index(url)
     entry = next((x for x in index.get("plugins", []) if isinstance(x, dict) and isinstance(x.get("file"), str)
                   and plugin_id(str(x.get("id"))) == pid), None)
     if not entry:
         raise SourceError(f"The list has no plugin {pid}")
+    if entry.get("kind") == "feature":
+        if url != plugins_.OFFICIAL_LIST:
+            raise SourceError("Plugins that add features only install from Recap Studio's own list")
+        try:
+            info = plugins_.install_zip(pid, _fetch_file(urljoin(url, entry["file"]), plugins_.MAX_ZIP),
+                                        str(entry.get("sha256", "")))
+        except plugins_.PluginError as e:
+            raise SourceError(f"{entry.get('name') or pid}: {e}")
+        return {**info, "kind": "feature"}
     data = _fetch_file(urljoin(url, entry["file"]))
     if hashlib.sha256(data).hexdigest() != str(entry.get("sha256", "")).lower():
         raise SourceError(f"{entry['file']} doesn't match the list's checksum, so it wasn't installed")
-    return add_plugin(f"{pid}.py", data, repo=url)
+    return {**add_plugin(f"{pid}.py", data, repo=url), "kind": "source"}
 
 
 # ---- gallery-dl: the member's own copy, run as a program --------------------------------------------------------
@@ -923,6 +991,7 @@ class _Suwayomi:
                         "name": f"{s.get('displayName') or s.get('name')} (Suwayomi)",
                         "language": "" if s.get("lang") == "localsourcelang" else s.get("lang", ""),
                         "nsfw": bool(s.get("isNsfw")), "search": True, "lists": lists, "link": bool(home),
+                        "chapters": True, "characters": False,
                         "sites": [(urlparse(home).hostname or "").lower().removeprefix("www.")] if home else []})
         with self._lock:
             self._cache.update(url=self.url(), at=now, sources=out)

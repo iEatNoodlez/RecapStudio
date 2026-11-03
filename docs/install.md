@@ -2,10 +2,20 @@
 
 ## Download and install
 
-Download from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page (Windows 10 or 11, 64-bit):
+Download from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page (Windows 10 or 11, 64-bit). There are two editions, both free, from the same version of the app:
 
-- **`Recap-Studio-<version>-setup.exe`**: installs into `C:\Program Files\Recap Studio` for everyone on the PC (Windows asks for admin rights, and again for each update), or, if you pick **Install for me only** at the start, into `%LOCALAPPDATA%\Programs\Recap Studio` without them. It adds a Start menu shortcut (and a desktop one if you tick it). Installing a newer version over it keeps the way it was installed, and your projects and settings.
-- **`Recap-Studio-<version>-portable.zip`**: unzip it anywhere you can write to (not Program Files) whose path is under about 90 characters (Windows' 260-character limit on file paths, with the app's deepest files and room to unpack an update), and run `Recap Studio.exe`.
+- **Lite**: the whole app, with no plugins. You can install single plugins in Settings → Plugins.
+- **Full Suite**: Lite with the [plugins](plugins.md) that add features built in, in the app's own `plugins\` folder.
+
+| | Installer | Portable |
+|---|---|---|
+| Lite | `Recap-Studio-Lite-<version>-setup.exe` | `Recap-Studio-Lite-<version>-portable.zip` |
+| Full Suite | `Recap-Studio-Full-Setup-<version>.exe` | `Recap-Studio-Full-Portable-<version>.zip` |
+
+The two share their folders and data: installing Full Suite over Lite (or Lite over Full Suite) switches edition and keeps every project and setting. Lite installed over Full Suite takes out the plugins Full Suite came with; plugins you installed from the list stay. Each copy updates to its own edition, and copies of 0.1.x update to Lite. The window's title, the sidebar's foot and Settings → Updates say which edition and version you have.
+
+- **The installer**: installs into `C:\Program Files\Recap Studio` for everyone on the PC (Windows asks for admin rights, and again for each update), or, if you pick **Install for me only** at the start, into `%LOCALAPPDATA%\Programs\Recap Studio` without them. It adds a Start menu shortcut (and a desktop one if you tick it). Installing a newer version over it keeps the way it was installed, and your projects and settings.
+- **The portable zip**: unzip it anywhere you can write to (not Program Files) whose path is under about 90 characters (Windows' 260-character limit on file paths, with the app's deepest files and room to unpack an update), and run `Recap Studio.exe`.
 
 Both carry their own Python with every package, so there's nothing else to install. The first run downloads the voice model (354 MB). Where your files go (uninstalling and updating leave all of them):
 
@@ -36,9 +46,9 @@ The first time the app opens, a short setup walks through everything you'd other
 `recap\paths.py` decides: an installed copy uses Windows' places (see [Download and install](#download-and-install)), a portable copy or one run from source keeps everything next to itself, as listed here (`RECAP_DATA` points it all at another folder, for testing). A project is found by the id saved first in its `project.json`, so its folder can be renamed or moved by hand while the app is closed.
 
 - `data\projects\<project name>\` (or the projects folder chosen in Settings) holds `project.json`, `pages\`, `panels\`, `audio\`, `output\`, `characters\` (character pictures), `render\` (each chapter's finished video piece, reused by the next render; safe to delete, at the cost of rendering everything again), `editors\` (each chapter's video for **Export for editors** → Any editor, reused the same way), `textless\` (the pictures without their text, reused the same way), `voiceover\` (your recordings) and `focus.json` (each scene's subject).
-- `data\settings.json` holds the app-wide settings, `data\speeds.json` the speeds learned for time estimates, and `data\*_key.txt` the API keys (the script writers' and ElevenLabs'). `data\plugins\` holds the source plugins you added (each with the log of what it printed), and `data\suwayomi_login.json` the Suwayomi server's login, when it has one.
+- `data\settings.json` holds the app-wide settings, `data\speeds.json` the speeds learned for time estimates, and `data\*_key.txt` the API keys (the script writers' and ElevenLabs'). `data\plugins\` holds the source plugins you added (each with the log of what it printed) and, each in a folder of its own, the plugins installed from Recap Studio's plugin list (`features.json` says which are switched off); `data\plugin-data\` holds those plugins' own files, and `data\suwayomi_login.json` the Suwayomi server's login, when it has one. The app's own `plugins\` folder holds the plugins an edition comes with.
 - `data\addons\magi\`, `data\addons\charscan\`, `data\addons\ocr_en\`, `data\addons\focus\`, `data\addons\boxes\`, `data\addons\bubbles\`, `data\addons\vosk\` and `data\addons\gpu\` hold the Magi add-on, the character scan models, the English text model, the subject finder, the box finder, the bubble finder, the speech recognizer and GPU support when downloaded; each project's `scan\` holds the last scan's snapshots, and `models\` the voice model.
-- `recap\` holds the code: `importer.py` (folder scan and chapter import), `sources.py` and `plugin_host.py` (getting chapters from sites: plugins, gallery-dl and Suwayomi), `panels.py` and `bubbles.py` (cutting pages and webtoon strips, and the bubble finder), `ocr.py`, `script.py`, `claude.py` and `cloud.py` (the online script writers), `tts.py` and `online_voices.py` (the voices), `voiceover.py` (your own recording), `video.py`, `focus.py` (the scenes' subjects), `textless.py` (the pictures without text), `cover.py` (black boxes and the box finder), `editors.py` (export for video editors), `package.py` (project files), `credits.py` (the scan group's pages), `estimates.py` (time estimates), `magi.py` and `magi_worker.py` (the Magi add-on), `charscan.py` (character scan), `gpu.py` (the NVIDIA GPU, and GPU support), `pipeline.py` (steps and the background worker), `server.py` (local API, 127.0.0.1 only) and `web\` (the interface).
+- `recap\` holds the code: `importer.py` (folder scan and chapter import), `sources.py` and `plugin_host.py` (getting chapters from sites: plugins, gallery-dl and Suwayomi), `plugins.py` (plugins that add features, from Recap Studio's own list), `panels.py` and `bubbles.py` (cutting pages and webtoon strips, and the bubble finder), `ocr.py`, `script.py`, `claude.py` and `cloud.py` (the online script writers), `tts.py` and `online_voices.py` (the voices), `voiceover.py` (your own recording), `video.py`, `focus.py` (the scenes' subjects), `textless.py` (the pictures without text), `cover.py` (black boxes and the box finder), `editors.py` (export for video editors), `package.py` (project files), `credits.py` (the scan group's pages), `estimates.py` (time estimates), `magi.py` and `magi_worker.py` (the Magi add-on), `charscan.py` (character scan), `gpu.py` (the NVIDIA GPU, and GPU support), `pipeline.py` (steps and the background worker), `server.py` (local API, 127.0.0.1 only) and `web\` (the interface).
 
 ## Run from source
 
@@ -56,6 +66,8 @@ This creates `.venv`, installs packages, and downloads the Kokoro voice model (a
 
 Double-click `run.bat`. It opens a desktop window (WebView2, the same engine RecapSynth uses).
 
+The tests: `.venv\Scripts\python tests\run.py` (each on a scratch data folder with made-up projects; see `tests\README.md`).
+
 To use your normal browser instead:
 
 ```powershell
@@ -64,7 +76,9 @@ To use your normal browser instead:
 
 ### Building the installer
 
-`packaging\build.ps1 -Version 1.0.0` builds `dist\Recap Studio\` (the app with its own Python from [python-build-standalone](https://github.com/astral-sh/python-build-standalone), the packages in `requirements.txt` plus imageio-ffmpeg, and `Recap Studio.exe`, a small launcher compiled from `packaging\launcher`), zips it as the portable download, and, when [Inno Setup 6](https://jrsoftware.org/isinfo.php) is installed, compiles `packaging\installer.iss` into the setup. Pushing a tag such as `v1.0.0` to GitHub does the same in GitHub Actions (`.github\workflows\build.yml`) and attaches both to a release; running that workflow by hand keeps them as the run's artifacts instead. The app's update check (`recap/updates.py`) reads the latest release of `iEatNoodlez/RecapStudio` and picks its file by name (`-setup.exe` for installed copies, `-portable.zip` for portable ones), so keep those names. Tags are versions (`v1.2.0`, or `v1.3.0-beta.1` for a pre-release, which GitHub's "latest" leaves out).
+`packaging\build.ps1 -Version 1.0.0 -Edition lite` builds `dist\Recap Studio\` (the app with its own Python from [python-build-standalone](https://github.com/astral-sh/python-build-standalone), the packages in `requirements.txt` plus imageio-ffmpeg, and `Recap Studio.exe`, a small launcher compiled from `packaging\launcher`), zips it as the portable download, and, when [Inno Setup 6](https://jrsoftware.org/isinfo.php) is installed, compiles `packaging\installer.iss` into the setup. `-Edition full` builds Full Suite: the same, with the feature plugins from Recap Studio's plugin list unpacked into the app's `plugins\` folder (`packaging\bundle_plugins.py`, each checked against the list's SHA-256), at the list's commit that `packaging\plugins.json` pins. Before tagging a release, move that pin to the list's latest commit once the list's tests pass against this version, and tag that commit of the list `app-v<version>`. `-PluginsFrom <a checkout of the list>` takes them from there instead (testing). Both write `VERSION` and `EDITION` into the app's folder.
+
+Pushing a tag such as `v1.0.0` to GitHub builds both editions in GitHub Actions (`.github\workflows\build.yml`) and attaches the four files to a release, with `packaging\release-notes.md` (which file is which) above GitHub's list of changes; running that workflow by hand keeps them as the run's artifacts instead. The app's update check (`recap/updates.py`) reads the latest release of `iEatNoodlez/RecapStudio` and picks its edition's file by name: Lite's end in `-setup.exe` (installed copies) and `-portable.zip` (portable ones), which is what copies of 0.1.x look for too, and Full Suite's are `Recap-Studio-Full-Setup-<version>.exe` and `Recap-Studio-Full-Portable-<version>.zip`, which they don't match. So keep those names. Tags are versions (`v1.2.0`, or `v1.3.0-beta.1` for a pre-release, which GitHub's "latest" leaves out).
 
 ## Shipping the app
 

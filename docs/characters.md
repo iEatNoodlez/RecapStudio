@@ -20,6 +20,22 @@ The main button finds the characters too, before the script, so the narrator kno
 - **Add all suggested** adds every suggested card that has a name, as the cards say now, biggest group first, after listing them for you to confirm. Cards with the same name become one character with all their pictures, a name already on the list (or among its other names) adds the group to that character, and the other names are added to the character's own. Extras and cards without a name stay.
 - Matching names to groups from the text alone was tried first and wasn't enough: on a 55-chapter test series it found 4 of the 5 main characters and no one else. With Claude Opus 5.5, as if freshly scanned (no characters, no script yet), one request of 30 groups took 65 seconds and named all six main characters (two with their other names: a fake title, an online name), matched 9 smaller groups to them, and called 16 groups extras, including every ad for another series. It disagreed with an earlier hand naming on one big, mixed group, marking its answer a guess.
 
+## From the series' page on AniList (Find the series)
+
+With the **Find the series** plugin and the **AniList** source (both from Recap Studio's plugin list, Settings → Plugins), a project's characters can come from AniList.
+- **In a new project:** the New project dialog's Characters page offers them.
+- **In an existing project:** the Characters tab → **Find the series…** adds them.
+
+Each comes with its name, other names, gender, a short description and a picture, marked "From AniList".
+
+Characters added this way don't stop Make the recap's scan, as names you type in do. A new project is still scanned, and the review matches the groups found to them:
+- by their pictures ("Looks like …: add to them")
+- by the writer's names ("The writer says …: add to them")
+
+Adding a group to one gives it the group's views from the chapters as pictures. See [Find the series](plugins.md#find-the-series).
+
+The descriptions are AniList's, written by its volunteers: look them over, since the narrator goes by them.
+
 ## Speaker detection with Magi (optional add-on)
 
 Magi v2 (Ragav Sachdeva, Gyungin Shin and Andrew Zisserman, University of Oxford) is a model built to transcribe manga: it finds the speech bubbles and characters on a page and guesses who says each line, naming characters by comparing them with pictures you give it. It is not part of the app; download it from **Settings → Speaker detection** if you want it.

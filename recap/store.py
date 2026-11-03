@@ -359,6 +359,9 @@ def load(pid: str) -> dict:
             stored.pop(key)
     # (video settings a project doesn't have yet: the app-wide ones from before they were per project)
     data["settings"] = {**copy.deepcopy(DEFAULT_SETTINGS), **_saved_video(), **stored, **global_settings()}
+    undo = _filtered(data["settings"])  # what plugins change for this project, never saved (see save)
+    if undo:
+        data["_settings_undo"] = undo
     data.setdefault("characters", [])
     if "chapters" not in data:  # projects from before chapters existed
         data["chapters"] = []
@@ -433,8 +436,32 @@ def update_global(changes: dict) -> dict:
     return current
 
 
+SETTINGS_FILTERS: list = []  # plugins.Plugin.settings_filter: fn(settings) -> what it changes for a project
+
+
+def _filtered(settings: dict) -> dict:
+    """Apply the plugins' settings filters to a project's settings, in place. Returns what they replaced:
+    {key: [whether it was there, its value before]}, so save() can put it back."""
+    before = {}
+    for fn in SETTINGS_FILTERS:
+        try:
+            changes = fn(dict(settings)) or {}
+        except Exception:  # a plugin's mistake doesn't stop a project from loading
+            logging.getLogger("recap.plugins").exception("A plugin's settings filter failed")
+            continue
+        for k, v in changes.items():
+            before.setdefault(k, [k in settings, settings.get(k)])
+            settings[k] = v
+    return before
+
+
 def save(project: dict) -> None:
     sort_by_chapter(project)
+    for k, (had, value) in (project.pop("_settings_undo", None) or {}).items():  # (plugins' changes: not kept)
+        if had:
+            project["settings"][k] = value
+        else:
+            project["settings"].pop(k, None)
     # app-wide settings live in settings.json, not in each project
     project["settings"] = {k: v for k, v in project["settings"].items() if k not in GLOBAL_KEYS}
     d = project_dir(project["id"])

@@ -43,6 +43,8 @@ Read text finds each line of text with RapidOCR, then groups the lines into spee
 
 RapidOCR's built-in recognition model reads Chinese and English, and on English comic lettering it runs words together and mixes up letters ("APAIROFSLIPPERS", "SEYOLNG"). **Settings → Text reading** offers its English model, a 9 MB download into `data\addons\ocr_en` (Apache 2.0, pinned and checksum-checked, not part of the app). On a test chapter it cut run-together words from 46 to 12 and misread words from 30 to 2, at the same speed. Once downloaded it's used for Read text unless switched off. Text already read stays as it is: run Read text with **Redo** on the chapters you want read again.
 
+Both take every line as upright. RapidOCR's check for upside-down lines turned real ones over and read them backwards: "NO" as "ON", "HOW" as "MOH", "THIS IS" as "TI SIHS". On 1,500 panels of real webtoons and the Black Jack sample it changed or lost 3 to 6% of the lines, and of those it got right only a handful (a phone screen drawn upside down), so it's off. Run Read text with **Redo** to read older chapters again without it.
+
 A thin piece (one line of lettering: a title, "To be continued") is read with a 24-pixel margin around it. Words touching its edges came out garbled: "To be continued" as "0 e e 0", a series' title as "S". On 90 thin pieces from three series, the margin read every such card right and 3 more words of dialogue; on taller pieces it was a wash (some words gained, some lost), so they're read as they are.
 
 ## Claude Code: the MCP server

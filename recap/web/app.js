@@ -128,6 +128,7 @@ async function openProject(id) {
   render();
   loadProjects();
   if (current.job && ACTIVE.includes(current.job.status)) poll();
+  emitPlugins("project-opened", { project: current });
 }
 
 // ---- New project: a few questions first (the kind of comic, its characters, how its video looks, YouTube); the
@@ -158,17 +159,41 @@ $("#new-project").addEventListener("submit", async (e) => {
   try { newSettings = await api("/api/projects/new-settings"); } catch (err) { return notify(err.message); }
   newName = $("#new-name").value.trim();
   newPage = 0;
+  emitPlugins("new-project-open", { name: newName });
   renderNew();
   $("#new-dialog").showModal();
 });
 
+// What a feature plugin is told about the New project dialog (RecapStudio.on("new-project-page")): it can name the
+// project and say what kind of comic it is.
+const newState = () => ({
+  get name() { return newName; },
+  get kind() { return kindOf(newSettings); },
+  settings: newSettings,
+  setName(v) { newName = String(v || ""); renderNew(); },
+  redraw: () => renderNew(),
+  setKind(id) {
+    const k = KINDS.find((x) => x[0] === id);
+    if (k) { Object.assign(newSettings, k[3]); renderNew(); }
+  },
+});
+
+// The dialog's pages: its own, then the ones plugins add (RecapStudio.addNewProjectPage), before Create project.
+const pluginPages = [];
+const newPages = () => [...NEW_PAGES, ...pluginPages.map((p) => p.id)];
+
 function renderNew() {
-  const page = NEW_PAGES[newPage], s = newSettings;
-  $("#new-title").textContent = { comic: "New project", characters: "Characters", video: "How its video looks", content: "YouTube" }[page];
-  $("#new-stepno").textContent = `Step ${newPage + 1} of ${NEW_PAGES.length}`;
+  const pages = newPages(), page = pages[newPage], s = newSettings;
+  const extra = pluginPages.find((p) => p.id === page);
+  $("#new-title").textContent = extra ? extra.title
+    : { comic: "New project", characters: "Characters", video: "How its video looks", content: "YouTube" }[page];
+  $("#new-stepno").textContent = `Step ${newPage + 1} of ${pages.length}`;
   $("#new-back").hidden = newPage === 0;
-  $("#new-next").textContent = page === "content" ? "Create project" : "Next";
+  $("#new-next").textContent = newPage === pages.length - 1 ? "Create project" : "Next";
   const body = el("div", { class: "setup-page" });
+  if (extra) {
+    try { extra.render({ body, state: newState() }); } catch (e) { console.error(e); body.append(el("span", { class: "error" }, e.message)); }
+  }
   if (page === "comic") {
     const name = el("input", { value: newName, placeholder: "The series' name", oninput: (e) => { newName = e.target.value; },
       onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); $("#new-next").click(); } } });
@@ -179,8 +204,8 @@ function renderNew() {
       choiceList("new-kind", KINDS, kindOf(s), (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }),
       el("label", {}, "What language is its text in? ", lang),
       isRaw(s) ? el("span", { class: "hint" }, `The text is read in ${LANGUAGES[s.language]} and your script writer translates it ` +
-        "into English, a chapter at a time, before writing the narration. The first time, Recap Studio downloads a text " +
-        "reader for Korean, Chinese and Japanese (about 35 MB).") : "");
+        "into English, a chapter at a time, before writing the narration." + (["ko", "zh", "ja"].includes(s.language)
+          ? " The first time, Recap Studio downloads a text reader for Korean, Chinese and Japanese (about 35 MB)." : "")) : "");
     setTimeout(() => name.focus(), 0);
   } else if (page === "characters") {
     body.append(
@@ -263,7 +288,7 @@ function renderNew() {
       el("span", { class: "hint" }, "Cut where a line ends, with \"Part 1\", \"Part 2\"… at the top" +
         (s.orientation === "portrait" ? "." : ". Portrait suits Shorts, TikTok and Reels best.")));
     speed();
-  } else {
+  } else if (page === "content") {
     const kind = KINDS.find((k) => k[0] === kindOf(s))[1];
     body.append(
       el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.suggest_title,
@@ -294,16 +319,18 @@ function renderNew() {
           : "No title or thumbnail suggested")),
       el("p", { class: "muted" }, "Any of this can change later: the video and title in the project's Video tab, the kind of comic and the characters in its Project settings (advanced mode)."));
   }
+  emitPlugins("new-project-page", { page, body, state: newState() });
   $("#new-body").replaceChildren(body);
 }
 
 $("#new-back").addEventListener("click", () => { newPage = Math.max(0, newPage - 1); renderNew(); });
 $("#new-next").addEventListener("click", async () => {
-  if (newPage < NEW_PAGES.length - 1) { newPage++; return renderNew(); }
+  if (newPage < newPages().length - 1) { newPage++; return renderNew(); }
   const btn = $("#new-next");
   btn.disabled = true;
   try {
     const p = await api("/api/projects", { method: "POST", json: { name: newName.trim() || "Untitled", settings: newSettings } });
+    await emitPlugins("project-created", { project: p });
     $("#new-dialog").close();
     $("#new-name").value = "";
     await openProject(p.id);
@@ -490,6 +517,7 @@ function renderGlobal() {
   renderBoxSettings();
   renderBubbleSettings();
   renderSourceSettings();
+  renderPluginSettings();
   renderGpuSettings();
   renderUpdate();
   renderRedraw();
@@ -1119,7 +1147,8 @@ function readInput(input) {
   return v;
 }
 
-document.querySelectorAll(".proj-settings [data-key]").forEach((input) => {
+// A Project settings field is saved as soon as it changes (fields plugins add too: RecapStudio.addProjectSetting).
+function bindProjectInput(input) {
   input.addEventListener("change", async () => {
     const p = await api(`/api/projects/${current.id}/settings`, { method: "PUT", json: { [input.dataset.key]: readInput(input) } });
     current.settings = p.settings;
@@ -1133,7 +1162,8 @@ document.querySelectorAll(".proj-settings [data-key]").forEach((input) => {
       loadEstimate();
     }
   });
-});
+}
+document.querySelectorAll(".proj-settings [data-key]").forEach(bindProjectInput);
 
 document.querySelectorAll("#global-dialog [data-key]").forEach((input) => {
   input.addEventListener("change", async () => {
@@ -1586,6 +1616,7 @@ function renderCharacters() {
       } }, "✕"),
       input("aliases", "Also appears in text as (comma-separated, e.g. how OCR misreads the name)", "wide"),
       desc,
+      c.source ? el("span", { class: "hint wide" }, `From ${c.source}`) : null,
       characterPictures(c),
       characterLooks(c));
     // dropping images here adds pictures (and keeps them away from the page drop zone)
@@ -1684,6 +1715,18 @@ function renderPrompt(force = false) {
 
 // ---- adding pages ----------------------------------------------------------
 
+let fileTypes = [];  // the kinds of file plugins import chapters from ({ext, name}: .epub), besides .zip and .cbz
+const fileKinds = () => [".zip", ".cbz", ...fileTypes.map((t) => t.ext)];
+const orList = (xs) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}` : xs[0];
+// The files a plugin's type couldn't read, and why
+const skippedNote = (skipped) => (skipped || []).map((x) => `${x.file} is left out: ${x.reason.replace(/\.$/, "")}.`).join(" ");
+
+function showFileTypes(types) {
+  fileTypes = types || [];
+  $("#drop-words").textContent = `or drop images, ${orList(fileKinds())} files anywhere here, or`;
+  $("#file-input").accept = ["image/*", ...fileKinds()].join(",");
+}
+
 async function upload(files) {
   if (!files.length) return;
   const fd = new FormData();
@@ -1691,8 +1734,9 @@ async function upload(files) {
   $("#page-count").textContent = `Uploading ${files.length} file(s)…`;
   try {
     const r = await api(`/api/projects/${current.id}/pages`, { method: "POST", body: fd });
-    if (!r.added) notify("No images were found in those files.", "Nothing added");
-    else noteDuplicates(r);
+    if (r.skipped && r.skipped.length) await notify(skippedNote(r.skipped), r.added ? "Not all of it was added" : "Nothing added");
+    else if (!r.added) notify("No images were found in those files.", "Nothing added");
+    noteDuplicates(r);
   } catch (e) { notify(e.message); }
   openProject(current.id);
 }
@@ -1760,6 +1804,7 @@ $("#import-scan").addEventListener("click", scan);
 $("#import-path").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); scan(); } });
 
 async function scan() {
+  let left = "";
   const path = $("#import-path").value.trim().replace(/^"|"$/g, "");
   if (!path) return;
   $("#import-status").textContent = "Scanning…";
@@ -1768,15 +1813,16 @@ async function scan() {
   try {
     const r = await api(`/api/projects/${current.id}/scan-folder`, { method: "POST", json: { path } });
     scanned = r.chapters.map((c) => ({ ...c, on: !c.exists }));
+    left = skippedNote(r.skipped);
   } catch (e) {
     $("#import-status").textContent = e.message;
     return;
   }
   if (!scanned.length) {
-    $("#import-status").textContent = "No images or .cbz/.zip files found in that folder or its subfolders.";
+    $("#import-status").textContent = left || `No images or ${orList(fileKinds())} files found in that folder or its subfolders.`;
     return;
   }
-  $("#import-status").textContent = "";
+  $("#import-status").textContent = left;
   $("#import-tools").hidden = false;
   renderScan();
 }
@@ -1786,6 +1832,7 @@ function renderScan() {
     el("input", { type: "checkbox", checked: c.on, onchange: (e) => { c.on = e.target.checked; summarize(); } }),
     el("span", {}, c.name,
       c.kind === "archive" ? el("span", { class: "tag" }, "archive") : null,
+      c.kind === "file" ? el("span", { class: "tag" }, c.type) : null,
       c.exists ? el("span", { class: "tag" }, "already imported") : null),
     el("span", { class: "muted" }, `${c.pages} pages`))));
   summarize();
@@ -1839,7 +1886,7 @@ async function openSources(newOnly = false) {
   if (newOnly) return openNewChapters();
   showSourceStep("find");
   $("#src-status").textContent = "Looking for sources…";
-  try { srcAll = (await api("/api/sources")).sources; }
+  try { srcAll = (await api("/api/sources")).sources.filter((s) => s.chapters !== false); }  // (not series details only)
   catch (e) { $("#src-status").textContent = e.message; return; }
   $("#src-status").textContent = "";
   $("#src-none").hidden = srcAll.length > 0;
@@ -1868,7 +1915,7 @@ function setSourceMode(mode) {
   document.querySelectorAll(".src-row").forEach((r) => { r.hidden = r.dataset.for !== mode; });
   $("#src-results").replaceChildren();
   $("#src-more").hidden = true;
-  $("#src-status").textContent = mode === "link" && !srcAll.some((s) => s.link)
+  $("#src-status").textContent = mode === "link" && srcAll.length && !srcAll.some((s) => s.link)
     ? "None of your sources opens links: use Search or Lists." : "";
   if (mode === "lists") loadSourceList();
   (mode === "link" ? $("#src-link") : mode === "search" ? $("#src-query") : $("#src-list")).focus();
@@ -2038,7 +2085,8 @@ async function renderSourceSettings() {
       } }),
       el("b", {}, p.name), p.version ? ` ${p.version}` : ""),
     el("span", { class: p.error ? "error" : "muted" },
-      p.error || [p.sites.join(", "), p.language, p.nsfw ? "adult" : "", p.repo ? "from a list" : "from a file"].filter(Boolean).join(" · ")),
+      p.error || [p.sites.join(", "), p.language, p.nsfw ? "adult" : "", p.chapters === false ? "series details, no chapters" : "",
+        p.repo === st.official_list ? "from Recap Studio's list" : p.repo ? "from a list" : "from a file"].filter(Boolean).join(" · ")),
     el("button", { type: "button", class: "ghost small danger", onclick: async () => {
       if (!await ask(`Remove ${p.name}?`, "Its file is deleted from data\\plugins. Chapters already got stay.", { ok: "Remove", danger: true })) return;
       await api(`/api/sources/plugins/${p.id}`, { method: "DELETE" });
@@ -2317,7 +2365,7 @@ function aboutTime(s) {
 async function loadEstimate(force = false) {
   if (!current || !current.chapters.length) {
     $("#estimate").textContent = "";
-    if (current) $("#go-note").textContent = "Import a folder of chapters, or drop images, .zip or .cbz files on this page.";
+    if (current) $("#go-note").textContent = `Import a folder of chapters, or drop images, ${orList(fileKinds())} files on this page.`;
     return;
   }
   const chosen = chosenIds();
@@ -4003,8 +4051,10 @@ function renderUpdate() {
     : u.state === "downloading" ? `Downloading the update… ${Math.round(u.progress * 100)}%`
     : u.available ? `⬆ Update to ${latest.version}` : "";
   btn.title = u.message || "";
-  $("#update-info").textContent = u.kind === "source" ? "Running from source: git pull updates it."
-    : `Version ${u.version} (${u.kind === "installed" ? "installed" : "portable"}). ` +
+  $("#app-label").textContent = u.label;
+  $("#update-edition").hidden = u.kind === "source" || u.edition !== "lite";
+  $("#update-info").textContent = u.kind === "source" ? `${u.label}, running from source: git pull updates it.`
+    : `${u.label} (${u.kind === "installed" ? "installed" : "portable"}). ` +
       (u.state === "checking" ? "Checking GitHub…" : u.state === "error" ? `The last update failed: ${u.error}`
         : u.error ? u.error : !u.checked ? "" : u.available ? `${latest.version} is out.` : "This is the latest version.");
   $("#update-check").hidden = u.kind === "source";
@@ -4017,7 +4067,7 @@ async function offerUpdate() {
   const canInstall = !!(latest.asset && latest.asset.sha256);
   // the release notes as plain text: GitHub's Markdown without its heading and bold marks
   const notes = (latest.notes || "").replace(/^#+\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\* /gm, "- ").trim();
-  const pick = await choose(`Recap Studio ${latest.version} is out`,
+  const pick = await choose(`Recap Studio ${u.edition_name} ${latest.version} is out`,
     `You have ${u.version}.` + (notes ? `\n\n${notes}` : "") + "\n\n" +
     (canInstall ? `Update now downloads it from GitHub (${Math.round(latest.asset.size / 1e6)} MB), checks it, closes ` +
       "Recap Studio, installs it and opens it again. Your projects, settings and downloads stay."
@@ -4057,8 +4107,176 @@ $("#update-check").addEventListener("click", async () => {
 });
 $("#update-notes").addEventListener("click", () => api("/api/update/page", { method: "POST" }));
 
+// ---- feature plugins (plugins.py): Settings → Plugins, and what a plugin's page script is given ----
+
+const pluginHooks = {};      // event: [functions] (RecapStudio.on)
+const pluginSettings = [];   // [{box, render}] (RecapStudio.addSettings), drawn with the rest of Settings
+
+async function emitPlugins(event, data) {
+  for (const fn of pluginHooks[event] || []) {
+    try { await fn(data); } catch (e) { console.error(e); notify(`A plugin failed (${event}): ${e.message}`); }
+  }
+}
+
+// A feature plugin's web\plugin.js runs after this file and adds to the page through these (docs/plugins.md). Events:
+// "new-project-open" ({name}), "new-project-page" ({page, body, state}: add to body; state.name, state.kind,
+// state.setName(), state.setKind()), "project-created" ({project}: awaited before it opens), "project-opened"
+// ({project}).
+window.RecapStudio = {
+  version: 1,
+  api, el, ask, notify, plural, showTab,
+  current: () => current,
+  reload: () => (current ? openProject(current.id) : loadProjects()),
+  on(event, fn) { (pluginHooks[event] ||= []).push(fn); },
+  // a button in the Characters tab ("characters"), beside Get chapters from a site ("chapters"), with the finished
+  // video's buttons in the Video tab ("video"), or in the sidebar under Open project file ("sidebar", for what's
+  // about every project)
+  addButton(where, label, onclick, { title = "" } = {}) {
+    const b = el("button", { type: "button", class: where === "sidebar" ? "ghost small open-file" : where === "video" ? "" : "ghost",
+      title, onclick }, label);
+    if (where === "chapters") $("#get-chapters").after(b);
+    else if (where === "sidebar") $("#open-file").after(b);
+    else if (where === "video") $("#output .output-actions").append(b);
+    else $(".char-buttons").append(b);
+    return b;
+  },
+  // a page of its own in the New project dialog, after the dialog's own (the last page has Create project):
+  // render({body, state}) draws it into body; the plugin keeps the choices and applies them on "project-created"
+  addNewProjectPage({ id, title, render }) {
+    const key = `plugin:${id}`;
+    if (!pluginPages.some((p) => p.id === key)) pluginPages.push({ id: key, title, render });
+  },
+  // a folder on this PC, from the window's folder picker (or typed, in a browser)
+  pickFolder: (start) => pickFolder(start),
+  // a choice of its own in Project settings (in a Plugins section), for a setting its Python side registered with
+  // plugin.project_setting: options [[value, text]]; saved like the rest as soon as it changes
+  addProjectSetting({ key, label, options, hint = "" }) {
+    let box = $("#plugin-project-settings");
+    if (!box) {
+      box = el("fieldset", { id: "plugin-project-settings" }, el("legend", {}, "Plugins"));
+      $("#settings").append(box);
+    }
+    const input = el("select", { "data-key": key }, ...options.map(([v, text]) => el("option", { value: v }, text)));
+    bindProjectInput(input);
+    box.append(...[el("label", {}, `${label} `, input), hint ? el("span", { class: "hint" }, hint) : null].filter(Boolean));
+    if (current) setInputs(box, current.settings);
+    return input;
+  },
+  // a language a comic can be in (the plugin's Python side registers how it's read): offered in New project and
+  // Project settings, as a raw translated into English
+  addLanguage(code, name) {
+    LANGUAGES[code] = name;
+    document.querySelectorAll('select[data-key="language"]').forEach((sel) => {
+      if (![...sel.options].some((o) => o.value === code)) sel.append(el("option", { value: code }, `${name} (translated into English)`));
+    });
+  },
+  // the sidebar's box for a new project: its placeholder and its button's word (what's typed opens New project)
+  setNewProjectBox({ placeholder, button, title } = {}) {
+    if (placeholder) $("#new-name").placeholder = placeholder;
+    if (title) $("#new-name").title = title;
+    if (button) $("#new-project button[type=submit]").textContent = button;
+  },
+  // a section of its own in Settings; render(box) runs each time Settings is drawn
+  addSettings(title, render) {
+    const box = el("div", {});
+    $("#plugins-box").after(el("fieldset", {}, el("legend", {}, title), box));
+    pluginSettings.push({ box, render });
+  },
+};
+
+async function loadPluginScripts() {
+  let st;
+  try { st = await api("/api/plugins"); } catch { return; }
+  showFileTypes(st.file_types);
+  for (const p of st.plugins.filter((x) => x.running && x.web)) {
+    const base = `/plugin-web/${encodeURIComponent(p.id)}/`, v = `?v=${encodeURIComponent(p.version)}`;  // (an update is never cached)
+    document.head.append(el("link", { rel: "stylesheet", href: `${base}plugin.css${v}`, onerror: (e) => e.target.remove() }));
+    await new Promise((done) => document.body.append(el("script", { src: `${base}plugin.js${v}`, onload: done,
+      onerror: () => { console.error(`${p.name}: plugin.js didn't load`); done(); } })));
+  }
+}
+
+let pluginList = null;  // Recap Studio's own plugin list, once asked for (Show the plugins)
+
+async function renderPluginSettings() {
+  for (const s of pluginSettings) { try { s.render(s.box); } catch (e) { console.error(e); } }
+  let st;
+  try { st = await api("/api/plugins"); } catch (e) { $("#plg-error").textContent = e.message; return; }
+  $("#plg-restart").hidden = !st.restart;
+  const state = (p) => p.error ? p.error : !p.enabled ? "Off" + (p.running ? " from the next start" : "")
+    : p.running ? "On" : "On from the next start";
+  $("#plg-installed").replaceChildren(...st.plugins.map((p) => el("div", { class: "src-plugin" },
+    el("label", { class: "check" },
+      el("input", { type: "checkbox", checked: p.enabled, disabled: !!p.error && !p.enabled, onchange: async (e) => {
+        try { await api(`/api/plugins/${p.id}`, { method: "PUT", json: { enabled: e.target.checked } }); }
+        catch (err) { notify(err.message); }
+        renderPluginSettings();
+      } }),
+      el("b", {}, p.name), p.version ? ` ${p.version}` : ""),
+    el("span", { class: p.error ? "error" : "muted" },
+      [p.summary, p.where === "bundled" ? "comes with Full Suite" : "", state(p)].filter(Boolean).join(" · ")),
+    p.where === "installed" ? el("button", { type: "button", class: "ghost small danger", onclick: async () => {
+      if (!await ask(`Remove ${p.name}?`, "Its folder is deleted from data\\plugins. It stops from the next start.",
+        { ok: "Remove", danger: true })) return;
+      try { await api(`/api/plugins/${p.id}`, { method: "DELETE" }); } catch (err) { return notify(err.message); }
+      renderPluginSettings();
+    } }, "Remove") : null)));
+  if (!st.plugins.length) $("#plg-installed").replaceChildren(el("span", { class: "muted" }, "No plugins yet."));
+  $("#plg-error").textContent = "";
+  if (pluginList) showPluginList();
+}
+
+async function showPluginList() {
+  const box = $("#plg-available");
+  if (!pluginList) box.replaceChildren(el("span", { class: "muted" }, "Loading…"));
+  let r;
+  try { r = pluginList = await api("/api/plugins/list"); }
+  catch (e) { box.replaceChildren(el("span", { class: "error" }, e.message)); return; }
+  $("#plg-show").hidden = true;
+  box.replaceChildren(...r.plugins.map((p) => el("div", { class: "src-plugin" },
+    el("b", {}, p.name, p.version ? ` ${p.version}` : ""),
+    el("span", { class: "muted" }, [p.summary, p.kind === "feature" ? "adds to the app" : "a source (Settings → Sources)",
+      p.sites.join(", ")].filter(Boolean).join(" · ")),
+    p.too_new ? el("span", { class: "muted" }, "Needs a newer Recap Studio")
+      : p.installed && !p.update ? el("span", { class: "ok" }, "Installed")
+      : el("button", { type: "button", class: "ghost small", onclick: async (e) => {
+        e.target.disabled = true;
+        try { await api("/api/plugins/install", { method: "POST", json: { id: p.id } }); }
+        catch (err) { e.target.disabled = false; return notify(err.message, "Not installed"); }
+        await renderPluginSettings();
+        renderSourceSettings();
+      } }, p.update ? "Update" : "Install"))));
+  if (!r.plugins.length) box.replaceChildren(el("span", { class: "muted" }, "The list is empty."));
+}
+
+$("#plg-show").addEventListener("click", showPluginList);
+
+// Restart now: the app closes and opens again (in the window, a new window opens; in a browser, this page waits for
+// it and reloads). A running job stops where it is, as when the app is closed.
+$("#plg-restart-go").addEventListener("click", async () => {
+  let r;
+  try { r = await api("/api/restart", { method: "POST", json: {} }); }
+  catch (e) {
+    if (!/running/.test(e.message)) return notify(e.message);
+    if (!await ask("Restart anyway?", `${e.message}. It stops where it is, as when Recap Studio is closed: Continue picks ` +
+      "it up afterwards.", { ok: "Restart" })) return;
+    try { r = await api("/api/restart", { method: "POST", json: { force: true } }); } catch (err) { return notify(err.message); }
+  }
+  if (!r || !r.restarting) return;
+  ask("Restarting…", "Recap Studio is closing and opening again.", { ok: "OK", cancel: false });
+  const before = Date.now();
+  const wait = setInterval(async () => {
+    if (Date.now() - before < 2500) return;  // (the old copy is still closing)
+    try {
+      const st = await api("/api/plugins");
+      if (!st.restart) { clearInterval(wait); location.reload(); }
+    } catch { /* not back yet */ }
+  }, 1000);
+});
+
 (async () => {
   globals = await api("/api/settings");
+  await loadPluginScripts();
   await loadProjects();
   const last = localStorage.getItem("last");
   if (last) { try { await openProject(last); } catch { localStorage.removeItem("last"); } }

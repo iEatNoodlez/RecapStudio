@@ -32,10 +32,17 @@ Add the chapters, press **Make the recap**, and Recap Studio cuts the pages into
 
 ## Download
 
-For Windows 10 or 11 (64-bit), from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page:
+For Windows 10 or 11 (64-bit), from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page. It comes in two editions, both free:
 
-- **`Recap-Studio-<version>-setup.exe`** installs it, for everyone on the PC or just for you.
-- **`Recap-Studio-<version>-portable.zip`**: unzip it anywhere you can write to, on a short path, and run `Recap Studio.exe`.
+- **Lite** is the whole app.
+- **Full Suite** is Lite with [Recap Studio's plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins#readme) built in: finding the series, automation, posting to YouTube, branding, and more languages and file types. Lite can add them one at a time, in Settings → Plugins.
+
+| | Installer | Portable |
+|---|---|---|
+| Lite | `Recap-Studio-Lite-<version>-setup.exe` | `Recap-Studio-Lite-<version>-portable.zip` |
+| Full Suite | `Recap-Studio-Full-Setup-<version>.exe` | `Recap-Studio-Full-Portable-<version>.zip` |
+
+The installer installs it for everyone on the PC or just for you. Unzip the portable copy anywhere you can write to, on a short path, and run `Recap Studio.exe`. Installing one edition over the other switches between them, and keeps your projects and settings.
 
 Everything it needs is included. The first start downloads the voice model (354 MB) and walks you through a short setup. After that, the app checks for updates when it starts and installs them with one click.
 
@@ -51,7 +58,7 @@ Type a name at the top left and press **Create**, then answer a few questions: w
 
 ### 2. Add the chapters and press Make the recap
 
-Press **Add chapters** and pick the series folder. Each subfolder of images, and each `.cbz` or `.zip`, becomes a chapter. You can also drop files on the window. **Make the recap** then runs every step on every chapter, and next time it carries on where it stopped. **Advanced mode** (bottom of the sidebar) shows every step and setting.
+Press **Add chapters** and pick the series folder. Each subfolder of images, and each `.cbz` or `.zip`, becomes a chapter (and each `.epub`, with the EPUB comics plugin). You can also drop files on the window. **Make the recap** then runs every step on every chapter, and next time it carries on where it stopped. **Advanced mode** (bottom of the sidebar) shows every step and setting.
 
 ### 3. Check who's who
 
@@ -91,7 +98,7 @@ Your script writer also suggests a clickbait title, a few others, and a thumbnai
 | Panels | Cuts the pages into panels. Webtoons are stitched into one strip and cut at the gutters, around the speech bubbles. | OpenCV; ogkalu's comic text-and-bubble detector (optional download) |
 | Text | Reads the speech bubbles and captions, in English, Korean, Chinese or Japanese. | RapidOCR; PaddleOCR's PP-OCRv5 for Korean, Chinese and Japanese (optional download) |
 | Translate | Translates a Korean, Chinese or Japanese comic into English, and can letter the English into the bubbles. | Your script writer |
-| Characters | Finds who's who and suggests their names. | DeepGHS's detectors and CCIP, the WD tagger (optional download) |
+| Characters | Finds who's who and suggests their names, or takes the cast from AniList. | DeepGHS's detectors and CCIP, the WD tagger (optional download); AniList through the Find the series plugin |
 | Script | Writes the narration a chapter at a time, from the pictures and the text. | A local model (Ollama), Claude Code on your Claude plan, or Claude, Gemini, OpenRouter, DeepSeek, Groq or Mistral with your own key |
 | Voice | Reads the narration aloud, or uses your own recording. | Kokoro on your PC, Microsoft Edge's voices, or ElevenLabs |
 | Title | Suggests a clickbait title and draws a labelled thumbnail, which an image model can repaint. | Your script writer; Gemini or OpenRouter image models |
@@ -121,6 +128,7 @@ The [docs](docs/README.md) cover every feature in detail:
 - [Video](docs/video.md)
 - [YouTube title, thumbnail and YouTube-safe](docs/youtube.md)
 - [Your phone](docs/phone.md)
+- [Plugins](docs/plugins.md)
 - [Getting chapters from sites](docs/sources.md)
 - [The scan group's pages](docs/scan-group-pages.md)
 - [Performance and the GPU](docs/performance.md)

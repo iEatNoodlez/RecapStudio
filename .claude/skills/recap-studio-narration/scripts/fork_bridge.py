@@ -178,7 +178,7 @@ def hand_over(params) -> str:
             data = np.frombuffer(base64.b64decode(b["source"]["data"]), np.uint8)
             pieces[cur]["imgs"].append(cv2.imdecode(data, cv2.IMREAD_COLOR))
             continue
-        m = re.match(r"Piece (\d+)", b["text"])
+        m = re.match(r"Piece (\d+)(?::| \(tall)", b["text"])  # (not a translated comic's "Piece 3's text, ...")
         if m:
             cur = int(m.group(1))
             pieces[cur] = {"imgs": [], "lines": []}

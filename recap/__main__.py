@@ -45,6 +45,18 @@ def _log_to_file_without_console():
         sys.stderr = sys.stderr or log
 
 
+def _wait_for(pid: int, seconds: float = 30.0) -> None:
+    """Restart: wait for the copy that's closing to be gone, so its port and files are free."""
+    try:
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+        if handle:
+            kernel32.WaitForSingleObject(handle, int(seconds * 1000))
+            kernel32.CloseHandle(handle)
+    except (AttributeError, OSError):  # (not Windows)
+        time.sleep(3)
+
+
 def _note_address(port: int):
     """data\\app.json: where the running app answers (removed when it quits)."""
     from .store import DATA_ROOT
@@ -69,7 +81,10 @@ def main():
     ap.add_argument("--browser", action="store_true", help="use the default browser instead of a window")
     ap.add_argument("--no-window", action="store_true", help="only the server, with no window or browser")
     ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--after", type=int, default=0, help=argparse.SUPPRESS)  # (Restart: the copy closing first)
     args = ap.parse_args()
+    if args.after:
+        _wait_for(args.after)
     from .store import move_old_layout
     move_old_layout()  # an installed copy that kept its data beside itself: before anything reads its settings
     from . import gpu
@@ -80,6 +95,8 @@ def main():
     server = uvicorn.Server(config)
     url = f"http://127.0.0.1:{port}/"
     _note_address(port)
+    from . import updates
+    updates.LAUNCH.update(port=port, mode="no-window" if args.no_window else "browser" if args.browser else "window")
 
     if args.no_window:
         print(f"Recap Studio running at {url}  (Ctrl+C to stop)")
@@ -87,7 +104,8 @@ def main():
         return
 
     if args.browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        if not args.after:  # (restarted: the page that asked reloads itself)
+            threading.Timer(1.0, lambda: webbrowser.open(url)).start()
         print(f"Recap Studio running at {url}  (Ctrl+C to stop)")
         server.run()
         return
@@ -102,7 +120,7 @@ def main():
     thread.start()
     while not server.started:
         time.sleep(0.05)
-    window = webview.create_window("Recap Studio", url, width=1440, height=920, min_size=(1000, 650))
+    window = webview.create_window(updates.label(), url, width=1440, height=920, min_size=(1000, 650))
 
     def pick_folder():
         """Native folder dialog, called from the page as window.pywebview.api.pick_folder()."""

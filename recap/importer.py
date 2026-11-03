@@ -2,14 +2,18 @@
 
 Every folder that directly contains images becomes one chapter, named after
 that folder (or after its path below the chosen folder, when two folders share
-a name). Every .zip/.cbz file becomes a chapter too. Chapters and their pages
-are sorted naturally, so "Chapter 2" comes before "Chapter 10".
+a name). Every .zip/.cbz file becomes a chapter too, and so does every file of a
+type a plugin reads (FILE_TYPES: an .epub, say), or one chapter for each part it
+finds in it (a volume's chapters). Chapters and their pages are sorted naturally,
+so "Chapter 2" comes before "Chapter 10".
 
 Images in folders are read in place; archive pages are extracted into the project.
 """
 import io
+import logging
 import os
 import re
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -19,6 +23,8 @@ from . import store
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 ARCHIVE_EXT = {".zip", ".cbz"}
+FILE_TYPES: dict[str, dict] = {}  # ".epub" -> {"name", "chapters", "pages"}: a plugin's (plugins.Plugin.file_type)
+log = logging.getLogger(__name__)
 
 
 def _path_key(rel: str):
@@ -35,8 +41,54 @@ def _archive_images(path: Path) -> list[str]:
     return sorted(names, key=store.natural_key)
 
 
-def scan(root: str) -> list[dict]:
-    """List the chapters found under root, in reading order."""
+def _zip_pages(path: Path, members: list[str]):
+    with zipfile.ZipFile(path) as z:
+        for member in members:
+            yield member, z.read(member)
+
+
+def _file_parts(path: Path, skipped: list | None) -> list[dict]:
+    """A plugin's file type: the parts its chapters() finds, [{"name", "pages"}], or [] with why in skipped."""
+    ftype = FILE_TYPES[path.suffix.lower()]
+    try:
+        parts = [x for x in ftype["chapters"](path) or [] if x.get("pages")]
+        reason = "no pages found in it"
+    except ValueError as e:  # (what the plugin says is wrong with it)
+        parts, reason = [], str(e)
+    except Exception as e:
+        log.exception("%s: %s couldn't be read", ftype["name"], path)
+        parts, reason = [], f"it couldn't be read ({type(e).__name__})"
+    if not parts and skipped is not None:
+        skipped.append({"file": path.name, "reason": reason})
+    return parts
+
+
+def _part_name(name, i: int) -> str:
+    return " ".join(str(name or "").replace("/", "-").replace("\\", "-").split())[:120] or f"Part {i}"
+
+
+def _file_chapters(path: Path, rel: str, skipped: list | None) -> list[dict]:
+    """A plugin's file type as chapters: one named after the file, or one a part (named after the part, and kept in
+    the file's order)."""
+    parts = _file_parts(path, skipped)
+    ext = path.suffix.lower()
+    if len(parts) == 1:
+        return [{"key": rel, "kind": "file", "type": ext, "path": str(path), "source": str(path), "files": parts[0]["pages"]}]
+    return [{"key": f"{rel}#{i}", "kind": "file", "type": ext, "path": str(path), "source": f"{path}#{i}",
+             "files": x["pages"], "parts": [*Path(rel).parts, _part_name(x.get("name"), i)], "order": (rel, i)}
+            for i, x in enumerate(parts, 1)]
+
+
+def _order(c: dict):
+    if "order" in c:  # (a file's parts: in its own order, right where the file is)
+        rel, i = c["order"]
+        return _path_key(rel) + [store.natural_key(f"\0{i:06d}")]
+    return _path_key(c["key"])
+
+
+def scan(root: str, skipped: list | None = None) -> list[dict]:
+    """List the chapters found under root, in reading order (with the files a plugin's type couldn't read, and why,
+    added to skipped)."""
     base = Path(root)
     if not base.is_dir():
         raise FileNotFoundError(f"Folder not found: {root}")
@@ -54,13 +106,16 @@ def scan(root: str) -> list[dict]:
                 "files": images,
             })
         for f in filenames:
-            if Path(f).suffix.lower() in ARCHIVE_EXT:
+            ext = Path(f).suffix.lower()
+            rel = (here / f).relative_to(base).with_suffix("").as_posix()
+            if ext in ARCHIVE_EXT:
                 members = _archive_images(here / f)
                 if members:
-                    rel = (here / f).relative_to(base).with_suffix("").as_posix()
                     found.append({"key": rel, "kind": "archive", "path": str(here / f), "files": members})
-    found.sort(key=lambda c: _path_key(c["key"]))
-    for c, name in zip(found, _names([list(Path(c["key"]).parts) for c in found])):
+            elif ext in FILE_TYPES:
+                found += _file_chapters(here / f, rel, skipped)
+    found.sort(key=_order)
+    for c, name in zip(found, _names([c.get("parts") or list(Path(c["key"]).parts) for c in found])):
         c["name"] = name
         c["pages"] = len(c["files"])
     return found
@@ -97,15 +152,29 @@ def _names(paths: list[list[str]]) -> list[str]:
             return names
 
 
-def summary(root: str, project: dict) -> list[dict]:
-    """Scan result for the review screen, flagging chapters already in the project."""
+def summary(root: str, project: dict, skipped: list | None = None) -> list[dict]:
+    """Scan result for the review screen, flagging chapters already in the project (and with a plugin's file type,
+    its name)."""
     sources = {c.get("source") for c in project["chapters"]}
     names = {c["name"] for c in project["chapters"]}
     return [
         {"key": c["key"], "name": c["name"], "kind": c["kind"], "pages": c["pages"],
-         "exists": c["path"] in sources or c["name"] in names}
-        for c in scan(root)
+         "exists": c.get("source", c["path"]) in sources or c["name"] in names}
+        | ({"type": FILE_TYPES[c["type"]]["name"]} if c["kind"] == "file" else {})
+        for c in scan(root, skipped)
     ]
+
+
+def read_file(name: str, data: bytes, skipped: list | None = None) -> list[tuple[str | None, list[tuple[str, bytes]]]]:
+    """A dropped file of a plugin's type: [(chapter name, [(page name, bytes)])], the name None when the file is one
+    chapter (named after it)."""
+    ftype = FILE_TYPES[Path(name).suffix.lower()]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / Path(name).name
+        path.write_bytes(data)
+        parts = _file_parts(path, skipped)
+        return [(None if len(parts) == 1 else _part_name(x.get("name"), i), list(ftype["pages"](path, x["pages"])))
+                for i, x in enumerate(parts, 1)]
 
 
 def _size(src) -> tuple[int, int] | None:
@@ -202,18 +271,17 @@ def import_into(project: dict, root: str, keys: list[str] | None, where: str = "
                 if size:
                     pages.append({"src": str(src), "name": f, "w": size[0], "h": size[1], "chapter": cid})
         else:
-            with zipfile.ZipFile(c["path"]) as z:
-                for i, member in enumerate(c["files"]):
-                    data = z.read(member)
-                    size = _size(io.BytesIO(data))
-                    if not size:
-                        continue
-                    fname = f"{cid}_{i:04d}{Path(member).suffix.lower()}"
-                    (pages_dir / fname).write_bytes(data)
-                    pages.append({"file": fname, "name": member, "w": size[0], "h": size[1], "chapter": cid})
+            read = _zip_pages if c["kind"] == "archive" else FILE_TYPES[c["type"]]["pages"]
+            for i, (member, data) in enumerate(read(Path(c["path"]), c["files"])):
+                size = _size(io.BytesIO(data))
+                if not size:
+                    continue
+                fname = f"{cid}_{i:04d}{Path(member).suffix.lower()}"
+                (pages_dir / fname).write_bytes(data)
+                pages.append({"file": fname, "name": member, "w": size[0], "h": size[1], "chapter": cid})
         if not pages:
             continue
-        project["chapters"].append({"id": cid, "name": c["name"], "source": c["path"]})
+        project["chapters"].append({"id": cid, "name": c["name"], "source": c.get("source", c["path"])})
         project["pages"].extend(pages)
         new.append(cid)
         added_chapters += 1

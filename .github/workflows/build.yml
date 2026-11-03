@@ -1,6 +1,6 @@
-# Builds the Windows installer and the portable zip (packaging/build.ps1).
-# Push a tag like v1.0.0 to publish them as a GitHub release; run it by hand (Actions → Build → Run workflow) to
-# get them as the run's artifacts instead.
+# Builds the Windows installer and the portable zip of each edition, Lite and Full Suite (packaging/build.ps1).
+# Push a tag like v1.0.0 to publish the four files as a GitHub release; run it by hand (Actions → Build → Run
+# workflow) to get them as the run's artifacts instead.
 name: Build
 
 on:
@@ -41,9 +41,13 @@ jobs:
         run: |
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
 
-      - name: Build
+      - name: Build Lite
         shell: pwsh
-        run: ./packaging/build.ps1 -Version "${{ steps.version.outputs.version }}"
+        run: ./packaging/build.ps1 -Version "${{ steps.version.outputs.version }}" -Edition lite
+
+      - name: Build Full Suite
+        shell: pwsh
+        run: ./packaging/build.ps1 -Version "${{ steps.version.outputs.version }}" -Edition full
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,4 +67,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           $files = (Get-ChildItem dist\*.exe, dist\*.zip).FullName
-          gh release create $env:TAG @files --title "Recap Studio $env:VERSION" --generate-notes
+          if ($files.Count -ne 4) { throw "Expected four files (Lite's and Full Suite's), found $($files.Count)." }
+          # which file is which, above GitHub's list of changes
+          (Get-Content packaging\release-notes.md -Raw).Replace("{version}", $env:VERSION) | Set-Content -Encoding utf8 notes.md
+          gh release create $env:TAG @files --title "Recap Studio $env:VERSION" --notes-file notes.md --generate-notes

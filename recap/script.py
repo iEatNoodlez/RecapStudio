@@ -1,6 +1,7 @@
 """Narration script generation with a local Ollama model."""
 import base64
 import json
+import logging
 
 import cv2
 import numpy as np
@@ -124,8 +125,26 @@ def system_prompt(settings: dict, characters: list[dict], output: str = OUTPUT_L
     note = (settings.get("note") or "").strip()
     if note:
         parts.append(f"Note for this run (important, follow it):\n{note}")
+    parts += extra_instructions(EXTRA, settings)  # plugins' (the language to write in, say)
     parts.append(output)
     return "\n\n".join(p for p in parts if p)
+
+
+EXTRA: list = []  # plugins.Plugin.script_instructions: fn(settings) -> more instructions for the narration
+
+
+def extra_instructions(hooks: list, settings: dict) -> list[str]:
+    """What the plugins add to a request's instructions; one that fails is logged and left out."""
+    out = []
+    for fn in hooks:
+        try:
+            text = (fn(settings) or "").strip()
+        except Exception:
+            logging.getLogger("recap.plugins").exception("A plugin's instructions failed")
+            continue
+        if text:
+            out.append(text)
+    return out
 
 
 def chapter_markers(project: dict) -> dict[str, str]:

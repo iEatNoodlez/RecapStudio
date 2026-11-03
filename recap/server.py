@@ -1,5 +1,6 @@
 """Local HTTP API and static UI. Binds to 127.0.0.1; with Phone access on, phone.py also serves it to the home
 network, where only a phone with the key gets through, and only to the phone page and what it uses."""
+import asyncio
 import copy
 import io
 import os
@@ -21,8 +22,8 @@ import anthropic
 import requests
 
 from . import (bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu,
-               importer, magi, mcp, music, ocr, online_voices, package, panels, phone, pipeline, scenes, script,
-               sources, store, translate, tts, updates, video, voiceover, youtube)
+               importer, magi, mcp, music, ocr, online_voices, package, panels, phone, pipeline, plugins, scenes,
+               script, sources, store, translate, tts, updates, video, voiceover, youtube)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -159,9 +160,11 @@ def list_projects():
 def create_project(name: str = Body("Untitled", embed=True), settings: dict | None = Body(None, embed=True)):
     """A new project, with the New project dialog's choices (the kind of comic, how its video looks)."""
     try:
-        return store.create(name, settings)
+        p = store.create(name, settings)
     except (TypeError, ValueError) as e:
         raise HTTPException(400, f"Those settings don't fit: {e}")
+    plugins.emit("project_created", project=p)
+    return p
 
 
 @app.get("/api/projects/new-settings")
@@ -328,7 +331,8 @@ def reset_prompt(pid: str):
 @app.put("/api/projects/{pid}/characters")
 def save_characters(pid: str, characters: list[dict] = Body(..., embed=True)):
     _project(pid)
-    fields = ("name", "gender", "aliases", "description")
+    fields = ("name", "gender", "aliases", "description",
+              "source")  # where it came from, when a plugin preloaded it (Find the series: "AniList")
     folder = store.project_dir(pid) / "characters"
 
     def pictures(x):
@@ -462,12 +466,14 @@ def _save_image(data: bytes, dest: Path) -> tuple[int, int] | None:
 
 @app.post("/api/projects/{pid}/pages")
 async def upload_pages(pid: str, files: list[UploadFile], place: str = Form("number")):
-    """Each dropped .zip/.cbz becomes a chapter; loose images together become one chapter. They're placed
-    as importer.place says (by chapter number unless told otherwise)."""
+    """Each dropped .zip/.cbz becomes a chapter, and so does a file of a type a plugin reads (or each part of it,
+    a volume's chapters); loose images together become one chapter. They're placed as importer.place says (by
+    chapter number unless told otherwise). The files a plugin's type couldn't read come back in skipped, with why."""
     _project(pid)
     pages_dir = store.project_dir(pid) / "pages"
     groups: list[tuple[str | None, list[tuple[str, bytes]]]] = []
     loose: list[tuple[str, bytes]] = []
+    skipped: list[dict] = []
     for f in files:
         data = await f.read()
         name = os.path.basename(f.filename or "page")
@@ -476,6 +482,9 @@ async def upload_pages(pid: str, files: list[UploadFile], place: str = Form("num
                 imgs = [(i.filename, z.read(i)) for i in z.infolist()
                         if not i.is_dir() and Path(i.filename).suffix.lower() in IMAGE_EXT]
             groups.append((Path(name).stem, imgs))
+        elif Path(name).suffix.lower() in importer.FILE_TYPES:
+            parts = await asyncio.to_thread(importer.read_file, name, data, skipped)
+            groups += [(title or Path(name).stem, imgs) for title, imgs in parts]
         elif Path(name).suffix.lower() in IMAGE_EXT:
             loose.append((name, data))
     if loose:
@@ -498,15 +507,16 @@ async def upload_pages(pid: str, files: list[UploadFile], place: str = Form("num
                 new.append(cid)
                 added += len(pages)
         importer.place(p, new, place)
-        return {"added": added, "total": len(p["pages"]), "duplicates": importer.duplicates(p, new)}
+        return {"added": added, "total": len(p["pages"]), "duplicates": importer.duplicates(p, new), "skipped": skipped}
     return store.update(pid, apply)
 
 
 @app.post("/api/projects/{pid}/scan-folder")
 def scan_folder(pid: str, path: str = Body(..., embed=True)):
     p = _project(pid)
+    skipped = []
     try:
-        return {"path": path, "chapters": importer.summary(path, p)}
+        return {"path": path, "chapters": importer.summary(path, p, skipped), "skipped": skipped}
     except FileNotFoundError as e:
         raise HTTPException(400, str(e))
 
@@ -1198,7 +1208,7 @@ def sources_status():
     s = store.global_settings()
     return {"sources": sources.available(), "plugins": sources.plugins(), "repos": s.get("plugin_repos") or [],
             "gallery_dl": sources.gallery_dl.status(), "suwayomi": sources.suwayomi.status(),
-            "new_counts": sources.new_counts}
+            "new_counts": sources.new_counts, "official_list": plugins.OFFICIAL_LIST}
 
 
 @app.get("/api/sources/new")
@@ -1279,10 +1289,69 @@ def sources_series(key: str = Body(..., embed=True), ref: str = Body(..., embed=
     return _sourced(sources.series, key, ref)
 
 
+@app.post("/api/sources/characters")
+def sources_characters(key: str = Body(..., embed=True), ref: str = Body(..., embed=True)):
+    return {"characters": _sourced(sources.characters, key, ref)}
+
+
 @app.get("/api/sources/image/{token}")
 def sources_image(token: str):
     data, kind = _sourced(sources.fetch_image, token)
     return Response(data, media_type=kind, headers={"Cache-Control": "max-age=86400"})
+
+
+# ---- feature plugins (plugins.py): Settings → Plugins, installed from Recap Studio's own list ----
+
+@app.post("/api/restart")
+def restart_app(force: bool = Body(False, embed=True)):
+    """Close the app and open it again (plugins installed or switched since it started are loaded then). A running
+    job stops where it is, as when the app is closed: Continue picks it up."""
+    running = [j for j in pipeline.jobs.values() if j["status"] in pipeline.ACTIVE]
+    if running and not force:
+        raise HTTPException(409, f"{len(running)} job{'s are' if len(running) != 1 else ' is'} running")
+    updates.restart()
+    return {"restarting": True}
+
+
+@app.get("/api/plugins")
+def plugins_status():
+    return {"plugins": plugins.public(), "list": plugins.OFFICIAL_LIST, "restart": plugins.changed,
+            "file_types": [{"ext": ext, "name": t["name"]} for ext, t in importer.FILE_TYPES.items()]}
+
+
+@app.get("/api/plugins/list")
+def plugins_list():
+    """Recap Studio's own plugin list (feature plugins and source plugins), with what's installed."""
+    return _sourced(sources.repo, plugins.OFFICIAL_LIST)
+
+
+@app.post("/api/plugins/install")
+def plugins_install(id: str = Body(..., embed=True)):
+    return _sourced(sources.install, plugins.OFFICIAL_LIST, id)
+
+
+@app.put("/api/plugins/{pid}")
+def plugins_switch(pid: str, enabled: bool = Body(..., embed=True)):
+    plugins.set_enabled(pid, enabled)
+    return plugins_status()
+
+
+@app.delete("/api/plugins/{pid}")
+def plugins_remove(pid: str):
+    try:
+        plugins.remove(pid)
+    except plugins.PluginError as e:
+        raise HTTPException(400, str(e))
+    return plugins_status()
+
+
+@app.get("/plugin-web/{pid}/{path:path}")
+def plugin_web(pid: str, path: str):
+    """A running feature plugin's page files (web\\plugin.js, plugin.css and what they load)."""
+    f = plugins.web_file(pid, path)
+    if not f:
+        raise HTTPException(404)
+    return FileResponse(f)
 
 
 @app.get("/api/projects/{pid}/source/new")
@@ -1769,4 +1838,5 @@ def project_file(pid: str, path: str):
     return FileResponse(target, headers={"Cache-Control": "no-cache"})
 
 
+plugins.load(app)  # the feature plugins' API routes, before the page takes every other path
 app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

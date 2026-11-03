@@ -1,9 +1,10 @@
 """Updates from GitHub: whether a newer release of Recap Studio is out, and installing it.
 
-The version is in VERSION next to the app (packaging\\build.ps1 writes it). A copy run from source has none and
-isn't checked: git pull updates it. Once per start (unless switched off in Settings), and whenever Check now is
-pressed, the app asks GitHub's API for the repository's latest release: one request, with nothing about you in
-it. Updating downloads that release's own file, checks it against the SHA-256 GitHub lists for it, and then:
+The version is in VERSION next to the app, and the edition (Lite, or Full Suite with Recap Studio's plugins built
+in) in EDITION; packaging\\build.ps1 writes both. A copy run from source has neither and isn't checked: git pull
+updates it. Once per start (unless switched off in Settings), and whenever Check now is pressed, the app asks
+GitHub's API for the repository's latest release: one request, with nothing about you in it. Updating downloads
+that release's file for this copy's edition, checks it against the SHA-256 GitHub lists for it, and then:
 - an installed copy (unins000.exe next to it) runs the new setup quietly; it updates the same folder, keeping the
   data and models folders, and starts the app again;
 - a portable copy unpacks the new zip and leaves a small PowerShell helper (powershell.exe comes with Windows) to
@@ -53,6 +54,24 @@ def kind() -> str:
     return "installed" if (store.ROOT / "unins000.exe").exists() else "portable"
 
 
+EDITIONS = {"lite": "Lite", "full": "Full Suite"}
+
+
+def edition() -> str:
+    """"full" for Full Suite, else "lite". A copy without EDITION (0.1.x, or run from source) is Lite."""
+    try:
+        e = (store.ROOT / "EDITION").read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        return "lite"
+    return e if e in EDITIONS else "lite"
+
+
+def label() -> str:
+    """The app's name as the window, the sidebar and Settings show it: "Recap Studio Full Suite 0.2.0"."""
+    v = version()
+    return f"Recap Studio {EDITIONS[edition()]}" + (f" {v}" if v else "")
+
+
 def _key(v: str):
     """A version to compare: 1.2.3 < 1.2.4, and 1.3.0-beta.1 < 1.3.0. None if it isn't one."""
     m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?", (v or "").strip())
@@ -68,10 +87,17 @@ def newer(latest: str, current: str) -> bool:
 
 
 def _asset_for(assets: list) -> dict | None:
-    """The release file this copy updates from: the setup for an installed copy, the zip for a portable one."""
-    end = "-setup.exe" if kind() == "installed" else "-portable.zip"
+    """The release file this copy updates from: its edition's setup for an installed copy, or zip for a portable one.
+    Lite's names end the way 0.1.x copies look for (Recap-Studio-Lite-0.2.0-setup.exe, -portable.zip), so those
+    stay Lite; Full Suite's don't (Recap-Studio-Full-Setup-0.2.0.exe, Recap-Studio-Full-Portable-0.2.0.zip). None
+    when the release has no file for this edition (it can still be downloaded from its page)."""
+    installed = kind() == "installed"
+    if edition() == "full":
+        pattern = r"Recap-Studio-Full-Setup-.+\.exe" if installed else r"Recap-Studio-Full-Portable-.+\.zip"
+    else:
+        pattern = r".+-setup\.exe" if installed else r".+-portable\.zip"
     for a in assets:
-        if a.get("name", "").endswith(end):
+        if re.fullmatch(pattern, a.get("name", "")):
             digest = a.get("digest") or ""
             return {"name": a["name"], "url": a["browser_download_url"], "size": int(a.get("size") or 0),
                     "sha256": digest[7:].lower() if digest.startswith("sha256:") else None}
@@ -91,7 +117,8 @@ def status() -> dict:
     _cleanup()
     s = store.global_settings()
     latest = _state["latest"]
-    return {**_state, "version": version(), "kind": kind(), "page": (latest or {}).get("url") or PAGE,
+    return {**_state, "version": version(), "kind": kind(), "edition": edition(), "edition_name": EDITIONS[edition()],
+            "label": label(), "page": (latest or {}).get("url") or PAGE,
             "check_updates": bool(s.get("check_updates", True)),
             "skipped": bool(latest and s.get("skip_version") == latest["version"])}
 
@@ -208,6 +235,24 @@ def _stage_portable(zip_file: Path):
                       str(script), "-AppPid", str(os.getpid()), "-Root", str(store.ROOT), "-New", str(app),
                       "-Log", str(store.DATA_ROOT / "update.log")],
                      creationflags=NO_WINDOW | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0), close_fds=True)
+
+
+LAUNCH = {"port": 0, "mode": "window"}  # how this copy was started (__main__), for restart()
+
+
+def restart() -> None:
+    """Start the app again, the way this copy was started (a new copy that waits for this one to close, on the same
+    port), then close this one. Plugins installed or switched since this copy started are loaded by the new one."""
+    cmd = [sys.executable, "-m", "recap"]
+    if LAUNCH["mode"] != "window":
+        cmd.append(f"--{LAUNCH['mode']}")
+    if LAUNCH["port"]:
+        cmd += ["--port", str(LAUNCH["port"])]
+    cmd += ["--after", str(os.getpid())]
+    subprocess.Popen(cmd, cwd=str(store.ROOT), env=os.environ.copy(), close_fds=True,
+                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    threading.Timer(0.8, _quit).start()  # (after the page has its answer)
 
 
 def _quit():

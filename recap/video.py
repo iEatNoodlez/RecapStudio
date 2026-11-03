@@ -400,6 +400,64 @@ class StripSegment:
         return {**self.__dict__, "cache": {}, "_bg": None, "_bg_idx": None}
 
 
+OVERLAYS: list = []  # plugins.Plugin.overlay: fn(settings) -> a picture laid over every frame, or None
+
+
+class Overlay:
+    """A plugin's picture laid over every frame (a channel's logo, say): fitted and placed once, then blended in.
+    spec: {"image": a picture file (PNG with transparency, or any picture), "where": "top-left", "top-right",
+    "bottom-left" or "bottom-right", "width": its width as a share of the frame's (0.12), "margin": the gap to the
+    edges as a share of the frame's shorter side (0.03), "opacity": 0 to 1 (1)}."""
+
+    def __init__(self, spec: dict, W: int, H: int):
+        img = cv2.imread(str(spec["image"]), cv2.IMREAD_UNCHANGED)
+        if img is None:
+            raise ValueError(f"{spec['image']} isn't a picture")
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        if img.shape[2] == 3:
+            img = np.dstack([img, np.full(img.shape[:2], 255, np.uint8)])
+        w = max(8, min(W, int(W * float(spec.get("width", 0.12)))))
+        h = max(1, min(H, round(img.shape[0] * w / img.shape[1])))
+        img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+        m = int(min(W, H) * float(spec.get("margin", 0.03)))
+        where = str(spec.get("where", "top-right"))
+        self.x = m if "left" in where else W - w - m
+        self.y = m if "top" in where else H - h - m
+        self.x, self.y = max(0, min(self.x, W - w)), max(0, min(self.y, H - h))
+        self.bgr = img[:, :, :3].astype(np.float32)
+        self.alpha = img[:, :, 3:4].astype(np.float32) / 255.0 * max(0.0, min(1.0, float(spec.get("opacity", 1.0))))
+
+    def draw(self, frame: np.ndarray) -> None:
+        h, w = self.bgr.shape[:2]
+        roi = frame[self.y:self.y + h, self.x:self.x + w]
+        roi[:] = (roi * (1.0 - self.alpha) + self.bgr * self.alpha).astype(np.uint8)
+
+
+def _overlay_specs(settings) -> list[dict]:
+    """What the plugins lay over the frames, for this project; one that fails is logged and left out."""
+    out = []
+    for fn in OVERLAYS:
+        try:
+            spec = fn(settings)
+        except Exception:
+            log.exception("A plugin's overlay failed")
+            continue
+        if spec and spec.get("image") and Path(spec["image"]).is_file():
+            out.append(spec)
+    return out
+
+
+def overlays_for(settings, W: int, H: int) -> list[Overlay]:
+    out = []
+    for spec in _overlay_specs(settings):
+        try:
+            out.append(Overlay(spec, W, H))
+        except Exception:
+            log.exception("A plugin's overlay couldn't be read")
+    return out
+
+
 class _Timeline:
     """Which segment is on screen at each frame, with crossfades between segments.
     A frame's picture depends only on its number, so any process can draw any frame."""
@@ -412,6 +470,7 @@ class _Timeline:
         self.frames = int(float(sum(self.durations)) * fps)
         self._released = 0  # segments before this one have had their images freed
         self.captions = None  # captions.Captions drawn over the frames, when the project has them
+        self.overlays = []  # plugins' pictures over every frame (Overlay)
 
     def draw(self, f: int, out: np.ndarray, spare: np.ndarray) -> np.ndarray:
         """Frame f drawn into out; spare holds the previous segment's picture during a crossfade."""
@@ -429,6 +488,8 @@ class _Timeline:
         if self.fade and (f < self.fade or f >= self.frames - self.fade):
             k = min(1.0, (f + 0.5) / self.fade, (self.frames - f - 0.5) / self.fade)
             cv2.convertScaleAbs(frame, dst=frame, alpha=_ease(max(0.0, k)))
+        for overlay in self.overlays:
+            overlay.draw(frame)
         if self.captions:
             self.captions.draw(frame, t)
         return frame
@@ -784,6 +845,8 @@ def piece_signature(items, settings, encoder_args) -> str:
     look = [frame_size(settings), int(settings["fps"]), float(settings["transition_seconds"]),
             float(settings["pad_seconds"]), float(settings["min_panel_seconds"]), scene_motion(settings)]
     look += captions.signature(settings)  # (nothing when they're off: pieces made before stay the same)
+    look += [[_stat(s["image"]), {k: v for k, v in s.items() if k != "image"}]
+             for s in _overlay_specs(settings)]  # plugins' pictures over the frames (none: the same as before)
     blob = json.dumps([PIECE_VERSION, look, list(encoder_args), content], default=str)
     return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
@@ -827,10 +890,13 @@ def render_piece(items, base: Path, settings, encoder_args, workers, progress=No
             if text.strip():
                 subs.append([round(st + at, 3), round(st + at + len(a) / SAMPLE_RATE, 3), text.strip()])
                 if style:
-                    pages += captions.pages(captions.words(text, a, SAMPLE_RATE, file), style, st + at)
+                    pages += captions.pages(captions.words(text, a, SAMPLE_RATE, file,
+                                                           listen=settings.get("captions_listen", True)),
+                                            style, st + at)
         seg.events = []
     if pages:
         timeline.captions = captions.Captions(captions.track(pages), settings, W, H)
+    timeline.overlays = overlays_for(settings, W, H)
     np.clip(track, -1, 1, out=track)
     tmp = {k: _piece_file(base, f"part.{k}") for k in ("mp4", "wav", "json")}
     base.parent.mkdir(parents=True, exist_ok=True)
@@ -895,7 +961,8 @@ def render_chapters(chapters, split, out_dir: Path, cache_dir: Path, settings, p
     [(file stem, [chapter indexes])] decides the parts from the chapters' exact lengths, and each part
     is joined into out_dir: <stem>.mp4, <stem>.srt, <stem>.wav and "<stem> - YouTube chapters.txt".
     music(seconds) -> (concat list, volume) puts background music under each part (see music.py).
-    between() runs before each chapter (Pause takes effect there); status(note) says what's happening.
+    between() runs before each chapter and each part's join (Pause takes effect there); status(note) says what's
+    happening.
     progress(fraction) shares the bar between drawing and joining by how long each should take: join_cost
     is how long joining a second of video takes, as a share of drawing one.
     Returns {"parts": [...], "made": n, "reused": n, "joined": seconds of video joined, "join_time": seconds}."""
@@ -949,6 +1016,8 @@ def render_chapters(chapters, split, out_dir: Path, cache_dir: Path, settings, p
     whole = sum(seconds) or 1.0
     outs, joined, started = [], 0.0, time.monotonic()
     for n, (stem, idx) in enumerate(parts, 1):
+        if between:  # (a pause asked for during the last chapter takes effect here, before the join)
+            between()
         if status:
             status(f"{how}; joining {'the chapters' if len(parts) == 1 else f'part {n} of {len(parts)}'}")
         j0, span = joined, sum(seconds[i] for i in idx)

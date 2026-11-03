@@ -15,7 +15,7 @@ import sys
 import traceback
 from pathlib import Path
 
-CALLS = {"search", "browse", "series", "pages"}
+CALLS = {"search", "browse", "series", "pages", "characters"}
 
 
 def main():

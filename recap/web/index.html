@@ -21,6 +21,7 @@
     <button id="open-global" class="ghost global-btn open-global">⚙ Settings</button>
     <label class="mode-switch" title="Advanced mode shows every step, setting and tool"><input type="checkbox" id="advanced-mode"> Advanced mode</label>
     <div id="env" class="adv"></div>
+    <div id="app-label" class="app-label"></div>
   </div>
 </aside>
 
@@ -89,7 +90,7 @@
       <div id="dropzone" class="dropzone">
         <button id="import-folder">Import folder…</button>
         <button id="get-chapters" class="ghost">Get chapters from a site…</button>
-        <span class="muted">or drop images, .zip or .cbz files anywhere here, or</span>
+        <span class="muted" id="drop-words">or drop images, .zip or .cbz files anywhere here, or</span>
         <label class="link">browse<input id="file-input" type="file" multiple accept="image/*,.zip,.cbz" hidden></label>
         <span id="page-count" class="muted"></span>
       </div>
@@ -509,6 +510,16 @@
         </div>
         <div id="bubbles-error" class="error"></div>
       </fieldset>
+      <fieldset id="plugins-box">
+        <legend>Plugins</legend>
+        <span class="hint">Plugins add features to Recap Studio. They only come from Recap Studio's own plugin list, made alongside the app, and run inside it. Installing, switching on or off and removing take effect the next time Recap Studio starts.</span>
+        <div id="plg-restart" class="key-row" hidden><span class="hint warn">Restart Recap Studio to use the changes.</span><button type="button" id="plg-restart-go" class="ghost small">Restart now</button></div>
+        <div id="plg-installed" class="src-plugins"></div>
+        <span class="field-head">Recap Studio's plugins</span>
+        <div id="plg-available" class="src-plugins"></div>
+        <div class="key-row"><button type="button" id="plg-show" class="ghost small">Show the plugins</button></div>
+        <div id="plg-error" class="error"></div>
+      </fieldset>
       <fieldset id="sources-box">
         <legend>Sources (getting chapters from sites)</legend>
         <span class="hint">Recap Studio comes with no scrapers and no links to any. Bring your own: a plugin (a Python file for a site, from a file or a plugin list someone shares), gallery-dl, or a Suwayomi server with its extensions. Then a project's Chapters tab has Get chapters from a site.</span>
@@ -624,6 +635,7 @@
       <fieldset id="update-box">
         <legend>Updates</legend>
         <span id="update-info" class="hint"></span>
+        <span id="update-edition" class="hint" hidden>Full Suite is this app with Recap Studio's plugins built in. To switch, install its file from the release page over this copy: your projects and settings stay.</span>
         <label class="check"><input data-key="check_updates" type="checkbox"> Check GitHub for a new version when the app starts</label>
         <span class="update-actions">
           <button type="button" id="update-check" class="ghost small">Check now</button>

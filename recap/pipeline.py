@@ -17,7 +17,7 @@ import soundfile as sf
 import anthropic
 
 from . import (bubbles, captions, charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, music,
-               naming, ocr, sources,
+               naming, ocr, plugins, sources,
                online_voices, panels, scenes, package, script, store, textless, translate, tts, typeset, video,
                voiceover, wording, youtube)
 
@@ -97,6 +97,24 @@ def _worker():
         except Exception as e:  # report any failure to the UI
             traceback.print_exc()
             job.update(status="error", error=str(e), message=f"{STEP_LABELS.get(job['step'], '')} failed")
+        plugins.emit("job_done", job=public(job))
+
+
+def register_step(name: str, label: str, runner) -> None:
+    """A step a feature plugin adds (plugins.Plugin.step): run on its own, like the extra steps."""
+    if name in STEP_LABELS:
+        raise ValueError(f"There's already a step called {name}")
+    STEP_LABELS[name] = label
+    EXTRA_STEPS.append(name)
+    RUNNERS[name] = runner
+
+
+def unregister_step(name: str) -> None:
+    """Take back a plugin's step (its setup failed after adding it)."""
+    STEP_LABELS.pop(name, None)
+    RUNNERS.pop(name, None)
+    if name in EXTRA_STEPS:
+        EXTRA_STEPS.remove(name)
 
 
 def start_worker():
@@ -463,7 +481,7 @@ def run_ocr(job):
     english = ocr.use_english(s)  # the English model, when downloaded and switched on
     lang = ocr.language(s)  # a raw comic: each bubble kept with its box and original text, for Translate
     if lang != "en" and targets:
-        _cjk_reader(job)
+        _reader_ready(job, lang)
     kind, joiner, rtl = ocr.model_for(s), "" if lang in ("zh", "ja") else " ", s.get("reading_direction") == "rtl"
 
     def read(panel):
@@ -472,7 +490,7 @@ def run_ocr(job):
             return None
         if lang == "en":
             return ocr.read_text(img, use_gpu=use_gpu, english=english)
-        return ocr.read_bubbles(img, kind, joiner, rtl, use_gpu=use_gpu)
+        return ocr.put_right(ocr.read_bubbles(img, kind, joiner, rtl, use_gpu=use_gpu), lang)
 
     for i, (panel, text) in enumerate(_in_parallel(job, targets, read, _workers(s, "ocr"))):
         if text is None:
@@ -495,6 +513,16 @@ def run_ocr(job):
     if magi_chapters:
         _run_magi(job, pid, magi_chapters)
     _leave_out_credits(job, pid, list({x["chapter"] for x in targets}))  # the text can find more of them
+
+
+def _reader_ready(job, lang):
+    """A raw comic's reader, there before reading: the CJK one (downloaded when it isn't yet), or a plugin's."""
+    if lang in ocr.READERS:
+        ready = ocr.READERS[lang].get("ready")
+        if ready:
+            ready(job)
+        return
+    _cjk_reader(job)
 
 
 def _cjk_reader(job):
@@ -611,8 +639,12 @@ def _leave_out_credits(job, pid, chapter_ids, always=False) -> str:
     hit = sum(1 for ids in found.values() if ids)
     note = (f"Left out {result['n']} pieces at the start or end of {hit} chapter{'s' if hit != 1 else ''} "
             "(the scan group's credits, notices and ads)" if result["n"] else "")
+    # (it counts what's left out now: a second look in the same job, after Read text, replaces the first's note)
+    old = job.pop("credits_note", None)
+    if note or old:
+        job["note"] = ". ".join([x for x in (job.get("note") or "").split(". ") if x and x != old] + [note] * bool(note))
     if note:
-        job["note"] = ". ".join(x for x in (job.get("note"), note) if x)
+        job["credits_note"] = note
     return note
 
 
@@ -1559,6 +1591,7 @@ def _video_plan(job, p, d, chapters, doing):
             job["message"] = f"{doing}: {what}, {name} ({done}/{total})"
             _check(job)
         items, planned = video_items(p, d, chapter, recover=lambda c: recover_strip_positions(p, c), prepare=prepare)
+        items = _plugin_scenes(p, chapter, items)
         if not planned:
             not_scrolling.append(chapter["name"])
         if items:
@@ -1573,6 +1606,23 @@ def _video_plan(job, p, d, chapters, doing):
     if p["settings"].get("youtube_safe") and len(chapters) == len(p["chapters"]):
         cover.prune(d, [it for ch in plan for it in ch["items"]])
     return plan, not_scrolling
+
+
+SCENE_HOOKS: list = []  # plugins.Plugin.scenes: fn(project, chapter, items) -> the items to render
+
+
+def _plugin_scenes(p, chapter, items):
+    """The chapter's scenes as the plugins want them (order, length, what's shown), before drawing; one that
+    fails is logged and left out."""
+    for fn in SCENE_HOOKS:
+        try:
+            changed = fn(p, chapter, items)
+        except Exception:
+            traceback.print_exc()
+            continue
+        if changed is not None:
+            items = changed
+    return items
 
 
 def run_video(job):
@@ -1618,6 +1668,7 @@ def run_video(job):
                        "first": o["first"], "last": o["last"]} for o in outs],
             "shorts": [f"output/shorts/{x.name}" for x in shorts]}
     store.update(pid, apply)
+    plugins.emit("video_rendered", project=store.load(pid), parts=[o["video"] for o in outs], shorts=shorts)
     notes = []
     if result["reused"]:
         notes.append(f"Reused {result['reused']} chapter{'s' if result['reused'] != 1 else ''} already rendered, "
@@ -1635,7 +1686,7 @@ def run_video(job):
     if not_scrolling:
         notes.append("Shown as scenes instead of scrolling (detect panels again to scroll): "
                      + ", ".join(not_scrolling[:5]) + (" …" if len(not_scrolling) > 5 else ""))
-    job["note"] = ". ".join(notes)
+    _add_note(job, ". ".join(notes))  # (after the notes of Make the recap's earlier steps)
 
 
 def run_editors(job):
@@ -1744,10 +1795,12 @@ def _to_write(project, chapters, missing=True) -> list[str]:
 def characters_to_scan(project, chapters, missing=True) -> list[str]:
     """What Finding characters scans: in a project never scanned and with no named characters, the chapters
     whose script is about to be written (the first SCAN_FIRST, or all as its settings say). Nothing otherwise
-    (Scan again is in the Characters tab), or when it's turned off."""
+    (Scan again is in the Characters tab), or when it's turned off. Characters a plugin preloaded (with a source,
+    such as AniList through Find the series) don't count: the scan's groups are matched to them, by their pictures
+    and by the writer's names."""
     s = project["settings"]
     if (not s.get("find_characters", True) or project.get("scan")
-            or any((c.get("name") or "").strip() for c in project["characters"])):
+            or any((c.get("name") or "").strip() and not c.get("source") for c in project["characters"])):
         return []
     todo = _to_write(project, chapters, missing)
     return todo if s.get("characters_chapters") == "all" else todo[:SCAN_FIRST]

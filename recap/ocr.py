@@ -9,6 +9,7 @@ instead: its text finder, which also finds vertical lines, and a reader for Chin
 traditional), Japanese and English, or one for Korean. Each speech bubble is kept with its box (read_bubbles),
 for translate.py to translate and typeset.py to put the English in its place.
 """
+import logging
 import re
 import threading
 
@@ -44,17 +45,25 @@ CJK = addon.Download(store.ADDONS_DIR / "ocr_cjk", {
 })
 
 
+# Languages plugins add (plugins.Plugin.language): code -> {"args": fn() -> the reader's RapidOCR arguments, or
+# None to read with the built-in reader; "ready": fn(job) that makes sure its models are there; "fix": fn(text)
+# -> a bubble's text put right, or None}
+READERS: dict = {}
+
+
 def language(settings: dict) -> str:
-    """The project's language: "en", "ko", "zh" or "ja"."""
+    """The project's language: "en", "ko", "zh" or "ja", or one a plugin added."""
     return settings.get("language") if settings.get("language") in LANGUAGES else "en"
 
 
 def model_for(settings: dict) -> str:
-    """Which reader a project's text is read with: "ko", "cjk" (Chinese and Japanese), "en" (the English model,
-    when downloaded and switched on) or "built-in"."""
+    """Which reader a project's text is read with: "ko", "cjk" (Chinese and Japanese), "lang:<code>" (a plugin's
+    language with a reader of its own), "en" (the English model, when downloaded and switched on) or "built-in"."""
     lang = language(settings)
     if lang in ("ko", "zh", "ja"):
         return "ko" if lang == "ko" else "cjk"
+    if lang in READERS:
+        return f"lang:{lang}" if READERS[lang].get("args") else "built-in"
     return "en" if use_english(settings) else "built-in"
 
 
@@ -69,9 +78,19 @@ def _keys(name: str):
     return out
 
 
+# RapidOCR's check for upside-down lines (use_cls) is off: lettering is hardly ever upside down, and the check turned
+# real lines over and read them as garble ("NO" as "ON", "HOW" as "MOH", Korean as Latin scraps). On real chapters
+# it changed or lost 3-6% of the English readers' lines and 16% of the Korean reader's, nearly all for the worse (it
+# was right on a handful: a phone screen drawn upside down). Chinese and Japanese keep it until a real raw is tried
+# (their vertical columns are read turned a quarter, and the check may matter there); a plugin's reader can ask for it
+UPRIGHT = {"use_cls": False}
+
+
 def _model_args(kind: str) -> dict:
     if kind == "en" and ENGLISH.installed():
-        return {"rec_model_path": str(ENGLISH.path("en_rec.onnx"))}
+        return {"rec_model_path": str(ENGLISH.path("en_rec.onnx")), **UPRIGHT}
+    if kind.startswith("lang:"):  # a plugin's reader (every line kept, as for the CJK readers)
+        return {"text_score": 0.0, **UPRIGHT, **READERS[kind[5:]]["args"]()}
     if kind in ("ko", "cjk"):
         if not CJK.installed():
             raise RuntimeError("The Korean, Chinese and Japanese text reader isn't downloaded yet")
@@ -79,13 +98,15 @@ def _model_args(kind: str) -> dict:
         # every line found is kept (read_bubbles decides): one read unsurely still marks where text is, for the
         # translator (who also sees the picture) and for the English to cover it
         return {"det_model_path": str(CJK.path("det.onnx")), "rec_model_path": str(CJK.path(f"{rec}.onnx")),
-                "rec_keys_path": str(_keys(rec)), "text_score": 0.0}
-    return {}
+                "rec_keys_path": str(_keys(rec)), "text_score": 0.0, **(UPRIGHT if kind == "ko" else {})}
+    return dict(UPRIGHT)
 
 # a thin piece (a line of lettering: a title, "To be continued") is read with a margin around it: words
 # touching its edges came out as "0 e e 0". On 90 such pieces the margin read 3 more words of dialogue
 # and every card right; on taller pieces it was a wash, so they're read as they are
 THIN, PAD = 0.3, 24    # height under this share of the width; margin in pixels
+OVERLAP = 200          # a tall strip's chunks overlap this much (read_lines)
+EDGE = 12              # a line this close to a chunk's edge is cut by it (a cut word's box ended 7 px short)
 
 _engine = None       # the most recently built engine (for status)
 device = "CPU"       # what it actually runs on
@@ -123,36 +144,59 @@ def _get(use_gpu: bool | None = None, kind: str | None = None):
                 want, engine = False, RapidOCR(**extra)
             _local.engine, _local.gpu, _local.kind = engine, bool(use_gpu), kind
             _engine, device = engine, gpu.device_of(engine.text_det.infer.session) if want else "CPU"
-            model = MODEL_NAMES[kind]
+            model = MODEL_NAMES.get(kind) or LANGUAGES.get(kind[5:], kind)  # (a plugin's reader: its language)
     return engine
 
 
 def read_lines(img_bgr: np.ndarray, min_score: float = 0.6, use_gpu: bool = True,
                english: bool | None = None, kind: str | None = None) -> list[tuple]:
     """Text line boxes (x0, y0, x1, y1, text) in an image, read with the English model (english) or the given
-    kind of reader (model_for). Very tall strips are read in overlapping chunks so their text isn't shrunk away."""
+    kind of reader (model_for). Very tall strips are read in overlapping chunks so their text isn't shrunk away:
+    a line a chunk's edge cuts through is taken from the chunk it's whole in (cut, its top half was read as
+    other words, "DE CIEDTA FODMA" over "DE CIERTA FORMA"), and one read whole by both chunks once."""
     kind = kind or ("en" if english else "built-in")
     h, w = img_bgr.shape[:2]
     chunk = max(w * 2, 1600)
     out, y = [], 0
     while y < h:
+        before = len(out)  # (the lines the chunks before read: one of this chunk's may be one of them)
         part = img_bgr[y:min(h, y + chunk)]
-        pad = PAD if part.shape[0] < THIN * w else 0
+        tall = part.shape[0]
+        above, below = y > 0, y + chunk < h  # (edges the chunk before or after reads across)
+        pad = PAD if tall < THIN * w else 0
         if pad:
             part = cv2.copyMakeBorder(part, pad, pad, pad, pad, cv2.BORDER_REPLICATE)
         result, _ = _get(use_gpu, kind)(part)
         for box, text, score in result or []:
             if float(score) < min_score or not text.strip():
                 continue
+            top, bottom = min(p[1] for p in box) - pad, max(p[1] for p in box) - pad
+            if (above and top <= EDGE and bottom < OVERLAP - EDGE  # (the chunk before has it whole)
+                    or below and bottom >= tall - EDGE and top > tall - OVERLAP + EDGE):  # (the one after)
+                continue
             xs = [min(w, max(0, p[0] - pad)) for p in box]
             ys = [min(h, max(0, p[1] - pad + y)) for p in box]
             line = (min(xs), min(ys), max(xs), max(ys), text.strip())
-            if not any(abs(line[1] - o[1]) < 6 and abs(line[0] - o[0]) < 6 for o in out):  # chunk overlap
+            same = next((i for i in range(before) if _overlap(line, out[i]) > 0.6), None)  # (read by both chunks)
+            if same is None:
                 out.append(line)
+            elif _area(line) > _area(out[same]):  # (the whole of it, not the piece of it the other chunk had)
+                out[same] = line
         if y + chunk >= h:
             break
-        y += chunk - 200
+        y += chunk - OVERLAP
     return out
+
+
+def _area(a) -> float:
+    return (a[2] - a[0]) * (a[3] - a[1])
+
+
+def _overlap(a, b) -> float:
+    """How much two line boxes overlap: the shared area's share of the smaller one."""
+    w, h = min(a[2], b[2]) - max(a[0], b[0]), min(a[3], b[3]) - max(a[1], b[1])
+    smaller = min(_area(a), _area(b))
+    return w * h / smaller if w > 0 and h > 0 and smaller > 0 else 0.0
 
 
 def _same_row(a, b) -> bool:
@@ -255,6 +299,17 @@ def read_bubbles(img_bgr: np.ndarray, kind: str, joiner: str, rtl: bool = False,
     for Chinese and Japanese, " " for Korean. Lines read unsurely are kept (min_score is low): Korean's reader
     read a clear "시작해요?" as "8워" (0.26), and left out, the line would show under the English."""
     return _ordered(read_lines(img_bgr, min_score, use_gpu, kind=kind), joiner, rtl, vertical_text=True)
+
+
+def put_right(bubbles: list[dict], lang: str) -> list[dict]:
+    """What a plugin's language puts right in the text read, the same mistake each time (READERS' "fix")."""
+    fix = (READERS.get(lang) or {}).get("fix")
+    for b in bubbles if fix else []:
+        try:
+            b["text"] = fix(b["text"])
+        except Exception:
+            logging.getLogger("recap.plugins").exception("A language's fix failed")
+    return bubbles
 
 
 _DIGIT_LOOKALIKES = str.maketrans({"5": "S", "0": "O"})

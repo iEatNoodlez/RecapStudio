@@ -1,5 +1,8 @@
 ; Recap Studio's installer (Inno Setup 6), compiled by packaging\build.ps1 from dist\Recap Studio:
-;   ISCC /DAppVersion=1.0.0 "/DAppDir=<dist\Recap Studio>" "/DOutputDir=<dist>" packaging\installer.iss
+;   ISCC /DAppVersion=1.0.0 /DEdition=lite /DOutputBase=Recap-Studio-Lite-1.0.0-setup "/DAppDir=<dist\Recap Studio>"
+;        "/DOutputDir=<dist>" packaging\installer.iss
+; Lite and Full Suite share its app id, folders and data, so installing one over the other switches edition and
+; keeps every project and setting. Only the welcome page's "Recap Studio Lite 1.0.0" and the file's name differ.
 ; It installs into Program Files for everyone (admin rights), or, if you choose "for me only" at the start, into
 ; %LOCALAPPDATA%\Programs without them. The app never writes to its own folder: settings go in %APPDATA%,
 ; models and add-ons in %LOCALAPPDATA%, projects in Documents\Recap Studio (recap\paths.py), so updates and
@@ -14,12 +17,25 @@
 #ifndef OutputDir
   #define OutputDir "..\dist"
 #endif
+#ifndef Edition
+  #define Edition "lite"
+#endif
+#if Edition == "full"
+  #define EditionName "Full Suite"
+  #define DefaultOutput "Recap-Studio-Full-Setup-" + AppVersion
+#else
+  #define EditionName "Lite"
+  #define DefaultOutput "Recap-Studio-Lite-" + AppVersion + "-setup"
+#endif
+#ifndef OutputBase
+  #define OutputBase DefaultOutput
+#endif
 
 [Setup]
 AppId={{7EEC7A0E-13A0-4CC7-8AE4-EC5217C2A4C0}
 AppName=Recap Studio
 AppVersion={#AppVersion}
-AppVerName=Recap Studio {#AppVersion}
+AppVerName=Recap Studio {#EditionName} {#AppVersion}
 AppPublisher=Recap Studio
 AppPublisherURL=https://github.com/iEatNoodlez/RecapStudio
 AppSupportURL=https://github.com/iEatNoodlez/RecapStudio/issues
@@ -31,7 +47,7 @@ PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
-OutputBaseFilename=Recap-Studio-{#AppVersion}-setup
+OutputBaseFilename={#OutputBase}
 SetupIconFile=launcher\icon.ico
 UninstallDisplayIcon={app}\Recap Studio.exe
 UninstallDisplayName=Recap Studio
@@ -48,6 +64,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Type: filesandordirs; Name: "{app}\python"
 Type: filesandordirs; Name: "{app}\recap"
 Type: filesandordirs; Name: "{app}\.claude\skills\recap-studio-narration"
+; Full Suite's plugins: Lite installed over Full Suite takes them out, and Full Suite puts its own back (plugins
+; installed from the list are in the data folder, and stay)
+Type: filesandordirs; Name: "{app}\plugins"
 
 [Files]
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

@@ -142,7 +142,7 @@ Posts a project's video to your YouTube channel, and its Shorts if you like: whe
 - **Thumbnails:** YouTube takes custom thumbnails only from a verified channel; otherwise the video is posted and the job says the thumbnail wasn't set.
 - **YouTube-safe projects:** post them as Private, set the age restriction in YouTube Studio, then publish.
 - **The age restriction** can't be set through YouTube's API (its field can be read, not set): set it in YouTube Studio.
-- **Tested with a stand-in, not Google.** The sign-in, the uploads, subtitles, playlists, the quota and errors were tested against a stand-in for Google's services on this PC; posting to a real channel is still to try.
+- **How far it's been tried:** on a real channel, the setup in the wiki, connecting, and posting a video with its custom thumbnail. Subtitles, playlists, Shorts, the quota and errors were tested against a stand-in for Google's services on this PC.
 
 ## Recaps in Spanish
 

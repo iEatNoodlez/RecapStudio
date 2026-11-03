@@ -415,6 +415,8 @@ body:not(.advanced) .adv { display: none !important; }
 body.advanced .sim { display: none !important; }
 
 .side-foot { display: flex; flex-direction: column; gap: 8px; }
+.app-label { font-size: 12px; color: var(--muted); padding: 0 2px; }
+.app-label:empty { display: none; }
 .update-btn { background: var(--accent); color: var(--accent-text); border-color: var(--accent); text-align: left; }
 .update-btn:disabled { opacity: 1; cursor: default; }
 #update-box .update-actions, #storage-box .storage-actions { display: flex; gap: 14px; align-items: center; }
@@ -502,6 +504,9 @@ body:not(.advanced) .hint.long:not(.open) {
 .src-plugins, .src-repos { display: flex; flex-direction: column; gap: 4px; }
 .src-plugin { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
 .src-plugin .muted, .src-plugin .error { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Settings → Plugins: a plugin's summary on a line of its own, whole */
+#plugins-box .src-plugin { grid-template-columns: 1fr auto; row-gap: 2px; padding-bottom: 4px; }
+#plugins-box .src-plugin > :nth-child(2) { grid-row: 2; grid-column: 1 / -1; white-space: normal; }
 .src-repo { display: flex; gap: 6px; align-items: center; font-size: 13px; }
 .src-repo-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .src-repo-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px 12px; }

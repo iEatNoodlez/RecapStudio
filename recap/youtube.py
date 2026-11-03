@@ -30,7 +30,7 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
-from . import charscan, cloud, cover, naming, ocr, panels, store
+from . import charscan, cloud, cover, naming, ocr, panels, script, store
 
 log = logging.getLogger(__name__)
 
@@ -116,6 +116,9 @@ This recap is an age-restricted video of an adult comic, kept within YouTube's r
 suggestive in the title, the other titles or the thumbnail's words."""
 
 
+EXTRA: list = []  # plugins.Plugin.title_instructions: fn(settings) -> more instructions for the title
+
+
 def suggest(project: dict, ask=None) -> dict:
     """Ask the script's writer (ask(instructions, blocks) -> answer, for one that isn't asked here: Claude Code's
     TitleAsker). Returns {"title", "alternatives", "text", "pictures", "panel" (the first), "marks",
@@ -126,7 +129,8 @@ def suggest(project: dict, ask=None) -> dict:
         raise RuntimeError("There's nothing narrated to choose a picture from: write the script first.")
     max_images = _max_images(s)
     shown = cands if not max_images else cands[:max_images * COLS * ROWS]
-    instructions = INSTRUCTIONS + (SAFE if s.get("youtube_safe") else "")
+    instructions = "\n\n".join([INSTRUCTIONS + (SAFE if s.get("youtube_safe") else ""),
+                                *script.extra_instructions(EXTRA, s)])  # plugins' (the language, say)
     data = ask(instructions, _content(project, shown)) if ask else naming._ask(
         s, instructions, _content(project, shown), SCHEMA, "recap_title")
     missing = problem(data)
@@ -134,8 +138,8 @@ def suggest(project: dict, ask=None) -> dict:
         raise RuntimeError(f"{naming.writer_label(s)} answered without {missing}")
     number = {k + 1: x["id"] for k, x in enumerate(shown)}
     pictures = [number[k] for k in dict.fromkeys(data["pictures"]) if k in number][:2] or [shown[0]["id"]]
-    title = _clean(data["title"])
-    return {"title": title, "alternatives": [a for a in dict.fromkeys(_clean(a) for a in data["alternatives"])
+    title = _title(data["title"])
+    return {"title": title, "alternatives": [a for a in dict.fromkeys(_title(a) for a in data["alternatives"])
                                              if a and a != title][:4],
             "text": _clean(data["thumbnail_text"])[:60], "pictures": pictures, "panel": pictures[0],
             "marks": tidy_marks([{**m, "picture": number.get(m.get("picture"))} for m in data["marks"]], pictures),
@@ -176,8 +180,30 @@ def tidy_marks(marks, pictures) -> list[dict]:
     return out
 
 
+def _text(text) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip().strip('"“”').strip()
+
+
 def _clean(text) -> str:
-    return re.sub(r"\s+", " ", str(text or "")).strip().strip('"“”').strip()[:100]
+    return _text(text)[:100]
+
+
+def _title(text) -> str:
+    """A title within YouTube's 100 characters, never ending in a cut word or a cut "| Manga Recap": a longer
+    ending (the Spanish "| Resumen de manga") can take it past 100, and a plain cut left "…| Resumen de m"."""
+    return fit_title(_text(text))
+
+
+def fit_title(title: str, room: int = 100) -> str:
+    """The title cut to fit in room characters: the "| … Recap" ending left out if it's what doesn't fit, else cut
+    after a whole word."""
+    if len(title) <= room:
+        return title
+    bar = title.rfind("|")
+    if 0 < bar <= room and len(title) - bar <= 30:  # (the ending, not a long second half)
+        return title[:bar].rstrip(" -–—:|")
+    space = title.rfind(" ", 0, room + 1)
+    return title[:space if space > 0 else room].rstrip(" ,;:-–—|")
 
 
 def _max_images(s):

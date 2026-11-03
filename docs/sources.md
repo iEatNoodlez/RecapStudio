@@ -1,6 +1,6 @@
 # Getting chapters from sites
 
-Recap Studio comes with no scrapers and no links to any site. Members bring their own source. It can be a plugin (a Python file for one site), [gallery-dl](#gallery-dl), or a [Suwayomi](#suwayomi) server running Mihon/Tachiyomi extensions. With one set up, a project's **Chapters** tab has **Get chapters from a site…**, and a project made that way can **Check for new chapters**.
+Recap Studio comes with no scrapers and no links to any site's chapters. Members bring their own source. It can be a plugin (a Python file for one site), [gallery-dl](#gallery-dl), or a [Suwayomi](#suwayomi) server running Mihon/Tachiyomi extensions. With one set up, a project's **Chapters** tab has **Get chapters from a site…**, and a project made that way can **Check for new chapters**.
 
 > A plugin is a program. It runs on your PC with your permissions, so it can read and change your files. Add only plugins from people you trust, and only get chapters you're allowed to.
 
@@ -10,6 +10,7 @@ Everything is in **Settings → Sources**:
 
 - **Add plugin file…** takes a plugin's `.py` file and copies it into `data\plugins`. The app reads its name, sites and lists from the file without running it, and refuses a file that isn't a plugin, saying why. A plugin with the same file name is replaced. Each plugin can be switched off or removed, and what it prints goes to `data\plugins\<plugin>.log`.
 - **Plugin lists**: paste a link to a list someone shares (an `index.json`, see [below](#plugin-lists)) and **Add list**. **Plugins…** shows what's on it, with **Install** and, when the list has a newer version than yours, **Update**. Each file is checked against the list's checksum before it's installed.
+- **Recap Studio's own list** is in **Settings → Plugins** ([Plugins](plugins.md)). It has no scrapers: its sources give series' details and characters from services with public APIs, such as **AniList**, for [Find the series](plugins.md#find-the-series). Those are listed here as "series details, no chapters" and don't appear in Get chapters.
 - **gallery-dl**: found on PATH, or give its program's path.
 - **Suwayomi**: the server's address (`http://127.0.0.1:4567` by default). Its installed sources show up in Get chapters.
 - **Check projects for new chapters when the app starts**: each project made from a source is checked, and the sidebar shows how many new chapters it has.
@@ -42,15 +43,19 @@ The settings are plain values at the top of the file, read without running it:
 | `LISTS` | The lists `browse()` gives, like `[{"id": "popular", "name": "Popular"}]`. |
 | `HEADERS` | Sent with every picture the app downloads for it (and covers), like `{"Referer": "https://example.com/"}`. |
 | `DELAY` | Seconds to wait between pictures, for sites that limit how fast you ask: pictures then come one at a time. |
+| `CHAPTERS = False` | For a source of series' details only (no chapters): `pages()` isn't needed, it doesn't open links in Get chapters, and Find the series uses its `search()` and `characters()`. |
 
 The functions get and return plain data (dicts, lists, text, numbers). Raise an exception with a readable message when something's wrong: the app shows it.
 
 | Function | Gets | Returns |
 |---|---|---|
 | `series(url)` (required) | A series' link (from a pasted link or a search or list result). | `{"title", "cover", "summary", "chapters": [{"url", "name", "number", "date"}]}`. Only `title` and each chapter's `url` are required. Chapters are sorted by `number` when every one has one, else kept in the order given (first chapter first). |
-| `pages(chapter_url)` (required) | A chapter's `url`. | Its pictures in reading order: links, or `{"url", "headers"}` for a picture that needs headers of its own. Relative links are taken from the chapter's page. |
+| `pages(chapter_url)` (required unless `CHAPTERS = False`) | A chapter's `url`. | Its pictures in reading order: links, or `{"url", "headers"}` for a picture that needs headers of its own. Relative links are taken from the chapter's page. |
 | `search(query, page)` | The title typed, and the page of results (from 1). | `{"items": [{"url", "title", "cover", "summary"}], "more": True when there's another page}` (or just the list of items). |
 | `browse(list_id, page)` | One of `LISTS`' ids, and the page. | The same as `search()`. |
+| `characters(url)` | A series' link. | Its characters, main ones first: `[{"name", "aliases", "gender", "role", "description", "picture"}]`. Only `name` is required. `aliases` is a list of other names, `gender` is `"female"`, `"male"` or empty, `role` is `"main"`, `"supporting"` or `"background"`, and `picture` is a link. Find the series offers them for the project's character list. |
+
+`series()`, `search()` and `browse()` results may also say what kind of comic a series is (`"kind"`: `"manga"`, `"webtoon"` or `"comic"`) and the year it started (`"year"`). Find the series sets the new project's kind from it.
 
 Each plugin runs in a process of its own, started the first time it's used and kept while the app runs (a new version replaces it). A call that takes more than 90 seconds stops it. What a plugin prints goes to its log, not to the app.
 
@@ -70,6 +75,8 @@ A plugin list is a JSON file anyone can host (a GitHub repository's raw files wo
 ```
 
 `file` is relative to the list's link (or a full link). `sha256` is required: a file that doesn't match isn't installed. In PowerShell, `(Get-FileHash example.py).Hash.ToLower()` gives it. The plugin is saved as `<id>.py`.
+
+Entries with `"kind": "feature"` are [feature plugins](plugins.md). Only Recap Studio's own list installs them; on any other list they aren't shown.
 
 ## gallery-dl
 
@@ -101,5 +108,5 @@ A plugin list is a JSON file anyone can host (a GitHub repository's raw files wo
 
 - Sites that need a login or a browser to get past their protection work only as far as the plugin (or gallery-dl, or the Suwayomi extension) handles it.
 - Suwayomi's search filters (genres, status and the like) and its extensions' own settings stay in Suwayomi: the app searches by title only.
-- New chapters are found when the app starts or when you check, not on a schedule; and found chapters aren't recapped on their own: **Make the recap** does them.
+- New chapters are found when the app starts or when you check. To check on a schedule, and get and recap them on their own, install **New chapters on a schedule** from Recap Studio's plugin list ([Plugins](plugins.md#new-chapters-on-a-schedule)).
 - The phone page can't get chapters or add plugins (installing code from a phone is left to the PC).

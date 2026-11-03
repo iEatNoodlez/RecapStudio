@@ -23,7 +23,7 @@ editors, the **Prompt** and **Project settings** tabs, the text read from each s
 selected scenes, and the rest of Settings (performance, text reading, the add-ons, Magi, the finer video options).
 In simple mode, long help text shows two lines: hover it for the rest, or click it.
 
-1. Create a project (the New project questions above) and click **Add chapters** or **Import folder…**. Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file. Review the list, untick anything you don't want, and import.
+1. Create a project (the New project questions above) and click **Add chapters** or **Import folder…**. Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file (and, with the EPUB comics plugin, every `.epub`, split into a volume's chapters). Files that can't be read are listed with why (an EPUB with DRM, say). Review the list, untick anything you don't want, and import.
    - Chapters and pages are sorted naturally (`Chapter 2` before `Chapter 10`, `144.5` after `144`).
    - A chapter is named after its folder. Generic image folders like `pages` or `images` are skipped (`Chapter 3/pages` is named "Chapter 3"), and parent folders are added only when two chapters would otherwise share a name (`Season 1 / Chapter 1`).
    - Images in folders are read where they are, not copied, so keep the source folder in place (re-import if you move it). Pages inside `.cbz`/`.zip` files are extracted into the project.
