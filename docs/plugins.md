@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
+Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
 
 ## Installing
 
@@ -34,6 +34,8 @@ Search for a series instead of typing its name. It names the project, sets its k
 
    Adding a group to a preloaded character gives it the group's best views from the chapters as more pictures. Groups that aren't one of them get names suggested as usual. With **Trust them**, the writer's matches are added without asking.
 
+**From the Trending finder:** its **Make a project** opens New project with the series already picked, from the same site, when that site is one of your sources (AniList or MangaUpdates). Without it, the series is searched for by its name.
+
 **A project that already exists:** the Characters tab → **Find the series…** searches for the project's name.
 - Characters already in the list (by name) are marked and left as they are.
 - **Add N characters** adds the ticked ones.
@@ -46,6 +48,25 @@ Search for a series instead of typing its name. It names the project, sets its k
   - It didn't match the hospital director's group (0.294).
   - Other series' art, and characters whose picture is cover art in another style, may match less well. The writer's names are the second check.
 - **It needs a source that can search.** Without one, it says to install AniList.
+
+## Trending finder
+
+The series trending now, to pick the next one to recap. **Trending…** in the sidebar opens them, from two public APIs (no account or key):
+
+- **AniList:** what its members are reading and adding to their lists most these days (**Trending now**), the ones among them that started in the past year (**New and trending**), and the **Most popular** and **Best rated** of all.
+- **MangaUpdates:** the series whose pages its readers looked at most this week, this month, these three months or this year. They mostly read scanlations, so it leans to manhwa and to what's being translated now.
+
+**Narrowing it:** by kind (manga from Japan, manhwa from Korea, manhua from China, or on MangaUpdates other comics, such as English webcomics), by genre, and on AniList by whether it's still coming out or finished. Adult series are left out unless **Adult series too** is ticked. Series MangaUpdates marks Lolicon or Shotacon are always left out. The list you looked at last opens next time.
+
+**Each series:** its place on the list, its cover, type, year, whether it's finished, its score, and on AniList how many members have it on their lists. Picking one shows its other titles, genres, chapters (when AniList knows them) and description, with **Open on AniList** (or MangaUpdates) in your browser.
+
+**Series you already have:** a series a project is named after (by any of its titles, without case or punctuation) is marked **Your project**.
+
+**Make a project** opens New project, named after the series and set to its kind. With Find the series installed, the series is already picked there, from the same site, so its characters are on the Characters page. Needs Recap Studio 0.2.2 or later; on an older one, the button copies the title to paste into the box at the top left.
+
+**Good to know**
+- **The services' terms:** AniList's API is free for non-commercial use. MangaUpdates' asks for credit, which the list gives at its foot, and for spacing and caching requests: the plugin asks it at most once a second, and keeps each answer for an hour (AniList's for 15 minutes).
+- **Kitsu** isn't one of the sites: its trending list is ten series of every kind, with no way to narrow it.
 
 ## Overnight queue
 
@@ -243,10 +264,11 @@ Anything else a plugin needs, it imports from the app (`from recap import store,
 |---|---|
 | `api(path, opts)`, `el(tag, attrs, ...children)`, `ask`, `notify`, `plural`, `showTab(name)` | The app's own helpers. |
 | `current()`, `reload()` | The open project, and opening it again after the plugin changed it. |
-| `on(event, function)` | `new-project-open` (`{name}`), `new-project-page` (`{page, body, state}`: add to `body`; `state.name`, `state.kind`, `state.setName()`, `state.setKind()`, `state.redraw()`), `project-created` (`{project}`, awaited before the project opens), `project-opened` (`{project}`). |
+| `on(event, function)` | `new-project-open` (`{name, series}`: `series` is the one `newProject` was given, or `null`), `new-project-page` (`{page, body, state}`: add to `body`; `state.name`, `state.kind`, `state.setName()`, `state.setKind()`, `state.redraw()`), `project-created` (`{project}`, awaited before the project opens), `project-opened` (`{project}`). |
 | `addButton(where, label, onclick)` | A button in the Characters tab (`"characters"`), beside Get chapters from a site (`"chapters"`), with the finished video's buttons in the Video tab (`"video"`), or in the sidebar under Open project file (`"sidebar"`, for what's about every project). |
 | `addNewProjectPage({id, title, render})` | A page of its own at the end of the New project dialog (so its Create project button moves there). `render({body, state})` draws it; the plugin keeps the choices and applies them on `project-created`. |
 | `pickFolder(start)` | A folder from the window's folder picker (typed, in a browser). |
+| `newProject({name, kind, series})` | New project, as the sidebar's box opens it: named, set to a kind of comic (`"manga"`, `"webtoon"`, `"comic"`), and for a series a site lists (`{url, title, cover, summary, kind, year}`; Find the series picks it when one of your sources is for that site). Recap Studio 0.2.2 or later. |
 | `setNewProjectBox({placeholder, button, title})` | The words of the sidebar's box for a new project and its button (what's typed there still opens New project). |
 | `addSettings(title, render)` | A section of its own in Settings; `render(box)` runs each time Settings is drawn. |
 | `addProjectSetting({key, label, options, hint})` | A choice in Project settings (a Plugins section) for a setting registered with `plugin.project_setting`: `options` is `[[value, text]]`. Saved as soon as it changes, like the rest. |

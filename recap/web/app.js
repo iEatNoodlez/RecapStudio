@@ -154,14 +154,22 @@ function choiceList(name, options, value, onpick) {
       el("div", {}, el("b", {}, title), about ? el("div", { class: "muted" }, about) : ""))));
 }
 
-$("#new-project").addEventListener("submit", async (e) => {
-  e.preventDefault();
+// New project, named (from the sidebar's box, or a plugin's RecapStudio.newProject), with the kind of comic and the
+// series a plugin found it as, if it knows them
+async function openNew(name, { kind = "", series = null } = {}) {
   try { newSettings = await api("/api/projects/new-settings"); } catch (err) { return notify(err.message); }
-  newName = $("#new-name").value.trim();
+  newName = name;
   newPage = 0;
-  emitPlugins("new-project-open", { name: newName });
+  const k = KINDS.find((x) => x[0] === kind);
+  if (k) Object.assign(newSettings, k[3]);
+  emitPlugins("new-project-open", { name: newName, series });
   renderNew();
   $("#new-dialog").showModal();
+}
+
+$("#new-project").addEventListener("submit", (e) => {
+  e.preventDefault();
+  openNew($("#new-name").value.trim());
 });
 
 // What a feature plugin is told about the New project dialog (RecapStudio.on("new-project-page")): it can name the
@@ -4169,7 +4177,7 @@ async function emitPlugins(event, data) {
 }
 
 // A feature plugin's web\plugin.js runs after this file and adds to the page through these (docs/plugins.md). Events:
-// "new-project-open" ({name}), "new-project-page" ({page, body, state}: add to body; state.name, state.kind,
+// "new-project-open" ({name, series}), "new-project-page" ({page, body, state}: add to body; state.name, state.kind,
 // state.setName(), state.setKind()), "project-created" ({project}: awaited before it opens), "project-opened"
 // ({project}).
 window.RecapStudio = {
@@ -4219,6 +4227,11 @@ window.RecapStudio = {
     document.querySelectorAll('select[data-key="language"]').forEach((sel) => {
       if (![...sel.options].some((o) => o.value === code)) sel.append(el("option", { value: code }, `${name} (translated into English)`));
     });
+  },
+  // New project, as the sidebar's box opens it: named, of a kind of comic ("manga", "webtoon", "comic"), and of a
+  // series a site lists ({url, title, cover, summary, kind, year}: Find the series picks it, with its characters)
+  newProject({ name = "", kind = "", series = null } = {}) {
+    return openNew(String(name || "").trim(), { kind, series });
   },
   // the sidebar's box for a new project: its placeholder and its button's word (what's typed opens New project)
   setNewProjectBox({ placeholder, button, title } = {}) {

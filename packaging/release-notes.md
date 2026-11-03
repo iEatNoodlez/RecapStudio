@@ -7,6 +7,6 @@ Copies on 0.1.x update to Lite. To move to Full Suite, install its setup over Li
 
 ## What's new
 
-- **Settings, one section at a time:** a list on the left holds the app's own sections, then **Plugins**, with each plugin's own section. **Find a setting** narrows the list to the sections that have the words you type.
-- **A YouTube tab:** the suggested title and thumbnail at the full width, with the other titles, the words on the thumbnail and bigger pictures to pick from. YouTube-safe and the title and thumbnail options are there too. The Video tab keeps the video and how it's made.
-- **Project settings without Advanced mode:** a project's layout, the language of its text, how its characters and the scan group's pages are found, and each plugin's choice for it are now in reach for everyone. Only the smallest panel size still needs Advanced mode. Its dropdowns no longer cut off their own options.
+- **The Trending finder** (a plugin: built into Full Suite; in Lite, Settings → Plugins → Show the plugins). **Trending…** in the sidebar lists what's trending on AniList and what's looked at most on MangaUpdates this week, month or year. Narrow it by kind (manga, manhwa, manhua), genre and, on AniList, whether it's finished. Series you already have a project of are marked.
+- **Make a project from it:** opens New project named after the series and set to its kind. With Find the series and the AniList source installed, the series is already picked there, so its characters are on the Characters page.
+- **For plugin makers:** `RecapStudio.newProject({name, kind, series})` opens New project, and `new-project-open` passes the `series` on.
