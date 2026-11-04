@@ -3,6 +3,7 @@ network, where only a phone with the key gets through, and only to the phone pag
 import asyncio
 import copy
 import io
+import json
 import os
 import re
 import threading
@@ -1197,6 +1198,8 @@ def _sourced(fn, *args):
     """Run a source call, its problems as messages the page shows."""
     try:
         return fn(*args)
+    except sources.SiteCheck as e:  # (the page offers the site's window when a plugin gives one: X-Site-Check)
+        raise HTTPException(400, str(e), headers={"X-Site-Check": json.dumps(e.check)})
     except sources.SourceError as e:
         raise HTTPException(400, str(e))
     except requests.RequestException as e:

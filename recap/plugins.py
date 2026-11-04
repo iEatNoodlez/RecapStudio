@@ -141,7 +141,14 @@ class Plugin:
       plugin.step(name, label, run)    a step of its own, run on its own like the extra steps: run(job), with
                                        job["project"] the project's id; named "<id>.<name>"
       plugin.on(event, function)       called with keyword arguments: "project_created" (project),
-                                       "job_done" (job: its status is done, error or cancelled)
+                                       "job_done" (job: its status is done, error or cancelled), "site_check" (host,
+                                       url, source, refused: a site answered a source with its check for a person,
+                                       such as Cloudflare's, instead of its page; refused: it had a pass it didn't take)
+      plugin.site_pass(domain, cookies, user_agent, expires=None)
+                                       a site's pass, got in a window where the member passed its check: source
+                                       plugins' requests to that site and the app's picture downloads carry its
+                                       cookies ({name: value}) and that window's browser name until expires (a time)
+      plugin.forget_site_pass(domain)
       plugin.every(seconds, function)  function() again and again, that many seconds apart, on a thread of its own
       plugin.make_recap(project_id)    start Make the recap for a project (what isn't done yet); its job
       plugin.run(project_id, name)     start one of its own steps for a project, as a job of its own; its job
@@ -224,6 +231,16 @@ class Plugin:
     def overlay(self, function) -> None:
         from . import video
         self._add(video.OVERLAYS, function)
+
+    @staticmethod
+    def site_pass(domain: str, cookies: dict, user_agent: str, expires: float | None = None) -> None:
+        from . import sources
+        sources.set_pass(domain, cookies, user_agent, expires)
+
+    @staticmethod
+    def forget_site_pass(domain: str) -> None:
+        from . import sources
+        sources.forget_pass(domain)
 
     def file_type(self, ext: str, name: str, chapters, pages) -> None:
         from . import importer

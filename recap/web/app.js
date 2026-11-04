@@ -20,7 +20,10 @@ async function api(path, opts = {}) {
   if (!r.ok) {
     let msg = r.statusText;
     try { msg = (await r.json()).detail || msg; } catch {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    try { err.check = JSON.parse(r.headers.get("X-Site-Check") || "null"); } catch {}
+    if (err.check) siteCheck(err.check, msg);
+    throw err;
   }
   return r.json();
 }
@@ -2646,6 +2649,8 @@ function poll() {
   }, 1500);
 }
 
+const liveJobs = new Set();  // jobs seen queued or running on this page (renderJob)
+
 function renderJob() {
   const j = current.job;
   const box = $("#job");
@@ -2662,6 +2667,8 @@ function renderJob() {
     : j.message + (left != null ? ` · ${aboutTime(left)} left${more ? ` in this step (${plural(more, "more step")} after)` : ""}` : "");
   $("#job-bar").style.width = `${Math.round((j.progress || 0) * 100)}%`;
   $("#job-error").textContent = j.error || "";
+  if (running) liveJobs.add(j.id);
+  if (j.status === "error" && j.check && liveJobs.delete(j.id)) siteCheck(j.check, j.error);  // (failed while open here)
   $("#job-cancel").hidden = !running;
   // Pause takes effect after the item being worked on (for Claude, the chapter), so it can say "Pausing…" for a bit
   const pause = $("#job-pause");
@@ -4259,10 +4266,15 @@ async function emitPlugins(event, data) {
   }
 }
 
+// A site answered a source with its check for a person (Cloudflare) instead of its page (sources.SiteCheck): the
+// plugins are told ("site-check"), so one can offer the site's window. Not awaited: what asked goes on to show its error.
+const siteCheck = (check, message) => { emitPlugins("site-check", { ...check, message }); };
+
 // A feature plugin's web\plugin.js runs after this file and adds to the page through these (docs/plugins.md). Events:
 // "new-project-open" ({name, series}), "new-project-page" ({page, body, state}: add to body; state.name, state.kind,
 // state.setName(), state.setKind()), "project-created" ({project}: awaited before it opens), "project-opened"
-// ({project}).
+// ({project}), "site-check" ({host, url, source, refused, message}: a site answered a source with its check for a
+// person, such as Cloudflare's, instead of its page).
 window.RecapStudio = {
   version: 1,
   api, el, ask, notify, plural, showTab,

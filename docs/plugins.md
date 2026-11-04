@@ -1,7 +1,6 @@
 # Plugins
 
-Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, 
-**When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
+Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Site check**, **When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
 
 ## Installing
 
@@ -118,7 +117,21 @@ Projects made from a site (Get chapters from a site) are checked for new chapter
 
 A new project starts from the last project's choice, as it does for the kind of comic. Settings lists what each check found and did. The settings and that list are kept in `data\plugin-data\new-chapters\`.
 
+## Site check
 
+Needs Recap Studio 0.2.4 or later. Some sites answer programs with **Cloudflare's check for a person** (a "Just a moment…" page that runs a script in a browser, sometimes with a box to tick) instead of their pages, so your sources get nothing from them. Site check lets you pass that check yourself, in a window.
+
+1. **When a site asks:** Get chapters says "… wants to check you're a person first", and Site check offers **Open the site**. A small window of the app's own browser (Edge WebView2, like the app's window) opens on the page that asked.
+2. **You pass the check there:** wait while it runs, or tick its box. The window is only ever opened when you ask, and nothing in it is clicked for you.
+3. **Then try again:** once the site's own page shows, the window closes. Your source plugins' requests to that site, and the pictures Recap Studio downloads from it, carry the pass until it runs out. The site decides how long that is: often 30 minutes, sometimes days. Then it asks again, and so does Recap Studio.
+
+**Settings → Site check** lists the passes (with when each runs out, and **Forget**) and the sites that have asked, each with **Open the site**. You can also pass a site's check ahead of time, from its address. A site that asked while you were away (**New chapters on a schedule** at night) waits there: that check couldn't go ahead, and the next one can once you've passed it.
+
+**Good to know**
+- **What a pass is:** the site's cookies, Cloudflare's `cf_clearance` among them, and the window's browser name, which the pass is tied to. Only sent to that site. Kept in `data\plugin-data\site-check\passes.json`, so a pass outlives a restart.
+- **Sites a window can't help with:** some sites look at more than the pass, such as how the connection itself looks, which only a real browser has. When a site refuses a pass you've just got, Site check says so, and that site's chapters can't be got this way.
+- **Only in the app's own window:** when Recap Studio is opened in a browser instead (`--browser`), there's no window to open, and Settings says so.
+- **For your own sources:** it works with source plugins you added (from a file or a list), not gallery-dl or Suwayomi, which have their own ways.
 
 ## When a video is done
 
@@ -250,7 +263,8 @@ This part is for people adding to Recap Studio's plugin list. A plugin that adds
 |---|---|
 | `plugin.router` | A FastAPI router, served under `/api/plugins/<id>/`. `PUT` and `DELETE` on `/api/plugins/<id>` itself are the app's (switching the plugin on or off, and removing it), so give those routes a path of their own. |
 | `plugin.step(name, label, run)` | A step of its own, `<id>.<name>`, run on its own as a job like the extra steps: `run(job)`, with `job["project"]` the project's id. |
-| `plugin.on(event, function)` | Called with keyword arguments: `project_created` (`project`), `job_done` (`job`, whose `status` is `done`, `error` or `cancelled`), `video_rendered` (`project`, `parts`: the video files, `shorts`). A failing handler is logged and passed over. |
+| `plugin.on(event, function)` | Called with keyword arguments: `project_created` (`project`), `job_done` (`job`, whose `status` is `done`, `error` or `cancelled`), `video_rendered` (`project`, `parts`: the video files, `shorts`), `site_check` (`host`, `url`, `source`, `refused`: a site answered a source with its check for a person, such as Cloudflare's, instead of its page; `refused`, it had a pass and didn't take it; Recap Studio 0.2.4 or later). A failing handler is logged and passed over. |
+| `plugin.site_pass(domain, cookies, user_agent, expires=None)` | A site's pass, got in a window where the member passed its check: source plugins' requests to `domain` (and the sites under it) and the app's picture downloads from it carry its `cookies` (`{name: value}`) and that browser name until `expires` (a time; `None`, until the app closes). `plugin.forget_site_pass(domain)` takes it back. Recap Studio 0.2.4 or later. |
 | `plugin.every(seconds, function)` | `function()` again and again, that many seconds apart, on a thread of its own, for as long as the app runs. A failure is logged and it runs again next time. |
 | `plugin.make_recap(project_id)` | Starts Make the recap for a project (what isn't done yet) and gives its job. |
 | `plugin.run(project_id, name)` | Starts one of its own steps for a project, as a job of its own, and gives the job. |
@@ -274,7 +288,7 @@ Anything else a plugin needs, it imports from the app (`from recap import store,
 |---|---|
 | `api(path, opts)`, `el(tag, attrs, ...children)`, `ask`, `notify`, `plural`, `showTab(name)` | The app's own helpers. |
 | `current()`, `reload()` | The open project, and opening it again after the plugin changed it. |
-| `on(event, function)` | `new-project-open` (`{name, series}`: `series` is the one `newProject` was given, or `null`), `new-project-page` (`{page, body, state}`: add to `body`; `state.name`, `state.kind`, `state.setName()`, `state.setKind()`, `state.redraw()`), `project-created` (`{project}`, awaited before the project opens), `project-opened` (`{project}`). |
+| `on(event, function)` | `new-project-open` (`{name, series}`: `series` is the one `newProject` was given, or `null`), `new-project-page` (`{page, body, state}`: add to `body`; `state.name`, `state.kind`, `state.setName()`, `state.setKind()`, `state.redraw()`), `project-created` (`{project}`, awaited before the project opens), `project-opened` (`{project}`), `site-check` (`{host, url, source, refused, message}`: a site answered a source with its check for a person instead of its page, from a call the page made or a Getting chapters job; Recap Studio 0.2.4 or later). |
 | `addButton(where, label, onclick)` | A button in the Characters tab (`"characters"`), beside Get chapters from a site (`"chapters"`), with the finished video's buttons in the Video tab (`"video"`), or in the sidebar under Open project file (`"sidebar"`, for what's about every project). |
 | `addNewProjectPage({id, title, render})` | A page of its own at the end of the New project dialog (so its Create project button moves there). `render({body, state})` draws it; the plugin keeps the choices and applies them on `project-created`. |
 | `pickFolder(start)` | A folder from the window's folder picker (typed, in a browser). |

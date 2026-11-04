@@ -27,6 +27,8 @@ Picking a series shows its chapters, first chapter first, each ticked unless the
 
 The project remembers the series. **Check for new chapters** (above the chapter list) lists the chapters the site has that the project doesn't, with **Don't offer the unticked chapters again** for ones you don't want.
 
+**A site that wants to check you're a person** (Cloudflare's "Just a moment…" page) answers your sources with that check instead of its pages, and Get chapters says so. The **Site check** plugin lets you pass it yourself, in a small window: your plugins then reach that site with your pass until it runs out ([Plugins](plugins.md#site-check), Recap Studio 0.2.4 or later).
+
 ## Writing a plugin
 
 A plugin is one Python file. [plugin-example.py](plugin-example.py) is a complete one for a made-up site, to copy from. It runs on the app's own Python 3.12 with the standard library and `requests`; nothing else is installed for it. Files in `data\plugins` whose names start with `_` aren't plugins: plugins can share helpers through them.
@@ -58,6 +60,8 @@ The functions get and return plain data (dicts, lists, text, numbers). Raise an 
 `series()`, `search()` and `browse()` results may also say what kind of comic a series is (`"kind"`: `"manga"`, `"webtoon"` or `"comic"`) and the year it started (`"year"`). Find the series sets the new project's kind from it.
 
 Each plugin runs in a process of its own, started the first time it's used and kept while the app runs (a new version replaces it). A call that takes more than 90 seconds stops it. What a plugin prints goes to its log, not to the app.
+
+When one of a plugin's requests (made with `requests`) gets Cloudflare's check for a person instead of a page, the app sees it, whatever the plugin does with the answer, and Get chapters offers the site's window (Site check). Once the member has passed it, the plugin's requests to that site carry the pass (its cookies, and the browser name it's tied to, in place of the plugin's own `User-Agent`). The plugin doesn't need to do anything for either. Recap Studio 0.2.4 or later.
 
 ## Plugin lists
 
@@ -94,8 +98,6 @@ Entries with `"kind": "feature"` are [feature plugins](plugins.md). Only Recap S
 
 [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server) runs Mihon/Tachiyomi extensions on a PC. It's MPL-2.0 and not part of the app. If you already use those extensions, run Suwayomi with your extension repositories, and **Settings → Sources → Suwayomi** connects to it. The address is `http://127.0.0.1:4567` unless you changed it. Tested with v2.4.2366.
 
-
-
 - **What shows up:** every source installed in Suwayomi appears in Get chapters, named "… (Suwayomi)" with its language. Its Local source (the server's own folder) appears too.
 - **Lists:** each source's Popular, and Latest when the source has one.
 - **Search:** searches one source, or with **All your sources**, every one in the project's language (and those in every language), four at a time.
@@ -104,11 +106,12 @@ Entries with `"kind": "feature"` are [feature plugins](plugins.md). Only Recap S
   - Any other link on one of its sources' sites searches that source for the link's last words.
 - **Chapters and pages:** chapters come oldest first, and their pages are downloaded through the server.
 - **A login:** when the server has one turned on, enter the user name and password under Suwayomi and press **Save login**. All three of its kinds work (basic auth, simple login and UI login). They're kept in `data\suwayomi_login.json`.
+  - **Turn one on** (Suwayomi's `authMode`, with `authUsername` and `authPassword`): Suwayomi comes with none. Without one, a web page open in your browser can use its API while it runs, even though it listens on this PC only: its API takes requests from any page, and the browser runs on the same PC.
 - **What Suwayomi downloads by itself:** on its first start, it downloads a 268 MB Chromium for its built-in browser, plus its web interface. That's Suwayomi, not Recap Studio; its `kcefEnabled` and `webUIEnabled` settings turn them off.
 
 ## What isn't there yet
 
-- Sites that need a login or a browser to get past their protection work only as far as the plugin (or gallery-dl, or the Suwayomi extension) handles it.
+- Sites that need a login, or a browser to get past their protection, work only as far as the plugin (or gallery-dl, or the Suwayomi extension) handles it. Cloudflare's check for a person can be passed in a window with Site check, except on sites that also look at how the connection itself looks.
 - Suwayomi's search filters (genres, status and the like) and its extensions' own settings stay in Suwayomi: the app searches by title only.
 - New chapters are found when the app starts or when you check. To check on a schedule, and get and recap them on their own, install **New chapters on a schedule** from Recap Studio's plugin list ([Plugins](plugins.md#new-chapters-on-a-schedule)).
 - The phone page can't get chapters or add plugins (installing code from a phone is left to the PC).

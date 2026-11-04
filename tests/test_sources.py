@@ -271,6 +271,102 @@ def run():
     check(len(s3["items"]) == 2, "and it starts again")
     sources.stop_all()
 
+    print("11. a site's check for a person (the made-up site's stand-in for Cloudflare's)")
+    site_check(sources)
+
+
+def get_pass(ua: str) -> str:
+    """The made-up site's pass (cf_clearance), as a browser named ua gets it when its check's script runs."""
+    import http.client
+    c = http.client.HTTPConnection("127.0.0.1", SITE, timeout=10)
+    c.request("GET", "/cdn-cgi/pass?to=/", headers={"User-Agent": ua})
+    r = c.getresponse()
+    cookies = [v.split(";")[0].split("=", 1) for k, v in r.getheaders() if k.lower() == "set-cookie"]
+    c.close()
+    return dict(cookies)["cf_clearance"]
+
+
+def site_check(sources):
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0"
+    urllib.request.urlopen(f"{SITE_URL}/admin/guard?on=1&reset=1", timeout=5)
+    try:
+        # through the app's server: the error, and what tells the page (X-Site-Check)
+        req = urllib.request.Request(BASE + "/api/sources/search", method="POST", headers={"Content-Type": "application/json"},
+                                     data=json.dumps({"key": "plugin:example", "query": "moon", "page": 1}).encode())
+        try:
+            urllib.request.urlopen(req, timeout=60)
+            check(False, "a site that asks for its check is an error")
+        except urllib.error.HTTPError as e:
+            detail = json.loads(e.read()).get("detail", "")
+            told = json.loads(e.headers.get("X-Site-Check") or "null") or {}
+            check(e.code == 400 and "wants to check you're a person" in detail and "Site check plugin" in detail,
+                  f"the search says the site wants its check, and which plugin passes it: {detail}")
+            check(told.get("host") == "127.0.0.1" and told.get("source") == "Example Comics" and told.get("refused") is False
+                  and told.get("url", "").startswith(SITE_URL), f"the page is told the site, its page and the source: {told}")
+        r = api("/api/sources/series", "POST", {"key": "plugin:example", "ref": f"{SITE_URL}/series/red-river"})
+        check(r.get("http") == 400 and "check" in r["detail"], f"so does a series: {r.get('detail')}")
+
+        # in this process: a pass, as the Site check plugin gives one
+        p = sources._plugin("example")
+        host = sources._host("example")
+        try:
+            host.call("search", "moon", 1, source=p)
+            check(False, "no pass: the check")
+        except sources.SiteCheck as e:
+            check(e.check["host"] == "127.0.0.1" and not e.check["refused"], f"no pass: the check ({e})")
+        sources.set_pass("127.0.0.1", {"cf_clearance": get_pass(ua)}, ua, time.time() + 600)
+        found = host.call("search", "moon", 1, source=p)
+        check([x["title"] for x in found["items"]] == ["The Moon Tower", "Moonlight Cafe"],
+              "with the pass, the plugin's requests get through (its own browser name replaced by the pass's)")
+        s = sources.series("plugin:example", f"{SITE_URL}/series/red-river")
+        check(s["title"] == "Red River Days" and len(s["chapters"]) == 2, "a series too")
+        folder = DATA / "pass-pictures"
+        folder.mkdir(exist_ok=True)
+        got = sources._fetch("plugin:example", s["chapters"][0]["ref"], folder, lambda i, n: None, lambda: None)
+        check(len(got) == 3 and all(f.exists() for f, w, h in got), f"and the app's picture downloads ({len(got)} pages)")
+        data, kind = sources.fetch_image(sources.image_link(f"{SITE_URL}/cover/red-river.png", {"Referer": SITE_URL + "/"})
+                                         .rsplit("/", 1)[1])
+        check(data[:4] == b"\x89PNG", "and covers")
+        check(sources._with_pass("http://elsewhere.test/x", {"A": "1"}) == ({"A": "1"}, None),
+              "a pass isn't sent to other sites")
+        check(list(sources.site_passes()) == ["127.0.0.1"] and "cookies" not in sources.site_passes()["127.0.0.1"],
+              "the passes in use are listed (without their cookies)")
+
+        # passes that don't work
+        sources.set_pass("127.0.0.1", {"cf_clearance": get_pass(ua)}, "Some other browser", time.time() + 600)
+        try:
+            host.call("search", "moon", 1, source=p)
+            check(False, "a pass got with another browser name is refused")
+        except sources.SiteCheck as e:
+            check(e.check["refused"] and "didn't take the pass" in str(e), f"a pass got with another browser name: {e}")
+        sources.set_pass("127.0.0.1", {"cf_clearance": get_pass(ua)}, ua, time.time() - 1)
+        check(sources._pass_for("127.0.0.1") is None, "a pass that has run out isn't used")
+        try:
+            host.call("search", "moon", 1, source=p)
+            check(False, "and the site asks again")
+        except sources.SiteCheck as e:
+            check(not e.check["refused"], f"and the site asks again, as for no pass ({e})")
+        sources.set_pass("127.0.0.1", {"cf_clearance": get_pass(ua)}, ua, time.time() + 600)
+        urllib.request.urlopen(f"{SITE_URL}/admin/guard?on=1&strict=1", timeout=5)
+        try:
+            host.call("search", "moon", 1, source=p)
+            check(False, "a site that looks at more than the pass refuses it")
+        except sources.SiteCheck as e:
+            check(e.check["refused"], f"a site that looks at more than the pass refuses it: {e}")
+        sources.forget_pass("127.0.0.1")
+        check(sources.site_passes() == {}, "a pass can be forgotten")
+        for bad in (("", {}, ua), ("127.0.0.1", {}, "")):
+            try:
+                sources.set_pass(*bad)
+                check(False, f"a pass without {'a site' if not bad[0] else 'a browser name'} is refused")
+            except sources.SourceError:
+                check(True, f"a pass without {'a site' if not bad[0] else 'a browser name'} is refused")
+    finally:
+        urllib.request.urlopen(f"{SITE_URL}/admin/guard?on=0&reset=1", timeout=5)
+        sources.stop_all()
+    r = api("/api/sources/search", "POST", {"key": "plugin:example", "query": "moon", "page": 1})
+    check(len(r.get("items", [])) == 2, "with the check off again, the site answers as before")
+
 
 if __name__ == "__main__":
     main()

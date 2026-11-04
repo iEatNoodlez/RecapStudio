@@ -36,6 +36,7 @@ from PIL import Image
 
 from . import importer, store
 from . import plugins as plugins_  # feature plugins (plugins() here lists the source plugins)
+from .plugin_host import is_check, on_site
 
 PLUGINS_DIR = store.DATA_ROOT / "plugins"
 STATE_FILE = PLUGINS_DIR / "plugins.json"
@@ -193,6 +194,7 @@ class _Host:
     def __init__(self, pid: str):
         self.pid, self.proc, self.lock = pid, None, threading.Lock()
         self.lines: queue.Queue = queue.Queue()
+        self.met: set = set()  # sites that asked this plugin's requests for their check (their passes go with it too)
 
     def _start(self):
         path = PLUGINS_DIR / f"{self.pid}.py"
@@ -212,12 +214,16 @@ class _Host:
             lines.put(line)
         lines.put(None)
 
-    def call(self, name: str, *args, timeout: float = CALL_TIMEOUT):
+    def call(self, name: str, *args, timeout: float = CALL_TIMEOUT, source: dict | None = None):
+        """A plugin function's answer. source: the plugin's details (plugins()), for the passes its sites have."""
         with self.lock:
             if self.proc is None or self.proc.poll() is not None:
                 self._start()
+            sites = list((source or {}).get("sites") or []) + sorted(self.met)
+            passes = [{"domain": d, "cookies": p["cookies"], "user_agent": p["user_agent"]}
+                      for d, p in _live_passes().items() if any(on_site(d, s) or on_site(s, d) for s in sites)]
             try:
-                self.proc.stdin.write(json.dumps({"call": name, "args": list(args)}) + "\n")
+                self.proc.stdin.write(json.dumps({"call": name, "args": list(args), "passes": passes}) + "\n")
                 self.proc.stdin.flush()
                 line = self.lines.get(timeout=timeout)
             except queue.Empty:
@@ -230,6 +236,10 @@ class _Host:
                 raise SourceError(f"The plugin stopped while answering {name}(); its log is in data\\plugins\\"
                                   f"{self.pid}.log")
             reply = json.loads(line)
+            check = reply.get("check")
+            if isinstance(check, dict) and check.get("host"):  # (even when it answered: what it got was the check)
+                self.met.add(str(check["host"]))
+                raise site_check(str(check["host"]), str(check.get("url") or ""), (source or {}).get("name", ""))
             if not reply.get("ok"):
                 raise SourceError(f"The plugin failed in {name}(): {reply.get('error')}")
             return reply.get("result")
@@ -261,6 +271,88 @@ def stop_all() -> None:
         _stop_host(pid)
 
 
+# ---- a site's check for a person (Cloudflare) ------------------------------------------------------------------------
+# Some sites answer programs with Cloudflare's check (a page that runs a script in a browser, sometimes with a box to
+# tick) instead of their pages. The app doesn't get past it by itself: a feature plugin (Site check) opens the site in
+# a window where the member passes it, and gives the pass here (plugins.Plugin.site_pass): the site's cookies and that
+# window's browser name, which the pass is tied to. Plugins' requests to that site (plugin_host.py) and the app's
+# picture downloads carry them until they run out. Each time a site asks for its check, feature plugins are told
+# ("site_check": host, url, source, refused) and the error says so (SiteCheck.check, for the page).
+
+_passes: dict[str, dict] = {}  # domain: {"cookies": {name: value}, "user_agent", "expires"}
+
+
+class SiteCheck(SourceError):
+    """A site answered with its check for a person instead of its page. .check: {"host", "url", "source",
+    "refused"} (refused: it had a pass, which it didn't take)."""
+
+    def __init__(self, message: str, check: dict):
+        super().__init__(message)
+        self.check = check
+
+
+def site_check(host: str, url: str, source: str = "") -> SiteCheck:
+    """The error for a site that asked for its check (feature plugins are told)."""
+    host = host.lower()
+    refused = _pass_for(host) is not None
+    check = {"host": host, "url": url, "source": source, "refused": refused}
+    message = (f"{host} didn't take the pass you got in its window (it may have run out early, or the site looks at "
+               f"more than the pass)" if refused else f"{host} wants to check you're a person first (Cloudflare's check)")
+    if not plugins_._handlers.get("site_check"):
+        message += ". The Site check plugin (Settings → Plugins) lets you pass it in a window"
+    plugins_.emit("site_check", **check)
+    return SiteCheck(message, check)
+
+
+def set_pass(domain: str, cookies: dict, user_agent: str, expires: float | None = None) -> None:
+    """A site's pass (from a window the member passed its check in): sent with requests to domain and the sites under
+    it until expires (a time; None: until the app closes or it's forgotten)."""
+    domain = str(domain or "").strip().lower().lstrip(".")
+    if not domain or not re.fullmatch(r"[a-z0-9.-]+", domain):
+        raise SourceError(f"{domain or 'Nothing'} isn't a site's name")
+    if not isinstance(user_agent, str) or not user_agent.strip():
+        raise SourceError("A pass needs the browser name it was got with")
+    cookies = {str(k): str(v) for k, v in (cookies or {}).items() if str(k)}
+    with _lock:
+        _passes[domain] = {"cookies": cookies, "user_agent": user_agent.strip(), "expires": expires}
+
+
+def forget_pass(domain: str) -> None:
+    with _lock:
+        _passes.pop(str(domain or "").strip().lower().lstrip("."), None)
+
+
+def _live_passes() -> dict:
+    now = time.time()
+    with _lock:
+        return {d: dict(p) for d, p in _passes.items() if not p["expires"] or p["expires"] > now}
+
+
+def site_passes() -> dict:
+    """The passes in use: {domain: {"expires", "user_agent"}} (not their cookies)."""
+    return {d: {"expires": p["expires"], "user_agent": p["user_agent"]} for d, p in _live_passes().items()}
+
+
+def _pass_for(host: str) -> dict | None:
+    """The pass for a site (the one for the narrowest domain it's on), or None."""
+    found = [(d, p) for d, p in _live_passes().items() if on_site(host, d)]
+    if not found:
+        return None
+    d, p = max(found, key=lambda x: len(x[0]))
+    return {"domain": d, **p}
+
+
+def _with_pass(url: str, headers: dict) -> tuple[dict, object]:
+    """The headers and cookies for a request the app makes itself (a picture), with the site's pass when it has one."""
+    mine = _pass_for((urlparse(url).hostname or "").lower())
+    if not mine:
+        return headers, None
+    jar = requests.cookies.RequestsCookieJar()
+    for name, value in mine["cookies"].items():
+        jar.set_cookie(requests.cookies.create_cookie(name, value, domain="." + mine["domain"]))
+    return {**{k: v for k, v in headers.items() if k.lower() != "user-agent"}, "User-Agent": mine["user_agent"]}, jar
+
+
 # ---- pictures the page shows (covers): fetched through the app, with the source's headers ------------------------
 
 _images: "OrderedDict[str, tuple[str, dict]]" = OrderedDict()
@@ -288,7 +380,10 @@ def fetch_image(token: str) -> tuple[bytes, str]:
     if not found:
         raise SourceError("That picture isn't known any more")
     url, headers = found
-    r = requests.get(url, headers={"User-Agent": USER_AGENT, **headers}, timeout=20)
+    headers, cookies = _with_pass(url, {"User-Agent": USER_AGENT, **headers})
+    r = requests.get(url, headers=headers, cookies=cookies, timeout=20)
+    if is_check(r):
+        raise site_check(urlparse(r.url).hostname or "", r.url)
     r.raise_for_status()
     return r.content[:8 << 20], r.headers.get("Content-Type", "image/jpeg")
 
@@ -440,7 +535,7 @@ def search(key: str, query: str, page: int = 1) -> dict:
         p = _plugin(rest)
         if not p["search"]:
             raise SourceError(f"{p['name']} can't search")
-        return _items(_host(rest).call("search", query, page), p["headers"])
+        return _items(_host(rest).call("search", query, page, source=p), p["headers"])
     if kind == "suwayomi":
         return suwayomi.browse(rest, "SEARCH", page, query)
     raise SourceError("gallery-dl can't search: paste a series' link instead")
@@ -452,7 +547,7 @@ def browse(key: str, list_id: str, page: int = 1) -> dict:
         p = _plugin(rest)
         if list_id not in {x["id"] for x in p["lists"]}:
             raise SourceError(f"{p['name']} has no list {list_id}")
-        return _items(_host(rest).call("browse", list_id, page), p["headers"])
+        return _items(_host(rest).call("browse", list_id, page, source=p), p["headers"])
     if kind == "suwayomi":
         return suwayomi.browse(rest, list_id, page)
     raise SourceError("gallery-dl has no lists: paste a series' link instead")
@@ -462,7 +557,7 @@ def series(key: str, ref: str) -> dict:
     kind, rest = _kind(key)
     if kind == "plugin":
         p = _plugin(rest)
-        return _series(_host(rest).call("series", ref), ref, p["headers"])
+        return _series(_host(rest).call("series", ref, source=p), ref, p["headers"])
     if kind == "suwayomi":
         return suwayomi.series(rest, ref)
     return gallery_dl.series(ref)
@@ -474,7 +569,7 @@ def characters(key: str, ref: str) -> list[dict]:
     p = _plugin(rest) if kind == "plugin" else None
     if not p or not p["characters"]:
         raise SourceError(f"{p['name'] if p else key} doesn't list characters")
-    return _characters(_host(rest).call("characters", ref), p["headers"])
+    return _characters(_host(rest).call("characters", ref, source=p), p["headers"])
 
 
 def _pages(key: str, ref: str) -> tuple[list[dict], float]:
@@ -482,7 +577,7 @@ def _pages(key: str, ref: str) -> tuple[list[dict], float]:
     kind, rest = _kind(key)
     if kind == "plugin":
         p = _plugin(rest)
-        found = _host(rest).call("pages", ref)
+        found = _host(rest).call("pages", ref, source=p)
         out = []
         for x in found if isinstance(found, list) else []:
             if isinstance(x, str):
@@ -498,12 +593,15 @@ def _pages(key: str, ref: str) -> tuple[list[dict], float]:
 
 # ---- getting chapters into a project ----------------------------------------------------------------------------
 
-def _get(session, url, headers, check) -> bytes:
+def _get(session, url, headers, check, source: str = "") -> bytes:
     last = None
     for attempt in range(3):
         check()
         try:
-            r = session.get(url, headers=headers, timeout=40)
+            sent, cookies = _with_pass(url, headers)
+            r = session.get(url, headers=sent, cookies=cookies, timeout=40)
+            if is_check(r):
+                raise site_check(urlparse(r.url).hostname or "", r.url, source)
             if r.status_code in (429, 503) and attempt < 2:
                 time.sleep(3 * (attempt + 1))
                 continue
@@ -548,11 +646,12 @@ def _fetch(key: str, ref: str, folder: Path, report, check) -> list[tuple[Path, 
     session = requests.Session()
     session.headers["User-Agent"] = USER_AGENT
     done = [0]
+    name = _plugin(key.partition(":")[2])["name"] if key.startswith("plugin:") else ""
 
     def one(i):
         if delay:
             time.sleep(delay * (i % IMAGE_WORKERS))
-        got = _save_picture(_get(session, pages[i]["url"], pages[i]["headers"], check), folder / f"{i:04d}")
+        got = _save_picture(_get(session, pages[i]["url"], pages[i]["headers"], check, name), folder / f"{i:04d}")
         done[0] += 1
         report(done[0], len(pages))
         return got

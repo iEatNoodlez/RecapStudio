@@ -96,7 +96,8 @@ def _worker():
             job.update(status="cancelled", message="Cancelled")
         except Exception as e:  # report any failure to the UI
             traceback.print_exc()
-            job.update(status="error", error=str(e), message=f"{STEP_LABELS.get(job['step'], '')} failed")
+            job.update(status="error", error=str(e), message=f"{STEP_LABELS.get(job['step'], '')} failed",
+                       check=getattr(e, "check", None))  # (a site that asked for its check: sources.SiteCheck)
         plugins.emit("job_done", job=public(job))
 
 
