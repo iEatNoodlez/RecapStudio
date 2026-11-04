@@ -35,7 +35,7 @@ Add the chapters, press **Make the recap**, and Recap Studio cuts the pages into
 For Windows 10 or 11 (64-bit), from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page. It comes in two editions, both free:
 
 - **Lite** is the whole app.
-- **Full Suite** is Lite with [Recap Studio's plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins#readme) built in: finding the series, automation, posting to YouTube, branding, and more languages and file types. Lite can add them one at a time, in Settings → Plugins.
+- **Full Suite** is Lite with [Recap Studio's plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins#readme) built in: finding the series, what's trending to make a project of, automation, posting to YouTube, branding, passing a site's Cloudflare check yourself in a window, and more languages and file types. Lite can add them one at a time, in Settings → Plugins.
 
 | | Installer | Portable |
 |---|---|---|
@@ -50,7 +50,7 @@ Everything it needs is included. The first start downloads the voice model (354 
 
 ### 1. Create a project
 
-Type a name at the top left and press **Create**, then answer a few questions: what kind of comic it is, how to find its characters, how the video looks, and the YouTube options.
+Type a name at the top left and press **Create**, then answer a few questions: what kind of comic it is, how to find its characters, how the video looks, and the YouTube options. With the Find the series plugin, search for the series instead and it fills the project in for you, and the Trending finder suggests what to recap next.
 
 <p align="center">
   <img src="docs/images/new-project.png" width="80%" alt="The New project dialog asking what kind of comic it is: Webtoon, Manga (picked), Comic or Not sure">
@@ -94,15 +94,17 @@ Your script writer also suggests a clickbait title, a few others, and a thumbnai
 
 | Step | What it does | With |
 |---|---|---|
-| Chapters | Imports folders, .zip and .cbz files, or gets chapters from sites through sources members bring (no scrapers come with the app), and checks for new ones. | Plugins you add; gallery-dl or Suwayomi if you run them |
+| Chapters | Imports folders, .zip and .cbz files, or gets chapters from sites through sources you bring (no scrapers come with the app): search one source or all of them at once, add a plugin list to install everything on it and keep it up to date, and pass a site's Cloudflare check yourself in a window. Checks for new chapters too. | Plugins you add, one at a time or a whole list; gallery-dl or Suwayomi if you run them; the Site check plugin |
 | Panels | Cuts the pages into panels. Webtoons are stitched into one strip and cut at the gutters, around the speech bubbles. | OpenCV; ogkalu's comic text-and-bubble detector (optional download) |
 | Text | Reads the speech bubbles and captions, in English, Korean, Chinese or Japanese. | RapidOCR; PaddleOCR's PP-OCRv5 for Korean, Chinese and Japanese (optional download) |
 | Translate | Translates a Korean, Chinese or Japanese comic into English, and can letter the English into the bubbles. | Your script writer |
-| Characters | Finds who's who and suggests their names, or takes the cast from AniList. | DeepGHS's detectors and CCIP, the WD tagger (optional download); AniList through the Find the series plugin |
+| Characters | Finds who's who and suggests their names, or takes the cast from AniList or Kitsu. | DeepGHS's detectors and CCIP, the WD tagger (optional download); AniList or Kitsu through the Find the series plugin |
 | Script | Writes the narration a chapter at a time, from the pictures and the text. | A local model (Ollama), Claude Code on your Claude plan, or Claude, Gemini, OpenRouter, DeepSeek, Groq or Mistral with your own key |
 | Voice | Reads the narration aloud, or uses your own recording. | Kokoro on your PC, Microsoft Edge's voices, or ElevenLabs |
 | Title | Suggests a clickbait title and draws a labelled thumbnail, which an image model can repaint. | Your script writer; Gemini or OpenRouter image models |
 | Video | Scrolls webtoons, pans and zooms other comics, crossfades, adds your background music, writes subtitles, can draw CapCut-style captions and cuts Shorts. | OpenCV and ffmpeg |
+
+**Example Sources:** [RecapStudio-Sources](https://github.com/iEatNoodlez/RecapStudio-Sources) is a list of source plugins for some comic sites. It's kept apart from the app and isn't part of it. To try it, paste its link in Settings → Sources → Plugin lists. Using a source in line with a site's terms is up to you.
 
 ## Costs and privacy
 
