@@ -1,6 +1,7 @@
 # Plugins
 
-Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
+Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, 
+**When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
 
 ## Installing
 
@@ -64,6 +65,13 @@ The series trending now, to pick the next one to recap. **Trending…** in the s
 
 **Make a project** opens New project, named after the series and set to its kind. With Find the series installed, the series is already picked there, from the same site, so its characters are on the Characters page. Needs Recap Studio 0.2.2 or later; on an older one, the button copies the title to paste into the box at the top left.
 
+**Its chapters:** once the project is made, **Get chapters from a site** opens and searches all your own sources for the series: its title, then its other titles, until a search finds something. These are the chapter sources you added in Settings → Sources (a plugin of yours, or a Suwayomi server): AniList and MangaUpdates have no chapters, and the plugin list has no scrapers. What happens next, set in **Settings → Trending finder**:
+- **Look for them, and show what's found** (the default): a series called exactly that, in one of your sources only, opens straight to its chapters, all ticked, for **Get chapters**. Otherwise the results are shown, grouped by source, to pick from.
+- **Get them all straight away:** when one of your sources has a series called exactly that, every chapter is got without asking, and a message says from where. Otherwise the results are shown, as above.
+- **Don't look for them.**
+
+With no source that can search, nothing opens, and the series' panel says so. Needs Recap Studio 0.2.3 or later.
+
 **Good to know**
 - **The services' terms:** AniList's API is free for non-commercial use. MangaUpdates' asks for credit, which the list gives at its foot, and for spacing and caching requests: the plugin asks it at most once a second, and keeps each answer for an hour (AniList's for 15 minutes).
 - **Kitsu** isn't one of the sites: its trending list is ten series of every kind, with no way to narrow it.
@@ -109,6 +117,8 @@ Projects made from a site (Get chapters from a site) are checked for new chapter
 3. **A project with a job running** gets its chapters once that job has finished. A chapter is never got twice: one the project has, or was told to pass over, isn't new.
 
 A new project starts from the last project's choice, as it does for the kind of comic. Settings lists what each check found and did. The settings and that list are kept in `data\plugin-data\new-chapters\`.
+
+
 
 ## When a video is done
 
@@ -238,7 +248,7 @@ This part is for people adding to Recap Studio's plugin list. A plugin that adds
 
 | | |
 |---|---|
-| `plugin.router` | A FastAPI router, served under `/api/plugins/<id>/`. |
+| `plugin.router` | A FastAPI router, served under `/api/plugins/<id>/`. `PUT` and `DELETE` on `/api/plugins/<id>` itself are the app's (switching the plugin on or off, and removing it), so give those routes a path of their own. |
 | `plugin.step(name, label, run)` | A step of its own, `<id>.<name>`, run on its own as a job like the extra steps: `run(job)`, with `job["project"]` the project's id. |
 | `plugin.on(event, function)` | Called with keyword arguments: `project_created` (`project`), `job_done` (`job`, whose `status` is `done`, `error` or `cancelled`), `video_rendered` (`project`, `parts`: the video files, `shorts`). A failing handler is logged and passed over. |
 | `plugin.every(seconds, function)` | `function()` again and again, that many seconds apart, on a thread of its own, for as long as the app runs. A failure is logged and it runs again next time. |
@@ -269,6 +279,7 @@ Anything else a plugin needs, it imports from the app (`from recap import store,
 | `addNewProjectPage({id, title, render})` | A page of its own at the end of the New project dialog (so its Create project button moves there). `render({body, state})` draws it; the plugin keeps the choices and applies them on `project-created`. |
 | `pickFolder(start)` | A folder from the window's folder picker (typed, in a browser). |
 | `newProject({name, kind, series})` | New project, as the sidebar's box opens it: named, set to a kind of comic (`"manga"`, `"webtoon"`, `"comic"`), and for a series a site lists (`{url, title, cover, summary, kind, year}`; Find the series picks it when one of your sources is for that site). Recap Studio 0.2.2 or later. |
+| `getChapters({titles, auto})` | Get chapters from a site, for the open project, searching all the member's sources that can for a series: by its first titles in turn (up to three) until a search finds something. A series called exactly the title searched (else another of `titles`), in one source only, opens to choose its chapters; with `auto`, they're all got without asking. Recap Studio 0.2.3 or later. |
 | `setNewProjectBox({placeholder, button, title})` | The words of the sidebar's box for a new project and its button (what's typed there still opens New project). |
 | `addSettings(title, render)` | A section of its own in Settings; `render(box)` runs each time Settings is drawn. |
 | `addProjectSetting({key, label, options, hint})` | A choice in Project settings (a Plugins section) for a setting registered with `plugin.project_setting`: `options` is `[[value, text]]`. Saved as soon as it changes, like the rest. |

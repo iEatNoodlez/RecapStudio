@@ -7,6 +7,7 @@ Copies on 0.1.x update to Lite. To move to Full Suite, install its setup over Li
 
 ## What's new
 
-- **The Trending finder** (a plugin: built into Full Suite; in Lite, Settings → Plugins → Show the plugins). **Trending…** in the sidebar lists what's trending on AniList and what's looked at most on MangaUpdates this week, month or year. Narrow it by kind (manga, manhwa, manhua), genre and, on AniList, whether it's finished. Series you already have a project of are marked.
-- **Make a project from it:** opens New project named after the series and set to its kind. With Find the series and the AniList source installed, the series is already picked there, so its characters are on the Characters page.
-- **For plugin makers:** `RecapStudio.newProject({name, kind, series})` opens New project, and `new-project-open` passes the `series` on.
+- **Search all your sources at once:** Get chapters from a site → Search has **All your sources**, with the results grouped by source.
+- **The Trending finder looks for the chapters too** (Trending finder 1.1.0, a plugin: built into Full Suite; in Lite, Settings → Plugins). After **Make a project**, it searches all your own sources for the series. When one of them has a series by that exact title, its chapters open ready to get. **Settings → Trending finder** can have them got straight away instead, or not looked for. The chapters come only from sources you added yourself in Settings → Sources.
+- **Reading Spanish comics 1.0.2:** its **Remove** deletes only the downloaded reader and leaves the plugin installed.
+- **For plugin makers:** `RecapStudio.getChapters({titles, auto})` opens Get chapters from a site for the open project, searching all of the member's sources for a series.

@@ -20,7 +20,7 @@ Everything is in **Settings → Sources**:
 **Get chapters from a site…** (the Chapters tab) finds a series three ways:
 
 - **Link**: paste a series' page. The plugin for that site opens it; gallery-dl takes any other link when it's installed.
-- **Search**: search one source by title (plugins that have search, and Suwayomi's sources).
+- **Search**: search by title, in one source or **All your sources** (when more than one can search): plugins that have search, and Suwayomi's sources in the project's language. The results are grouped by source.
 - **Lists**: a source's lists, a page at a time with **More**: Popular and Latest for Suwayomi's sources, and whatever lists a plugin offers (trending, new, completed…).
 
 Picking a series shows its chapters, first chapter first, each ticked unless the project already has it. **Get chapters** runs as a job (with progress and **Cancel**, like the other steps). Each chapter's pictures are downloaded into the project's `pages` folder, four at a time and retried when the site is busy. Pictures that aren't JPEG, PNG or WebP are saved as PNG. A chapter is added only once all its pages are in, placed by its number unless you choose otherwise, and the project takes the series' title if it had none. Cancelled or stopped by an error, run it again: chapters already in are passed over.
@@ -94,9 +94,11 @@ Entries with `"kind": "feature"` are [feature plugins](plugins.md). Only Recap S
 
 [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server) runs Mihon/Tachiyomi extensions on a PC. It's MPL-2.0 and not part of the app. If you already use those extensions, run Suwayomi with your extension repositories, and **Settings → Sources → Suwayomi** connects to it. The address is `http://127.0.0.1:4567` unless you changed it. Tested with v2.4.2366.
 
+
+
 - **What shows up:** every source installed in Suwayomi appears in Get chapters, named "… (Suwayomi)" with its language. Its Local source (the server's own folder) appears too.
 - **Lists:** each source's Popular, and Latest when the source has one.
-- **Search:** searches one source.
+- **Search:** searches one source, or with **All your sources**, every one in the project's language (and those in every language), four at a time.
 - **Link:** Suwayomi has no way to open a link.
   - A link to a series it has already shown you (in a search or a list) opens.
   - Any other link on one of its sources' sites searches that source for the link's last words.

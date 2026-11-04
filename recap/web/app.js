@@ -1886,7 +1886,8 @@ let srcHave = new Set();  // the project's chapters from that series (source_ref
 const srcDlg = $("#sources-dialog");
 const srcName = (key) => (srcAll.find((s) => s.key === key) || {}).name || key;
 
-async function openSources(newOnly = false) {
+// find (RecapStudio.getChapters): a series to search every source for straight away, {titles, auto}
+async function openSources(newOnly = false, find = null) {
   $("#src-status").textContent = "";
   $("#src-results").replaceChildren();
   $("#src-more").hidden = true;
@@ -1902,12 +1903,86 @@ async function openSources(newOnly = false) {
   $("#src-find").hidden = !srcAll.length;
   const searchable = srcAll.filter((s) => s.search), listed = srcAll.filter((s) => s.lists.length);
   const opts = (list) => list.map((s) => el("option", { value: s.key }, s.name + (s.language ? ` (${s.language})` : "")));
-  $("#src-search-source").replaceChildren(...opts(searchable));
+  $("#src-search-source").replaceChildren(...[searchable.length > 1 ? el("option", { value: "*" }, "All your sources") : null,
+    ...opts(searchable)].filter(Boolean));
   $("#src-list-source").replaceChildren(...opts(listed));
   fillSourceLists();
   document.querySelector('.src-modes [data-mode="search"]').disabled = !searchable.length;
   document.querySelector('.src-modes [data-mode="lists"]').disabled = !listed.length;
-  setSourceMode(srcMode === "search" && !searchable.length || srcMode === "lists" && !listed.length ? "link" : srcMode);
+  setSourceMode(find && searchable.length ? "search"
+    : srcMode === "search" && !searchable.length || srcMode === "lists" && !listed.length ? "link" : srcMode);
+  if (find && searchable.length) {
+    $("#src-search-source").value = $("#src-search-source").options[0].value;
+    $("#src-query").value = find.titles[0] || "";
+    return searchEvery(find);
+  }
+}
+
+// The sources one search asks: the one picked, or all of them. Suwayomi's only in the project's language (or in
+// every language), since a server can have dozens.
+function searchTargets() {
+  const key = $("#src-search-source").value, lang = (current && current.settings.language) || "en";
+  return key !== "*" ? srcAll.filter((s) => s.key === key)
+    : srcAll.filter((s) => s.search && (s.kind !== "suwayomi" || !s.language || s.language === "all" || s.language === lang));
+}
+
+const sameTitle = (t) => String(t || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, "");
+
+// A series searched for in every source that can search (four at a time), by its first titles in turn (up to three)
+// until one finds something, the results by source. One called exactly one of its titles is opened (auto: and all its
+// chapters are got).
+async function searchEvery({ titles = [], auto = false }) {
+  const targets = searchTargets(), queries = [...new Set(titles.map((t) => String(t).trim()).filter(Boolean))].slice(0, 3);
+  let found = [], searched = "";
+  $("#src-more").hidden = true;
+  for (const query of queries) {
+    $("#src-query").value = query;
+    $("#src-results").replaceChildren();
+    let asked = 0;
+    const ask = async (s) => {
+      try { return { source: s, items: (await api("/api/sources/search", { method: "POST", json: { key: s.key, query, page: 1 } })).items }; }
+      catch (e) { return { source: s, items: [], error: e.message }; }
+      finally { $("#src-status").textContent = `Asked ${++asked} of ${plural(targets.length, "source")} for "${query}"…`; }
+    };
+    $("#src-status").textContent = `Asking ${plural(targets.length, "source")} for "${query}"…`;
+    found = [];
+    for (let i = 0; i < targets.length; i += 4) found.push(...await Promise.all(targets.slice(i, i + 4).map(ask)));
+    if (!srcDlg.open) return;  // (closed meanwhile)
+    searched = query;
+    if (found.some((r) => r.items.length)) break;
+  }
+  const errors = found.filter((r) => r.error).map((r) => `${r.source.name}: ${r.error}`);
+  $("#src-status").textContent = [found.some((r) => r.items.length) ? "" : "None of your sources found it.", ...errors]
+    .filter(Boolean).join(" · ");
+  for (const r of found.filter((x) => x.items.length)) {
+    if (targets.length > 1) $("#src-results").append(el("span", { class: "src-source-head" }, r.source.name));
+    $("#src-results").append(...r.items.map((it) => sourceCard(r.source.key, it)));
+  }
+  // the series called what was searched for; else called another of its titles
+  const called = (names) => {
+    const want = new Set(names.map(sameTitle).filter(Boolean)), out = [];
+    for (const r of found) for (const it of r.items) {
+      if (want.has(sameTitle(it.title)) && !out.some((m) => m.key === r.source.key && m.it.ref === it.ref)) out.push({ key: r.source.key, it });
+    }
+    return out;
+  };
+  let one = called([searched]);
+  if (!one.length) one = called(titles);
+  if (one.length !== 1) {
+    if (one.length) $("#src-status").textContent = `${one.length} series in your sources are called that: pick one.`;
+    return;
+  }
+  if (!auto) return openSeries(one[0].key, one[0].it.ref);
+  $("#src-status").textContent = `Getting the chapters from ${srcName(one[0].key)}…`;
+  let series;
+  try { series = await api("/api/sources/series", { method: "POST", json: { key: one[0].key, ref: one[0].it.ref } }); }
+  catch (e) { $("#src-status").textContent = e.message; return; }
+  if (!series.chapters.length) return showSeries(one[0].key, series, false);  // (it says it found none)
+  try {
+    await getSourceChapters(one[0].key, series, series.chapters.map(({ ref, name, url }) => ({ ref, name, url })), "number", []);
+  } catch (e) { showSeries(one[0].key, series, false); $("#src-series-status").textContent = e.message; return; }
+  notify(`Getting all ${plural(series.chapters.length, "chapter")} of ${series.title} from ${srcName(one[0].key)}, the one ` +
+    "of your sources that has a series called that. Check it's the right one in the Chapters tab.", "Getting its chapters");
 }
 
 function showSourceStep(step) {
@@ -1954,17 +2029,20 @@ async function showResults(key, load, page = 1) {
   try { r = await load(page); }
   catch (e) { $("#src-status").textContent = e.message; return; }
   $("#src-status").textContent = page === 1 && !r.items.length ? "Nothing found." : "";
-  $("#src-results").append(...r.items.map((it) => el("button", {
-    type: "button", class: "src-card", title: it.summary || it.title, onclick: () => openSeries(key, it.ref),
-  }, it.cover ? el("img", { src: it.cover, alt: "", loading: "lazy" }) : el("div", { class: "src-nocover" }),
-  el("span", {}, it.title))));
+  $("#src-results").append(...r.items.map((it) => sourceCard(key, it)));
   srcMore = r.more ? () => showResults(key, load, page + 1) : null;
   $("#src-more").hidden = !r.more;
 }
 
+const sourceCard = (key, it) => el("button", {
+  type: "button", class: "src-card", title: it.summary || it.title, onclick: () => openSeries(key, it.ref),
+}, it.cover ? el("img", { src: it.cover, alt: "", loading: "lazy" }) : el("div", { class: "src-nocover" }),
+el("span", {}, it.title));
+
 function runSourceSearch() {
   const key = $("#src-search-source").value, query = $("#src-query").value.trim();
   if (!key || !query) return;
+  if (key === "*") return searchEvery({ titles: [query] });
   return showResults(key, (page) => api("/api/sources/search", { method: "POST", json: { key, query, page } }));
 }
 
@@ -2052,19 +2130,24 @@ $("#src-go").addEventListener("click", async () => {
   const skip = newOnly && $("#src-skip").checked ? rows.filter((c) => !c.on).map((c) => c.ref) : [];
   $("#src-go").disabled = true;
   try {
-    current.job = await api(`/api/projects/${current.id}/download`, {
-      method: "POST", json: { key, series: { ref: series.ref, url: series.url, title: series.title }, chapters: chosen,
-                              place: $("#src-place").value || "number", skip },
-    });
-    srcDlg.close();
-    delete newCounts[current.id];
-    render();
-    poll();
+    await getSourceChapters(key, series, chosen, $("#src-place").value || "number", skip);
   } catch (e) {
     $("#src-series-status").textContent = e.message;
     $("#src-go").disabled = false;
   }
 });
+
+// Get chapters of a series into the open project (a job), closing the dialog
+async function getSourceChapters(key, series, chosen, place, skip) {
+  current.job = await api(`/api/projects/${current.id}/download`, {
+    method: "POST", json: { key, series: { ref: series.ref, url: series.url, title: series.title }, chapters: chosen,
+                            place, skip },
+  });
+  srcDlg.close();
+  delete newCounts[current.id];
+  render();
+  poll();
+}
 
 async function openNewChapters() {
   srcAll = (await api("/api/sources").catch(() => ({ sources: [] }))).sources;
@@ -4232,6 +4315,14 @@ window.RecapStudio = {
   // series a site lists ({url, title, cover, summary, kind, year}: Find the series picks it, with its characters)
   newProject({ name = "", kind = "", series = null } = {}) {
     return openNew(String(name || "").trim(), { kind, series });
+  },
+  // Get chapters from a site, for the open project, searching every source that can for a series by its titles (the
+  // first ones in turn, until one finds something): a series called exactly one of them, in one source only, is
+  // opened to choose its chapters (auto: they're all got, without asking). Whether any source can search is
+  // RecapStudio.api("/api/sources") (chapters !== false and search).
+  getChapters({ titles = [], auto = false } = {}) {
+    if (!current) return;
+    return openSources(false, { titles: [].concat(titles).map(String), auto: !!auto });
   },
   // the sidebar's box for a new project: its placeholder and its button's word (what's typed opens New project)
   setNewProjectBox({ placeholder, button, title } = {}) {
