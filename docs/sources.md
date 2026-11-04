@@ -20,7 +20,7 @@ Everything is in **Settings → Sources**:
 **Get chapters from a site…** (the Chapters tab) finds a series three ways:
 
 - **Link**: paste a series' page. The plugin for that site opens it; gallery-dl takes any other link when it's installed.
-- **Search**: search by title, in one source or **All your sources** (when more than one can search): plugins that have search, and Suwayomi's sources in the project's language. The results are grouped by source.
+- **Search**: search by title, in one source or **All your sources** (when more than one can search): plugins that have search, and Suwayomi's sources in the project's language. The results are grouped by source, each source's shown as soon as it answers (Recap Studio 0.2.6 or later; before, they came all at once).
 - **Lists**: a source's lists, a page at a time with **More**: Popular and Latest for Suwayomi's sources, and whatever lists a plugin offers (trending, new, completed…).
 
 Picking a series shows its chapters, first chapter first, each ticked unless the project already has it. **Get chapters** runs as a job (with progress and **Cancel**, like the other steps). Each chapter's pictures are downloaded into the project's `pages` folder, four at a time and retried when the site is busy. Pictures that aren't JPEG, PNG or WebP are saved as PNG. A chapter is added only once all its pages are in, placed by its number unless you choose otherwise, and the project takes the series' title if it had none. Cancelled or stopped by an error, run it again: chapters already in are passed over.

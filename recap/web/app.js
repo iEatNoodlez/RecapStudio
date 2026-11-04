@@ -28,6 +28,36 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
+// One search in several sources (their keys), got() called with each one's answer as soon as it comes: {key, items,
+// more}, or {key, error} (with check, offered as api() does, when a site wants its check for a person). It's one
+// request for them all, so the page's other requests (the results' covers) aren't kept waiting behind the searches.
+// Done once every source has answered; signal (an AbortController's) stops it.
+async function searchSources(keys, query, got, { signal } = {}) {
+  const r = await fetch("/api/sources/search-many", { method: "POST", signal, headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keys, query, page: 1 }) });
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).detail || msg; } catch {}
+    throw new Error(msg);
+  }
+  const reader = r.body.getReader(), text = new TextDecoder();
+  let rest = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    rest += text.decode(value || new Uint8Array(), { stream: !done });
+    let end;
+    while ((end = rest.indexOf("\n")) >= 0) {
+      const line = rest.slice(0, end).trim();
+      rest = rest.slice(end + 1);
+      if (!line) continue;
+      const one = JSON.parse(line);
+      if (one.check) siteCheck(one.check, one.error);
+      try { got(one); } catch (e) { console.error(e); }
+    }
+    if (done) return;
+  }
+}
+
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -1931,36 +1961,47 @@ function searchTargets() {
 
 const sameTitle = (t) => String(t || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, "");
 
-// A series searched for in every source that can search (four at a time), by its first titles in turn (up to three)
-// until one finds something, the results by source. One called exactly one of its titles is opened (auto: and all its
-// chapters are got).
+// A series searched for in every source that can search (all at once), by its first titles in turn (up to three)
+// until one finds something, each source's results shown as they come. Once all have answered, one series called
+// exactly one of its titles is opened (auto: and all its chapters are got), unless one was picked meanwhile.
+let srcSearch = null;  // the search running: a new one (or closing the dialog) stops it
 async function searchEvery({ titles = [], auto = false }) {
+  if (srcSearch) srcSearch.abort();
+  const stop = srcSearch = new AbortController();
   const targets = searchTargets(), queries = [...new Set(titles.map((t) => String(t).trim()).filter(Boolean))].slice(0, 3);
   let found = [], searched = "";
   $("#src-more").hidden = true;
   for (const query of queries) {
     $("#src-query").value = query;
     $("#src-results").replaceChildren();
-    let asked = 0;
-    const ask = async (s) => {
-      try { return { source: s, items: (await api("/api/sources/search", { method: "POST", json: { key: s.key, query, page: 1 } })).items }; }
-      catch (e) { return { source: s, items: [], error: e.message }; }
-      finally { $("#src-status").textContent = `Asked ${++asked} of ${plural(targets.length, "source")} for "${query}"…`; }
-    };
     $("#src-status").textContent = `Asking ${plural(targets.length, "source")} for "${query}"…`;
     found = [];
-    for (let i = 0; i < targets.length; i += 4) found.push(...await Promise.all(targets.slice(i, i + 4).map(ask)));
-    if (!srcDlg.open) return;  // (closed meanwhile)
+    try {
+      await searchSources(targets.map((s) => s.key), query, (one) => {
+        const source = targets.find((s) => s.key === one.key);
+        if (!source) return;
+        const r = { source, items: one.items || [], error: one.error };
+        found.push(r);
+        if (found.length < targets.length) {
+          $("#src-status").textContent = `Asked ${found.length} of ${plural(targets.length, "source")} for "${query}"…`;
+        }
+        if (!r.items.length) return;
+        if (targets.length > 1) $("#src-results").append(el("span", { class: "src-source-head" }, source.name));
+        $("#src-results").append(...r.items.map((it) => sourceCard(source.key, it)));
+      }, { signal: stop.signal });
+    } catch (e) {
+      if (e.name !== "AbortError" && srcSearch === stop) $("#src-status").textContent = e.message;
+      return;
+    }
+    if (!srcDlg.open || srcSearch !== stop) return;  // (closed meanwhile, or searched again)
     searched = query;
     if (found.some((r) => r.items.length)) break;
   }
+  srcSearch = null;
   const errors = found.filter((r) => r.error).map((r) => `${r.source.name}: ${r.error}`);
   $("#src-status").textContent = [found.some((r) => r.items.length) ? "" : "None of your sources found it.", ...errors]
     .filter(Boolean).join(" · ");
-  for (const r of found.filter((x) => x.items.length)) {
-    if (targets.length > 1) $("#src-results").append(el("span", { class: "src-source-head" }, r.source.name));
-    $("#src-results").append(...r.items.map((it) => sourceCard(r.source.key, it)));
-  }
+  if ($("#src-find").hidden) return;  // (a series was picked while the rest were answering)
   // the series called what was searched for; else called another of its titles
   const called = (names) => {
     const want = new Set(names.map(sameTitle).filter(Boolean)), out = [];
@@ -1996,7 +2037,11 @@ function showSourceStep(step) {
   $("#src-title").textContent = step === "series" ? "Choose the chapters" : "Get chapters from a site";
 }
 
+const stopSourceSearch = () => { if (srcSearch) { srcSearch.abort(); srcSearch = null; } };
+srcDlg.addEventListener("close", stopSourceSearch);
+
 function setSourceMode(mode) {
+  stopSourceSearch();
   srcMode = mode;
   document.querySelectorAll(".src-modes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   document.querySelectorAll(".src-row").forEach((r) => { r.hidden = r.dataset.for !== mode; });
@@ -2046,6 +2091,7 @@ function runSourceSearch() {
   const key = $("#src-search-source").value, query = $("#src-query").value.trim();
   if (!key || !query) return;
   if (key === "*") return searchEvery({ titles: [query] });
+  stopSourceSearch();
   return showResults(key, (page) => api("/api/sources/search", { method: "POST", json: { key, query, page } }));
 }
 
@@ -4389,6 +4435,8 @@ const siteCheck = (check, message) => { emitPlugins("site-check", { ...check, me
 window.RecapStudio = {
   version: 1,
   api, el, ask, notify, plural, showTab,
+  // one search in several sources, each one's answer as it comes: searchSources(keys, query, got, {signal}) (0.2.6)
+  searchSources,
   current: () => current,
   reload: () => (current ? openProject(current.id) : loadProjects()),
   on(event, fn) { (pluginHooks[event] ||= []).push(fn); },

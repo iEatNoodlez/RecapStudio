@@ -54,6 +54,18 @@ def api(path, method="GET", body=None, raw=False, files=None):
         return {"http": e.code, "detail": json.loads(detail).get("detail") if detail.startswith("{") else detail}
 
 
+def search_many(keys, query):
+    """/api/sources/search-many's lines, each with when it came (seconds after asking), and its Content-Type."""
+    req = urllib.request.Request(BASE + "/api/sources/search-many", method="POST", headers={"Content-Type": "application/json"},
+                                 data=json.dumps({"keys": keys, "query": query}).encode())
+    t, lines = time.time(), []
+    with urllib.request.urlopen(req, timeout=120) as r:
+        for line in r:
+            if line.strip():
+                lines.append((time.time() - t, json.loads(line)))
+        return lines, r.headers.get("Content-Type")
+
+
 def wait_job(pid, timeout=120):
     t = time.time()
     while time.time() - t < timeout:
@@ -308,6 +320,28 @@ def run():
     r = api("/api/sources/series", "POST", {"key": "plugin:broken", "ref": "x"})
     check(r.get("http") == 400 and "didn't load" in r["detail"], f"one that doesn't load: {r.get('detail')}")
 
+    print("9b. one search in several sources, each one's answer as it comes")
+    slow = plugin_text(extra="\nimport time\n_find = search\ndef search(query, page=1):\n    time.sleep(3)\n"
+                             "    return _find(query, page)\n")
+    api("/api/sources/plugins", "POST", files=("slow.py", slow.encode()))
+    keys = ["plugin:slow", "plugin:example", "plugin:broken", "plugin:nope"]
+    at, kind = search_many(keys, "moon")
+    got = {one["key"]: (t, one) for t, one in at}
+    check(sorted(got) == sorted(keys) and len(at) == len(keys), f"a line for each source: {[o['key'] for _, o in at]}")
+    check((kind or "").startswith("application/x-ndjson"), f"sent as lines of JSON ({kind})")
+    quick_at, quick = got["plugin:example"]
+    slow_at, slow_one = got["plugin:slow"]
+    check([x["title"] for x in quick.get("items", [])] == ["The Moon Tower", "Moonlight Cafe"] and quick["more"] is False
+          and quick["items"][0]["cover"].startswith("/api/sources/image/"), "a source's results as search gives them")
+    check(quick_at < 2 and slow_at >= 3 and at[-1][1]["key"] == "plugin:slow",
+          f"a quick source's answer isn't held for a slow one ({quick_at:.1f} s, then {slow_at:.1f} s)")
+    check(len(slow_one.get("items", [])) == 2, "and the slow one's comes when it's ready")
+    check("can't search" in got["plugin:broken"][1].get("error", ""), f"one that can't search says so: "
+          f"{got['plugin:broken'][1].get('error')}")
+    check(bool(got["plugin:nope"][1].get("error")) and "items" not in got["plugin:nope"][1],
+          f"a source that isn't there: {got['plugin:nope'][1].get('error')}")
+    api("/api/sources/plugins/slow", "DELETE")
+
     print("10. a call that hangs is stopped (in this process, with a short limit)")
     os.environ["RECAP_DATA"] = str(DATA)
     sys.path.insert(0, str(APP))
@@ -385,6 +419,9 @@ def site_check(sources):
                   and told.get("url", "").startswith(SITE_URL), f"the page is told the site, its page and the source: {told}")
         r = api("/api/sources/series", "POST", {"key": "plugin:example", "ref": f"{SITE_URL}/series/red-river"})
         check(r.get("http") == 400 and "check" in r["detail"], f"so does a series: {r.get('detail')}")
+        (_, one), = search_many(["plugin:example"], "moon")[0]
+        check("wants to check you're a person" in one.get("error", "") and (one.get("check") or {}).get("host") == "127.0.0.1",
+              f"and a search of several sources, that one's line saying so, with the site to offer: {one}")
 
         # in this process: a pass, as the Site check plugin gives one
         p = sources._plugin("example")

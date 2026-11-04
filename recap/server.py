@@ -10,16 +10,16 @@ import threading
 import time
 import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import cv2
 import numpy as np
 import soundfile as sf
 from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-import anthropic
 import requests
 
 from . import (bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu,
@@ -1304,6 +1304,40 @@ def sources_search(key: str = Body(..., embed=True), query: str = Body(..., embe
     return _sourced(sources.search, key, query, page)
 
 
+SEARCH_AT_ONCE = 8  # sources one search-many asks at the same time (each plugin runs in a process of its own)
+
+
+@app.post("/api/sources/search-many")
+def sources_search_many(keys: list[str] = Body(..., embed=True), query: str = Body(..., embed=True),
+                        page: int = Body(1, embed=True)):
+    """One search in several sources, each one's answer sent as soon as it comes, as a line of JSON: {"key", "items",
+    "more"}, or {"key", "error"} with "check" when a site wants its check for a person. The page shows each source's
+    results as they're found, on one request (so the results' covers aren't kept waiting behind the searches)."""
+    def one(key: str) -> dict:
+        try:
+            return {"key": key, **sources.search(key, query, page)}
+        except sources.SiteCheck as e:
+            return {"key": key, "error": str(e), "check": e.check}
+        except sources.SourceError as e:
+            return {"key": key, "error": str(e)}
+        except requests.RequestException as e:
+            return {"key": key, "error": f"The source didn't answer: {e}"}
+        except Exception as e:  # (one source's fault doesn't stop the others)
+            return {"key": key, "error": str(e) or type(e).__name__}
+
+    def lines():
+        keys_ = list(dict.fromkeys(keys))
+        if not keys_:
+            return
+        pool = ThreadPoolExecutor(max_workers=min(SEARCH_AT_ONCE, len(keys_)))
+        try:
+            for done in as_completed([pool.submit(one, k) for k in keys_]):
+                yield json.dumps(done.result(), default=str) + "\n"
+        finally:  # (the page stopped listening: the sources not yet asked aren't)
+            pool.shutdown(wait=False, cancel_futures=True)
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
+
+
 @app.post("/api/sources/browse")
 def sources_browse(key: str = Body(..., embed=True), list: str = Body(..., embed=True), page: int = Body(1, embed=True)):
     return _sourced(sources.browse, key, list, page)
@@ -1668,6 +1702,7 @@ def delete_claude_key():
 
 @app.post("/api/claude/check")
 def check_claude_key():
+    import anthropic  # (here, not at the top: the SDK takes seconds to load, and the app starts without it)
     try:
         claude.check_key()
         return {**claude.key_status(), "ok": True, "message": "Key works"}

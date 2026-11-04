@@ -7,6 +7,6 @@ Copies on 0.1.x update to Lite. To move to Full Suite, install its setup over Li
 
 ## What's new
 
-- **A plugin list installs all its plugins:** **Settings → Sources → Add list** now installs every source plugin on the list at once, each checked against the list's checksum. Adult ones are installed switched off, for you to switch on the ones you use. The list's plugins are grouped under its name, each with its switch, and **All on** / **All off**.
-- **Lists kept up to date:** each time Recap Studio starts (or with a list's **Check now**), its new plugins are installed and new versions got, each keeping whether it's on. A plugin you remove isn't put back (its list's **Plugins…** can install it again). Removing a list asks whether its plugins go with it.
-- **Switching sources on and off keeps up:** switching several quickly no longer puts some back on, and each switch is instant. Settings → Sources also opens faster when no Suwayomi server is running.
+- **It opens straight away:** the window appears as soon as you start Recap Studio, saying it's starting, and the app is ready about 4 seconds sooner than before. If it can't start, the window says so and where to find out why.
+- **Search results as they're found:** **Get chapters from a site → All your sources** shows each site's results as soon as it answers, so you can pick one while slower sites are still being asked. Searches no longer wait on a Suwayomi server that isn't running.
+- **Characters from AniList for a series from your sources** (Find the series 1.2.0, in Full Suite and from Settings → Plugins): pick a series from one of your source plugins, for its chapters, and **Get characters from AniList** (or Kitsu) finds the same series there and gets its characters. Find the series' results also show as each source answers.

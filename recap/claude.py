@@ -11,9 +11,7 @@ import logging
 import math
 import os
 
-import anthropic
 import cv2
-import httpx2
 import numpy as np
 
 from .store import DATA_ROOT
@@ -76,7 +74,8 @@ def key_status() -> dict:
     return {"saved": saved_key() is not None, "env": bool(os.environ.get("ANTHROPIC_API_KEY"))}
 
 
-def client() -> anthropic.Anthropic:
+def client() -> "anthropic.Anthropic":
+    import anthropic  # (here, not at the top: the SDK takes seconds to load, and the app starts without it)
     key = saved_key()
     return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
 
@@ -295,6 +294,8 @@ def narrate(model: str, instructions: str, chapter: str, pieces: list[dict], con
 def ask(model: str, instructions: str, content: list[dict], schema: dict, max_tokens: int = 32000, api=None,
         effort: str | None = None) -> dict:
     """One request (content: text and image blocks) whose answer is JSON in schema's shape."""
+    import anthropic  # (here, not at the top: the SDK takes seconds to load, and the app starts without it)
+    import httpx2
     api = api or client()
     output_config = {"format": {"type": "json_schema", "schema": schema}}
     if effort:  # "low" means less thinking before answering: faster, and less likely to run long

@@ -4,6 +4,7 @@ import math
 import queue
 import re
 import shutil
+import sys
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -13,8 +14,6 @@ import uuid
 
 import cv2
 import soundfile as sf
-
-import anthropic
 
 from . import (bubbles, captions, charscan, claude, cloud, cover, credits, editors, estimates, focus, gpu, magi, music,
                naming, ocr, plugins, sources,
@@ -925,6 +924,7 @@ def _story_context(p, chapter) -> str:
 
 
 def _script_claude(job, p):
+    import anthropic  # (here, not at the top: the SDK takes seconds to load, and the app starts without it)
     pid, s = p["id"], p["settings"]
     model = s.get("claude_model") or "claude-haiku-5-5"
     label = dict(claude.MODELS).get(model, model)
@@ -1014,6 +1014,9 @@ CLOUD_PAUSE = {  # the same for every service in cloud.py
 
 def _claude_problem(e: Exception) -> str | None:
     """'credit', 'key' or 'busy' for API errors that adding credit, fixing the key or waiting can fix."""
+    if "anthropic" not in sys.modules:  # (not loaded: not one of its errors)
+        return None
+    import anthropic
     if isinstance(e, anthropic.APIStatusError) and "credit" in str(e).lower():
         return "credit"
     if isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):

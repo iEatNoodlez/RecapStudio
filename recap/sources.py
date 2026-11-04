@@ -1116,7 +1116,9 @@ class _Suwayomi:
         if down and down[0] == url and time.time() < down[1]:
             raise SourceError(down[2])
         host = (urlparse(url).hostname or "").lower()
-        connect = 1.5 if host in ("127.0.0.1", "localhost", "::1") else 6  # (this PC answers at once, or not at all)
+        # (a server on this PC takes its connection at once, however busy it is; nothing there, and Windows takes 2 s
+        # to say so: every search would wait that long for one that isn't running)
+        connect = 0.5 if host in ("127.0.0.1", "localhost", "::1") else 6
         try:
             return self.session.post(f"{url}/api/graphql", json=body, timeout=(connect, timeout))
         except requests.RequestException as e:
