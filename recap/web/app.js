@@ -2168,33 +2168,111 @@ async function openNewChapters() {
 $("#get-chapters").addEventListener("click", () => openSources());
 $("#new-chapters").addEventListener("click", () => openSources(true));
 
-// Settings → Sources: plugins, plugin lists, gallery-dl and Suwayomi
-async function renderSourceSettings() {
-  let st;
-  try { st = await api("/api/sources"); } catch (e) { $("#src-error").textContent = e.message; return; }
-  $("#src-plugins").replaceChildren(...st.plugins.map((p) => el("div", { class: "src-plugin" },
+// Settings → Sources: plugins (grouped by the list they came from), plugin lists, gallery-dl and Suwayomi
+let srcDrawn = 0;                      // the latest drawing asked for: one that answers after a later one is dropped
+let srcSwitching = Promise.resolve();  // switches sent one after another, so the last one clicked is what stays
+
+// Switch plugins on or off without drawing the section again (that asks every source, which takes a while): every
+// box for them follows at once, and goes back if the switch didn't take.
+function switchPlugins(ids, on) {
+  const boxes = ids.flatMap((id) => [...document.querySelectorAll(`input[data-src-plugin="${CSS.escape(id)}"]`)]);
+  boxes.forEach((b) => (b.checked = on));
+  groupCounts();
+  srcSwitching = srcSwitching.then(async () => {
+    try {
+      await api(ids.length === 1 ? `/api/sources/plugins/${encodeURIComponent(ids[0])}` : "/api/sources/plugins",
+        { method: "PUT", json: ids.length === 1 ? { enabled: on } : { ids, enabled: on } });
+    } catch (e) {
+      boxes.forEach((b) => (b.checked = !on));
+      groupCounts();
+      notify(e.message, "Not switched");
+    }
+  });
+  return srcSwitching;
+}
+
+// each group's "N of M on", from its boxes
+function groupCounts() {
+  document.querySelectorAll("#src-plugins .src-group").forEach((g) => {
+    const boxes = [...g.querySelectorAll("input[data-src-plugin]")];
+    const count = g.querySelector(".src-group-count");
+    if (count) count.textContent = `${boxes.filter((b) => b.checked).length} of ${boxes.length} on`;
+  });
+}
+
+function sourcePluginRow(p) {
+  return el("div", { class: "src-plugin" },
     el("label", { class: "check" },
-      el("input", { type: "checkbox", checked: p.enabled, disabled: !!p.error, onchange: async (e) => {
-        await api(`/api/sources/plugins/${p.id}`, { method: "PUT", json: { enabled: e.target.checked } });
-        renderSourceSettings();
-      } }),
+      el("input", { type: "checkbox", "data-src-plugin": p.id, checked: p.enabled, disabled: !!p.error,
+        onchange: (e) => switchPlugins([p.id], e.target.checked) }),
       el("b", {}, p.name), p.version ? ` ${p.version}` : ""),
     el("span", { class: p.error ? "error" : "muted" },
-      p.error || [p.sites.join(", "), p.language, p.nsfw ? "adult" : "", p.chapters === false ? "series details, no chapters" : "",
-        p.repo === st.official_list ? "from Recap Studio's list" : p.repo ? "from a list" : "from a file"].filter(Boolean).join(" · ")),
+      p.error || [p.sites.join(", "), p.language, p.nsfw ? "adult" : "", p.chapters === false ? "series details, no chapters" : ""]
+        .filter(Boolean).join(" · ")),
     el("button", { type: "button", class: "ghost small danger", onclick: async () => {
-      if (!await ask(`Remove ${p.name}?`, "Its file is deleted from data\\plugins. Chapters already got stay.", { ok: "Remove", danger: true })) return;
+      if (!await ask(`Remove ${p.name}?`, "Its file is deleted from data\\plugins. Chapters already got stay."
+        + (p.repo ? " Its list won't put it back (its Plugins… can). To stop using it for now, switch it off instead." : ""),
+        { ok: "Remove", danger: true })) return;
       await api(`/api/sources/plugins/${p.id}`, { method: "DELETE" });
       renderSourceSettings();
-    } }, "Remove"))));
+    } }, "Remove"));
+}
+
+const listName = (url, st) => (st.lists[url] && st.lists[url].name) || url;
+
+async function renderSourceSettings() {
+  const me = ++srcDrawn;
+  let st;
+  try { st = await api("/api/sources"); } catch (e) { if (me === srcDrawn) $("#src-error").textContent = e.message; return; }
+  if (me !== srcDrawn) return;
+  // the plugins: a group for each list they came from (in the lists' order), then the rest
+  const groups = new Map(st.repos.map((u) => [u, []]));
+  const own = [], official = [];
+  for (const p of st.plugins) (p.repo === st.official_list ? official : groups.has(p.repo) ? groups.get(p.repo) : own).push(p);
+  const group = (title, list) => {
+    if (!list.length) return null;
+    const ids = list.filter((p) => !p.error).map((p) => p.id);
+    return el("div", { class: "src-group" },
+      el("div", { class: "src-group-head" }, el("span", { class: "field-head" }, title),
+        el("span", { class: "muted src-group-count" }),
+        list.length > 1 ? el("button", { type: "button", class: "ghost small", onclick: () => switchPlugins(ids, true) }, "All on") : null,
+        list.length > 1 ? el("button", { type: "button", class: "ghost small", onclick: () => switchPlugins(ids, false) }, "All off") : null),
+      ...list.map(sourcePluginRow));
+  };
+  const lists = [...groups].map(([u, list]) => group(listName(u, st), list));
+  $("#src-plugins").replaceChildren(...[...lists, group("Recap Studio's list", official),
+    group(lists.some(Boolean) || official.length ? "Your own" : "Plugins", own)].filter(Boolean));
   if (!st.plugins.length) $("#src-plugins").replaceChildren(el("span", { class: "muted" }, "No plugins."));
+  groupCounts();
   $("#src-repos").replaceChildren(...st.repos.map((url) => {
     const box = el("div", { class: "src-repo-list" });
+    const s = st.lists[url];
+    const mine = (groups.get(url) || []).length;
+    const when = s && s.at ? new Date(s.at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    const note = el("span", { class: s && s.error ? "error src-repo-note" : "muted src-repo-note" },
+      s && s.error ? `Couldn't check it: ${s.error}` : [plural(mine, "plugin"), when ? `checked ${when}` : ""].filter(Boolean).join(" · "));
     const row = el("div", { class: "src-repo" },
-      el("span", { class: "src-repo-url", title: url }, url),
+      el("span", { class: "src-repo-url", title: url }, listName(url, st)), note,
+      el("button", { type: "button", class: "ghost small", title: "Install its new plugins and get new versions now, as when Recap Studio starts",
+        onclick: async (e) => {
+          e.target.disabled = true;
+          note.textContent = "Checking…";
+          let r;
+          try { r = await api("/api/sources/repos/sync", { method: "POST", json: { url } }); }
+          catch (err) { e.target.disabled = false; note.textContent = err.message; return; }
+          await renderSourceSettings();
+          if (r.synced.installed.length || r.synced.updated.length || r.synced.failed.length) notify(listSummary(r.name, r.synced), "Plugin list checked");
+        } }, "Check now"),
       el("button", { type: "button", class: "ghost small", onclick: () => showRepo(url, box) }, "Plugins…"),
       el("button", { type: "button", class: "ghost small danger", onclick: async () => {
-        await api("/api/sources/repos", { method: "DELETE", json: { url } });
+        const how = await choose(`Remove ${listName(url, st)}?`, mine
+          ? `Its ${plural(mine, "plugin")} can go with it, or stay as plugins of your own (no longer kept up to date).`
+          : "It's taken out of Settings.",
+          [...(mine ? [{ value: "keep", label: "Keep its plugins" }] : []),
+            { value: "all", label: mine ? "Remove its plugins too" : "Remove", danger: true }]);
+        if (!how) return;
+        try { await api("/api/sources/repos", { method: "DELETE", json: { url, plugins: how === "all" } }); }
+        catch (err) { return notify(err.message); }
         renderSourceSettings();
       } }, "Remove"));
     return el("div", {}, row, box);
@@ -2205,6 +2283,16 @@ async function renderSourceSettings() {
     : g.error || "Not found. Install gallery-dl yourself (it isn't part of the app), then give its program here if it isn't on PATH.";
   renderSuwayomi(st.suwayomi);
   $("#src-error").textContent = "";
+}
+
+// what checking a list did, in a line or two
+function listSummary(name, s) {
+  const done = [s.installed.length ? `${plural(s.installed.length, "plugin")} installed` : "",
+    s.updated.length ? `${plural(s.updated.length, "plugin")} updated` : ""].filter(Boolean);
+  let text = `${name}: ${done.length ? done.join(", ") : "nothing new"}.`;
+  if (s.off.length) text += ` The adult ones are switched off (${s.off.join(", ")}): switch on the ones you use.`;
+  if (s.failed.length) text += ` Not installed: ${s.failed.join("; ")}.`;
+  return text;
 }
 
 function renderSuwayomi(s) {
@@ -2222,21 +2310,33 @@ $("#src-suwa-save").addEventListener("click", async () => {
   $("#src-suwa-pass").value = "";
 });
 
+// a list's plugins: each one installed from it, with its switch; ones you removed, to install again
 async function showRepo(url, box) {
+  if (box.childElementCount && !box.dataset.loading) return box.replaceChildren();  // (Plugins… again: closed)
+  box.dataset.loading = "1";
   box.replaceChildren(el("span", { class: "muted" }, "Loading…"));
   let r;
   try { r = await api(`/api/sources/repo?url=${encodeURIComponent(url)}`); }
   catch (e) { box.replaceChildren(el("span", { class: "error" }, e.message)); return; }
-  box.replaceChildren(el("span", { class: "field-head" }, r.name), ...r.plugins.map((p) => el("div", { class: "src-plugin" },
-    el("b", {}, p.name, p.version ? ` ${p.version}` : ""),
-    el("span", { class: "muted" }, [p.summary, p.sites.join(", "), p.language, p.nsfw ? "adult" : ""].filter(Boolean).join(" · ")),
-    p.installed && !p.update ? el("span", { class: "ok" }, "Installed")
-      : el("button", { type: "button", class: "ghost small", onclick: async (e) => {
+  finally { delete box.dataset.loading; }
+  box.replaceChildren(...r.plugins.map((p) => el("div", { class: "src-plugin" },
+    p.kind === "source" && p.installed && !p.elsewhere
+      ? el("label", { class: "check" }, el("input", { type: "checkbox", "data-src-plugin": p.id, checked: p.enabled,
+        onchange: (e) => switchPlugins([p.id], e.target.checked) }), el("b", {}, p.name), p.version ? ` ${p.version}` : "")
+      : el("b", {}, p.name, p.version ? ` ${p.version}` : ""),
+    el("span", { class: "muted" }, [p.summary, p.sites.join(", "), p.language, p.nsfw ? "adult" : "",
+      p.elsewhere ? "you have one of your own by this name, so it's left alone" : "",
+      p.left_out ? "you removed it" : "",
+      p.kind === "feature" ? "adds to the app: Settings → Plugins" : ""].filter(Boolean).join(" · ")),
+    p.kind === "source" && !p.installed && !p.elsewhere
+      ? el("button", { type: "button", class: "ghost small", onclick: async (e) => {
         e.target.disabled = true;
         try { await api("/api/sources/repos/install", { method: "POST", json: { url, id: p.id } }); }
         catch (err) { e.target.disabled = false; return notify(err.message, "Not installed"); }
         await renderSourceSettings();
-      } }, p.update ? "Update" : "Install"))));
+        box.replaceChildren();
+        showRepo(url, box);
+      } }, "Install") : null)));
 }
 
 $("#src-plugin-file").addEventListener("change", async (e) => {
@@ -2252,13 +2352,24 @@ $("#src-plugin-file").addEventListener("change", async (e) => {
   renderSourceSettings();
 });
 
-$("#src-repo-add").addEventListener("click", async () => {
+$("#src-repo-add").addEventListener("click", async (e) => {
   const url = $("#src-repo-url").value.trim();
   if (!url) return;
-  try { await api("/api/sources/repos", { method: "POST", json: { url } }); }
-  catch (e) { $("#src-error").textContent = e.message; return; }
+  if (!await ask("Add this list and install its plugins?", "Every source plugin on it is installed (adult ones "
+    + "switched off), and kept up to date: each time Recap Studio starts, the list's new plugins are installed and new "
+    + "versions got. Each one can be switched off. A plugin is a program: it runs on this PC with your permissions, so "
+    + "add a list only if you trust whoever keeps it.", { ok: "Add and install" })) return;
+  const button = e.target, was = button.textContent;
+  button.disabled = $("#src-repo-url").disabled = true;
+  button.textContent = "Installing…";
+  $("#src-error").textContent = "";
+  let r;
+  try { r = await api("/api/sources/repos", { method: "POST", json: { url } }); }
+  catch (err) { $("#src-error").textContent = err.message; return; }
+  finally { button.disabled = $("#src-repo-url").disabled = false; button.textContent = was; }
   $("#src-repo-url").value = "";
-  renderSourceSettings();
+  await renderSourceSettings();
+  notify(listSummary(r.name, r.synced), "Plugin list added");
 });
 
 // ---- chapters --------------------------------------------------------------

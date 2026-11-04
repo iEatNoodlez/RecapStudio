@@ -197,35 +197,88 @@ def run():
     check(job["status"] == "done" and len(api(f"/api/projects/{pid}")["chapters"]) == 5, "run again, it's added")
     check(not any((DATA / "projects").glob("*/downloading")), "nothing left in the download folder")
 
-    print("7. a plugin list")
+    print("7. a plugin list: all its plugins installed, adult ones off, kept up to date")
     good = plugin_text().replace('NAME = "Example Comics"', 'NAME = "Listed Comics"').replace('VERSION = "1.0.0"', 'VERSION = "2.0.0"')
+    adult = plugin_text().replace('NAME = "Example Comics"', 'NAME = "Adult Comics"').replace("NSFW = False", "NSFW = True")
     (REPO / "listed.py").write_text(good, encoding="utf-8", newline="\n")
+    (REPO / "adult.py").write_text(adult, encoding="utf-8", newline="\n")
     (REPO / "bad.py").write_text(good + "\n# changed after the list was made\n", encoding="utf-8", newline="\n")
-    sha = hashlib.sha256((REPO / "listed.py").read_bytes()).hexdigest()
+    sha = lambda name: hashlib.sha256((REPO / name).read_bytes()).hexdigest()
     index = {"name": "Test list", "plugins": [
-        {"id": "listed", "name": "Listed Comics", "version": "2.0.0", "file": "listed.py", "sha256": sha,
+        {"id": "listed", "name": "Listed Comics", "version": "2.0.0", "file": "listed.py", "sha256": sha("listed.py"),
          "sites": ["127.0.0.1"], "language": "en", "summary": "From a list"},
-        {"id": "bad", "name": "Bad", "version": "1", "file": "bad.py", "sha256": sha}]}
+        {"id": "adult", "name": "Adult Comics", "version": "1.0.0", "file": "adult.py", "sha256": sha("adult.py"), "nsfw": True},
+        {"id": "example", "name": "Example Comics", "version": "9.0.0", "file": "listed.py", "sha256": sha("listed.py")},
+        {"id": "bad", "name": "Bad", "version": "1", "file": "bad.py", "sha256": sha("listed.py")}]}
     (REPO / "index.json").write_text(json.dumps(index), encoding="utf-8")
     repo = f"{SITE_URL}/repo/index.json"
     r = api("/api/sources/repos", "POST", {"url": f"{SITE_URL}/series/red-river"})
     check(r.get("http") == 400, f"a page that isn't a list is refused: {r.get('detail')}")
     r = api("/api/sources/repos", "POST", {"url": repo})
-    check(r.get("name") == "Test list" and [x["id"] for x in r["plugins"]] == ["listed", "bad"], "the list added")
-    check(api("/api/sources")["repos"] == [repo], "kept in settings")
+    synced = r.get("synced") or {}
+    check(r.get("name") == "Test list" and [x["id"] for x in r["plugins"]] == ["listed", "adult", "example", "bad"], "the list added")
+    check(synced.get("installed") == ["Listed Comics", "Adult Comics"], f"adding it installs its plugins: {synced}")
+    check(synced.get("off") == ["Adult Comics"], "the adult one switched off")
+    check(len(synced.get("failed", [])) == 1 and "checksum" in synced["failed"][0], f"one that doesn't match its checksum isn't: {synced.get('failed')}")
+    listed = {x["id"]: x for x in r["plugins"]}
+    check(listed["example"]["elsewhere"] and listed["example"]["installed"] == "1.0.0",
+          "a plugin of the member's own by the same id is left alone (not replaced by the list's)")
+    st = api("/api/sources")
+    plugins = {x["id"]: x for x in st["plugins"]}
+    check(st["repos"] == [repo] and st["lists"][repo]["name"] == "Test list", "kept in settings, with when it was checked")
+    check(plugins["listed"]["repo"] == repo and plugins["listed"]["enabled"] and not plugins["adult"]["enabled"],
+          "each remembers its list; the listed one is on, the adult one off")
+    check(plugins["example"]["repo"] is None and plugins["example"]["version"] == "1.0.0", "the member's own is untouched")
     r = api("/api/sources/repos/install", "POST", {"url": repo, "id": "bad"})
-    check(r.get("http") == 400 and "checksum" in r["detail"], f"a file that doesn't match is refused: {r.get('detail')}")
+    check(r.get("http") == 400 and "checksum" in r["detail"], f"installing it by hand is refused too: {r.get('detail')}")
+
+    # removed by the member: not put back by the list, until installed again
+    api("/api/sources/plugins/listed", "DELETE")
+    r = api("/api/sources/repos/sync", "POST", {"url": repo})
+    check("listed" not in [x["id"] for x in api("/api/sources")["plugins"]] and r["synced"]["installed"] == [],
+          "a plugin the member removed isn't put back when the list is checked")
+    check({x["id"]: x for x in r["plugins"]}["listed"]["left_out"], "the list shows it as removed")
     r = api("/api/sources/repos/install", "POST", {"url": repo, "id": "listed"})
-    check(r.get("name") == "Listed Comics", "installed from the list")
-    listed = api(f"/api/sources/repo?url={repo}")["plugins"][0]
-    check(listed["installed"] == "2.0.0" and not listed["update"], "shown as installed")
-    index["plugins"][0]["version"] = "2.1.0"
+    check(r.get("name") == "Listed Comics", "Install puts it back")
+    r = api("/api/sources/repos/sync", "POST", {"url": repo})
+    check(not {x["id"]: x for x in r["plugins"]}["listed"]["left_out"], "and it's no longer left out")
+
+    # a new version: got when the list is checked, each plugin keeping whether it's on
+    api("/api/sources/plugins/listed", "PUT", {"enabled": False})
+    (REPO / "listed.py").write_text(good.replace('VERSION = "2.0.0"', 'VERSION = "2.1.0"'), encoding="utf-8", newline="\n")
+    index["plugins"][0].update(version="2.1.0", sha256=sha("listed.py"))
+    newer = plugin_text().replace('NAME = "Example Comics"', 'NAME = "Newer Comics"')
+    (REPO / "newer.py").write_text(newer, encoding="utf-8", newline="\n")
+    index["plugins"].append({"id": "newer", "name": "Newer Comics", "version": "1.0.0", "file": "newer.py", "sha256": sha("newer.py")})
     (REPO / "index.json").write_text(json.dumps(index), encoding="utf-8")
-    check(api(f"/api/sources/repo?url={repo}")["plugins"][0]["update"], "a newer version is offered as an update")
+    r = api("/api/sources/repos/sync", "POST", {"url": repo})
+    check(r["synced"]["updated"] == ["Listed Comics"] and r["synced"]["installed"] == ["Newer Comics"],
+          f"checking the list gets the new version and the new plugin: {r['synced']}")
     plugins = {x["id"]: x for x in api("/api/sources")["plugins"]}
-    check(plugins["listed"]["repo"] == repo, "it remembers its list")
+    check(plugins["listed"]["version"] == "2.1.0" and not plugins["listed"]["enabled"], "updated, and still off")
+    check(plugins["example"]["version"] == "1.0.0", "the member's own still untouched")
+
+    # several at once (a list's All on)
+    r = api("/api/sources/plugins", "PUT", {"ids": ["listed", "adult", "newer"], "enabled": True})
+    check(all(x["enabled"] for x in r["plugins"] if x["id"] in ("listed", "adult", "newer")), "All on switches them all on")
+    r = api("/api/sources/plugins", "PUT", {"ids": ["adult", "newer"], "enabled": False})
+    on = {x["id"]: x["enabled"] for x in r["plugins"]}
+    check(on["listed"] and not on["adult"] and not on["newer"], "and off again, just those")
+
+    # a list removed with its plugins, and one whose plugins stay
+    (REPO / "second.json").write_text(json.dumps({"name": "Second list", "plugins": [
+        {"id": "second", "name": "Second Comics", "version": "1", "file": "newer.py", "sha256": sha("newer.py")}]}), encoding="utf-8")
+    second = f"{SITE_URL}/repo/second.json"
+    r = api("/api/sources/repos", "POST", {"url": second})
+    check(r["synced"]["installed"] == ["Second Comics"], "a second list's plugin installed")
+    r = api("/api/sources/repos", "DELETE", {"url": second, "plugins": True})
+    ids = [x["id"] for x in api("/api/sources")["plugins"]]
+    check(r["removed"] == ["second"] and "second" not in ids and "listed" in ids, "removing a list with its plugins takes only its own")
     api("/api/sources/repos", "DELETE", {"url": repo})
-    check(api("/api/sources")["repos"] == [], "the list removed")
+    st = api("/api/sources")
+    check(st["repos"] == [] and "listed" in [x["id"] for x in st["plugins"]], "removing one and keeping its plugins keeps them")
+    for pid in ("adult", "newer"):
+        api(f"/api/sources/plugins/{pid}", "DELETE")
 
     print("8. switching off and removing")
     api("/api/sources/plugins/listed", "PUT", {"enabled": False})
@@ -269,7 +322,34 @@ def run():
         check(time.time() - t < 10 and "was stopped" in str(e), f"a hanging call is stopped: {e}")
     s3 = sources._host("hang").call("search", "moon", 1, timeout=20)
     check(len(s3["items"]) == 2, "and it starts again")
+    import threading
+    hung = {}
+
+    def busy():
+        try:
+            sources._host("hang").call("series", "x", timeout=60)
+        except sources.SourceError as e:
+            hung["error"] = str(e)
+    threading.Thread(target=busy, daemon=True).start()
+    time.sleep(1.5)
+    t = time.time()
+    sources.set_enabled("hang", False)
+    check(time.time() - t < 2, f"switching off a plugin in the middle of a call doesn't wait for it ({time.time() - t:.1f} s)")
+    deadline = time.time() + 10
+    while "error" not in hung and time.time() < deadline:
+        time.sleep(0.1)
+    check("stopped" in hung.get("error", ""), f"and that call ends: {hung.get('error')}")
+    sources.set_enabled("hang", True)
     sources.stop_all()
+
+    # a Suwayomi server that isn't running: asked once, not on every drawing of Settings → Sources
+    t = time.time()
+    first = sources.suwayomi.status()
+    slow = time.time() - t
+    t = time.time()
+    again = sources.suwayomi.status(), sources.available()
+    check(not first["ok"] and time.time() - t < 0.5, f"a Suwayomi that isn't answering isn't asked again straight away "
+          f"({slow:.1f} s, then {time.time() - t:.2f} s)")
 
     print("11. a site's check for a person (the made-up site's stand-in for Cloudflare's)")
     site_check(sources)

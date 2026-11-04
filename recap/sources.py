@@ -152,8 +152,9 @@ def _plugin(pid: str) -> dict:
     return p
 
 
-def add_plugin(filename: str, data: bytes, repo: str | None = None) -> dict:
-    """Save a plugin (replacing one with the same file name) after checking it is one."""
+def add_plugin(filename: str, data: bytes, repo: str | None = None, enabled: bool | None = None) -> dict:
+    """Save a plugin (replacing one with the same file name) after checking it is one. enabled: whether a new one
+    starts switched on (one that's here already keeps its choice)."""
     if len(data) > MAX_FILE:
         raise SourceError("That file is too big for a plugin (over 1 MB)")
     info = read_plugin(data.decode("utf-8-sig", errors="replace"))
@@ -162,30 +163,45 @@ def add_plugin(filename: str, data: bytes, repo: str | None = None) -> dict:
         PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
         (PLUGINS_DIR / f"{pid}.py").write_bytes(data)
         state = _state()
-        state[pid] = {"enabled": state.get(pid, {}).get("enabled", True), "repo": repo, "added": time.time(),
+        had = state.get(pid, {}).get("enabled")
+        state[pid] = {"enabled": had if had is not None else enabled is not False, "repo": repo, "added": time.time(),
                       "sha256": hashlib.sha256(data).hexdigest()}
+        state.get(LEFT_OUT, {}).pop(pid, None)  # (installed again on purpose)
         _save_state(state)
     _stop_host(pid)  # the next call starts the new version
     return {"id": pid, **info}
 
 
-def remove_plugin(pid: str) -> None:
+LEFT_OUT = "_left_out"  # in plugins.json: {plugin id: its list}, plugins of a list the member removed (not put back)
+
+
+def remove_plugin(pid: str, leave_out: bool = True) -> None:
+    """Delete a plugin. One from a plugin list is remembered as left out, so checking the list doesn't put it back."""
     _stop_host(pid)
     with _lock:
         (PLUGINS_DIR / f"{pid}.py").unlink(missing_ok=True)
         (PLUGINS_DIR / f"{pid}.log").unlink(missing_ok=True)
         state = _state()
-        state.pop(pid, None)
+        repo = state.pop(pid, {}).get("repo")
+        if repo and leave_out:
+            state.setdefault(LEFT_OUT, {})[pid] = repo
         _save_state(state)
 
 
 def set_enabled(pid: str, on: bool) -> None:
+    set_enabled_many([pid], on)
+
+
+def set_enabled_many(pids: list[str], on: bool) -> None:
+    """Switch plugins on or off, at once (one write); a plugin switched off in the middle of a call is stopped."""
     with _lock:
         state = _state()
-        state.setdefault(pid, {})["enabled"] = bool(on)
+        for pid in pids:
+            state.setdefault(pid, {})["enabled"] = bool(on)
         _save_state(state)
     if not on:
-        _stop_host(pid)
+        for pid in pids:
+            _stop_host(pid)
 
 
 # ---- running a plugin: one process each, kept while the app runs -------------------------------------------------
@@ -259,11 +275,20 @@ def _host(pid: str) -> _Host:
 
 
 def _stop_host(pid: str) -> None:
+    """Stop a plugin's process now: one in the middle of a call (a search, up to 90 s) is killed, and that call
+    ends with an error, rather than waited for."""
     with _lock:
         h = _hosts.pop(pid, None)
     if h:
-        with h.lock:
-            h.stop()
+        if h.lock.acquire(timeout=0.5):
+            try:
+                h.stop()
+            finally:
+                h.lock.release()
+        else:
+            proc = h.proc
+            if proc and proc.poll() is None:
+                proc.kill()
 
 
 def stop_all() -> None:
@@ -764,6 +789,7 @@ def repo(url: str) -> dict:
         raise SourceError("That link isn't a plugin list (it has no \"plugins\")")
     official = url == plugins_.OFFICIAL_LIST
     mine = {"source": {p["id"]: p for p in plugins()}, "feature": {p["id"]: p for p in plugins_.found()}}
+    left = _state().get(LEFT_OUT, {})
     out = []
     for x in index["plugins"]:
         if not (isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("file"), str)
@@ -780,9 +806,12 @@ def repo(url: str) -> dict:
                     "nsfw": bool(x.get("nsfw")), "sites": [str(s) for s in x.get("sites", [])][:20],
                     "too_new": kind == "feature" and isinstance(x.get("api"), int) and x["api"] > plugins_.API,
                     "installed": have.get("version") if have else None,
-                    "update": bool(have) and have.get("version") != version})
+                    "update": bool(have) and have.get("version") != version,
+                    "enabled": bool(have and have.get("enabled")),
+                    "elsewhere": bool(have) and kind == "source" and have.get("repo") != url,  # (a file, another list)
+                    "left_out": not have and left.get(pid) == url})
     return {"name": _text(index.get("name") or urlparse(url).hostname, 80), "url": url, "official": official,
-            "plugins": out}
+            "plugins": out, "status": list_status.get(url)}
 
 
 def install(url: str, pid: str) -> dict:
@@ -802,10 +831,86 @@ def install(url: str, pid: str) -> dict:
         except plugins_.PluginError as e:
             raise SourceError(f"{entry.get('name') or pid}: {e}")
         return {**info, "kind": "feature"}
+    return _install_entry(url, entry)
+
+
+def _install_entry(url: str, entry: dict, enabled: bool | None = None) -> dict:
+    """A source plugin from a list's entry, checked against its checksum."""
     data = _fetch_file(urljoin(url, entry["file"]))
     if hashlib.sha256(data).hexdigest() != str(entry.get("sha256", "")).lower():
         raise SourceError(f"{entry['file']} doesn't match the list's checksum, so it wasn't installed")
-    return {**add_plugin(f"{pid}.py", data, repo=url), "kind": "source"}
+    return {**add_plugin(f"{plugin_id(str(entry['id']))}.py", data, repo=url, enabled=enabled), "kind": "source"}
+
+
+LIST_WORKERS = 6             # a list's plugins fetched at once
+list_status: dict[str, dict] = {}  # a list's link: what its last check did (sync_repo), or why it couldn't
+
+
+def sync_repo(url: str) -> dict:
+    """Keep a plugin list's sources here: each source plugin on it that isn't installed yet is installed (adult ones
+    switched off, for the member to switch on), and each one installed from it that the list has a new version of
+    is updated, keeping whether it's on. Ones the member removed stay removed (LEFT_OUT), and a plugin of the same
+    id from a file or another list is left alone. {"installed", "updated", "off", "failed"}: plugins' names."""
+    index = _index(url)
+    if not isinstance(index, dict) or not isinstance(index.get("plugins"), list):
+        raise SourceError("That link isn't a plugin list (it has no \"plugins\")")
+    left = _state().get(LEFT_OUT, {})
+    mine = {p["id"]: p for p in plugins()}
+    todo = []
+    for x in index["plugins"]:
+        if not (isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("file"), str)
+                and isinstance(x.get("sha256"), str)) or x.get("kind") == "feature":
+            continue
+        pid = plugin_id(x["id"])
+        have = mine.get(pid)
+        if left.get(pid) == url:
+            continue
+        if have is None:
+            todo.append((x, "installed"))
+        elif have.get("repo") == url and have.get("version") != _text(x.get("version"), 20):
+            todo.append((x, "updated"))
+    done = {"installed": [], "updated": [], "off": [], "failed": []}
+
+    def one(item):
+        x, what = item
+        name = _text(x.get("name") or x["id"], 80)
+        try:
+            _install_entry(url, x, enabled=None if what == "updated" else not x.get("nsfw"))
+            return what, name, what == "installed" and bool(x.get("nsfw")), None
+        except SourceError as e:
+            return "failed", name, False, str(e)
+
+    with ThreadPoolExecutor(max_workers=LIST_WORKERS, thread_name_prefix="list") as pool:
+        for what, name, off, error in pool.map(one, todo):
+            done[what].append(f"{name}: {error}" if error else name)
+            if off:
+                done["off"].append(name)
+    list_status[url] = {"at": time.time(), "error": None, "name": _text(index.get("name") or urlparse(url).hostname, 80),
+                        **done}
+    return done
+
+
+def sync_lists() -> None:
+    """Every plugin list the member added, checked (as the app starts): new plugins installed, new versions got."""
+    for url in store.global_settings().get("plugin_repos") or []:
+        try:
+            sync_repo(url)
+        except SourceError as e:  # (offline, or the list moved: it's said in Settings → Sources)
+            list_status[url] = {"at": time.time(), "error": str(e)}
+
+
+def forget_repo(url: str, remove_plugins: bool = False) -> list[str]:
+    """A list taken out of Settings: with remove_plugins, the plugins installed from it go too (else they stay, as
+    plugins of their own). Its plugins left out are forgotten. The ids removed."""
+    gone = [p["id"] for p in plugins() if p.get("repo") == url] if remove_plugins else []
+    for pid in gone:
+        remove_plugin(pid, leave_out=False)
+    with _lock:
+        state = _state()
+        state[LEFT_OUT] = {k: v for k, v in state.get(LEFT_OUT, {}).items() if v != url}
+        _save_state(state)
+    list_status.pop(url, None)
+    return gone
 
 
 # ---- gallery-dl: the member's own copy, run as a program --------------------------------------------------------
@@ -960,6 +1065,7 @@ class _Suwayomi:
     def __init__(self):
         self._cache, self._lock = {}, threading.Lock()
         self.session, self._for = requests.Session(), None
+        self._down = None  # (its address, until when, the message): a server that didn't answer, not asked again yet
 
     def url(self) -> str:
         return (store.global_settings().get("suwayomi_url") or "http://127.0.0.1:4567").strip().rstrip("/")
@@ -986,7 +1092,7 @@ class _Suwayomi:
 
     def _fresh(self):
         with self._lock:
-            self.session, self._for, self._cache = requests.Session(), None, {}
+            self.session, self._for, self._cache, self._down = requests.Session(), None, {}, None
 
     def headers(self) -> dict:
         """What a picture asked for from the server needs: the login, as a header."""
@@ -1001,11 +1107,23 @@ class _Suwayomi:
             out["Cookie"] = cookies
         return out
 
+    DOWN_FOR = 30  # seconds a server that didn't answer is taken as still down (a refused connection on Windows
+                   # takes 2 s, and Settings → Sources asks it each time it's drawn)
+
     def _post(self, body: dict, timeout: float):
+        url = self.url()
+        down = self._down
+        if down and down[0] == url and time.time() < down[1]:
+            raise SourceError(down[2])
+        host = (urlparse(url).hostname or "").lower()
+        connect = 1.5 if host in ("127.0.0.1", "localhost", "::1") else 6  # (this PC answers at once, or not at all)
         try:
-            return self.session.post(f"{self.url()}/api/graphql", json=body, timeout=timeout)
+            return self.session.post(f"{url}/api/graphql", json=body, timeout=(connect, timeout))
         except requests.RequestException as e:
-            raise SourceError(f"Suwayomi isn't answering at {self.url()} ({e.__class__.__name__})")
+            message = f"Suwayomi isn't answering at {url} ({e.__class__.__name__})"
+            if isinstance(e, (requests.ConnectionError, requests.ConnectTimeout)):
+                self._down = (url, time.time() + self.DOWN_FOR, message)
+            raise SourceError(message)
 
     def _sign_in(self, basic: bool) -> None:
         """Log in the way the server asks: basic auth when it answered 401; else both its UI login's token and its

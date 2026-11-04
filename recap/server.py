@@ -81,8 +81,11 @@ def _startup():
     store.move_video_settings()  # video settings were app-wide until 0.1.1: each project keeps its own
     pipeline.start_worker()
     phone.restore(app)       # Phone access, when it was on
-    if store.global_settings().get("check_new_chapters"):  # each project's new chapters, from its source
-        threading.Thread(target=sources.check_all, daemon=True, name="new-chapters").start()
+    def check_sources():
+        sources.sync_lists()  # the member's plugin lists: new plugins installed, new versions got
+        if store.global_settings().get("check_new_chapters"):  # each project's new chapters, from its source
+            sources.check_all()
+    threading.Thread(target=check_sources, daemon=True, name="new-chapters").start()
 
 
 @app.on_event("shutdown")
@@ -1210,6 +1213,7 @@ def _sourced(fn, *args):
 def sources_status():
     s = store.global_settings()
     return {"sources": sources.available(), "plugins": sources.plugins(), "repos": s.get("plugin_repos") or [],
+            "lists": {u: sources.list_status.get(u) for u in s.get("plugin_repos") or []},
             "gallery_dl": sources.gallery_dl.status(), "suwayomi": sources.suwayomi.status(),
             "new_counts": sources.new_counts, "official_list": plugins.OFFICIAL_LIST}
 
@@ -1229,6 +1233,13 @@ async def sources_add_plugin(file: UploadFile):
 @app.put("/api/sources/plugins/{pid}")
 def sources_switch_plugin(pid: str, enabled: bool = Body(..., embed=True)):
     sources.set_enabled(pid, enabled)
+    return {"plugins": sources.plugins()}
+
+
+@app.put("/api/sources/plugins")
+def sources_switch_plugins(ids: list[str] = Body(..., embed=True), enabled: bool = Body(..., embed=True)):
+    """Several plugins switched on or off at once (a list's All on / All off)."""
+    sources.set_enabled_many(ids, enabled)
     return {"plugins": sources.plugins()}
 
 
@@ -1253,18 +1264,29 @@ def sources_repo(url: str):
 
 @app.post("/api/sources/repos")
 def sources_add_repo(url: str = Body(..., embed=True)):
+    """Add a plugin list, and install every source plugin on it (sources.sync_repo: adult ones switched off)."""
     url = url.strip()
-    found = _sourced(sources.repo, url)  # only a link that gives a plugin list is kept
+    _sourced(sources.repo, url)  # only a link that gives a plugin list is kept
     repos = store.global_settings().get("plugin_repos") or []
     if url not in repos:
         store.update_global({"plugin_repos": repos + [url]})
-    return found
+    synced = _sourced(sources.sync_repo, url)
+    return {**_sourced(sources.repo, url), "synced": synced}
+
+
+@app.post("/api/sources/repos/sync")
+def sources_sync_repo(url: str = Body(..., embed=True)):
+    """Check a list now: its new plugins installed, new versions got."""
+    synced = _sourced(sources.sync_repo, url)
+    return {**_sourced(sources.repo, url), "synced": synced}
 
 
 @app.delete("/api/sources/repos")
-def sources_remove_repo(url: str = Body(..., embed=True)):
+def sources_remove_repo(url: str = Body(..., embed=True), plugins: bool = Body(False, embed=True)):
+    """Take a list out; with plugins, the plugins installed from it are removed too."""
     store.update_global({"plugin_repos": [u for u in store.global_settings().get("plugin_repos") or [] if u != url]})
-    return {"repos": store.global_settings()["plugin_repos"]}
+    removed = sources.forget_repo(url, plugins)
+    return {"repos": store.global_settings()["plugin_repos"], "removed": removed}
 
 
 @app.post("/api/sources/repos/install")
