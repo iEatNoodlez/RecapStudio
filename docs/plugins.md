@@ -33,6 +33,7 @@ Search for a series instead of typing its name. It names the project, sets its k
    - **By name:** Suggest names gets the preloaded cast as the character list, so the writer can say a group is one of them ("The writer says …: add to them").
 
    Adding a group to a preloaded character gives it the group's best views from the chapters as more pictures. Groups that aren't one of them get names suggested as usual. With **Trust them**, the writer's matches are added without asking.
+7. **Its chapters, from a source that has them** (Find the series 1.1.0): when the series picked comes from one of your own source plugins for its site (not AniList, Kitsu or MangaUpdates, which have none), **Get its chapters from … once the project is made** is ticked under it. Once the project is made, every chapter is got, as **Get chapters from a site** would (a Getting chapters job, placed by their numbers). Untick it to get them yourself; the choice is kept for next time. A site that wants its check for a person first is offered to Site check, and Get chapters can try again once it's passed.
 
 **From the Trending finder:** its **Make a project** opens New project with the series already picked, from the same site, when that site is one of your sources (AniList or MangaUpdates). Without it, the series is searched for by its name.
 
