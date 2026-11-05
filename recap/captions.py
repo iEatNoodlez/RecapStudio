@@ -26,12 +26,13 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
+
+from . import fonts
 
 VERSION = 2  # bump when how captions look or are timed changes, so chapter videos are drawn again
-FONTS = {  # in every Windows
-    "Arial Black": "ariblk.ttf", "Segoe UI Black": "seguibl.ttf", "Impact": "impact.ttf",
-    "Comic Sans": "comicbd.ttf",
+FONTS = {  # the choices, and the look each is (fonts.py: Windows' own font, or Linux's stand-in)
+    "Arial Black": "arial-black", "Segoe UI Black": "segoe-black", "Impact": "impact", "Comic Sans": "comic-bold",
 }
 COLORS = {"yellow": (255, 229, 0), "green": (57, 229, 8), "red": (255, 59, 48), "purple": (124, 58, 237),
           "white": (255, 255, 255)}
@@ -66,13 +67,16 @@ def signature(settings) -> list:
     if not style_of(settings):
         return []
     return ["captions", VERSION, settings.get("captions"), settings.get("captions_color", "yellow"),
-            settings.get("captions_font", "Arial Black"), heard()]
+            settings.get("captions_font", "Arial Black"), heard(), *fonts.signature(_look(settings))]
+
+
+def _look(settings) -> str:
+    return FONTS.get(settings.get("captions_font"), FONTS["Arial Black"])
 
 
 def font_path(settings) -> str:
-    name = FONTS.get(settings.get("captions_font"), FONTS["Arial Black"])
-    path = Path("C:/Windows/Fonts") / name
-    return str(path if path.exists() else Path("C:/Windows/Fonts") / "arialbd.ttf")
+    """The captions' font (a fonts.py spec: a file, or a variable font's file and style)."""
+    return fonts.spec(_look(settings))
 
 
 # ---- when each word is said --------------------------------------------------------------------------
@@ -334,7 +338,7 @@ class Captions:
 
     def _f(self, size):
         if size not in self._fonts:
-            self._fonts[size] = ImageFont.truetype(self.font, size)
+            self._fonts[size] = fonts.truetype(self.font, size)
         return self._fonts[size]
 
     def _grow(self, width):

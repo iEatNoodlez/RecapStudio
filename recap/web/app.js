@@ -8,6 +8,8 @@ let selected = new Set();     // selected panels (for re-running script + voice)
 let selectedCh = new Set();   // selected chapters (scope for every step); empty = all
 let polling = null;
 let env = null;
+// (an app that doesn't say which system it runs on is on Windows: it was the only one)
+const onWindows = () => !env || !env.os || env.os === "windows";
 let newCounts = {};  // project id: new chapters at its source (sources.py), from the check when the app started
 
 async function api(path, opts = {}) {
@@ -393,14 +395,89 @@ $("#delete-project").addEventListener("click", () => deleteProject({
 
 let globals = null;  // app-wide settings (writer, voice, video), shared by every project
 
+// Buttons and hints that name Windows' own things, said Linux's way there
+let toldWhyBrowser = false;
+function systemWording() {
+  if (onWindows()) return;
+  if (env.why_browser === "sandbox" && !toldWhyBrowser) {
+    toldWhyBrowser = true;
+    notify("Recap Studio opened in your browser: this Linux keeps Chromium's sandbox from apps it doesn't know, so " +
+      "its own window can't start. The Linux page of Recap Studio's docs says how to get the window back.",
+      "Opened in your browser");
+  }
+  const fm = env.file_manager || "your file manager";
+  $("#show-folder").title = `Open this project's folder in ${fm}`;
+  $("#projects-show").textContent = `Show in ${fm}`;
+  $("#phone-firewall").textContent = "If a firewall runs on this computer (ufw or firewalld, say), it has to let other " +
+    "devices on your network reach Recap Studio, or your phone can't connect.";
+}
+
+// Linux has none of Windows' fonts (fonts.py): which ones stand in, and the open look-alikes to download
+const FONT_LOOKS = { "Arial Black": "arial-black", "Segoe UI Black": "segoe-black", "Impact": "impact", "Comic Sans": "comic-bold" };
+let fontsInfo = null;
+
+async function loadFonts(refresh = false) {
+  if (onWindows()) return null;
+  if (!fontsInfo || refresh) fontsInfo = await api("/api/fonts");
+  return fontsInfo;
+}
+
+function fontsDownload(after) {
+  const button = el("button", { type: "button", class: "small" }, `Download them (${fontsInfo.size_mb} MB)`);
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Downloading…";
+    try {
+      fontsInfo = await api("/api/fonts/download", { method: "POST" });
+      if ($("#captions-preview").dataset.src) $("#captions-preview").dataset.src = "";  // (drawn again in the new font)
+      if (current) renderCaptionsBox();
+      after();
+    } catch (e) {
+      notify(e.message);
+      button.disabled = false;
+      button.textContent = `Download them (${fontsInfo.size_mb} MB)`;
+    }
+  });
+  return button;
+}
+
+// For setup's "This computer": nothing on Windows
+async function fontsLine() {
+  const f = await loadFonts();
+  if (!f) return null;
+  const shown = f.looks.filter((x) => Object.values(FONT_LOOKS).includes(x.id));
+  const instead = shown.filter((x) => !x.exact).map((x) => `${x.name} with ${x.font}`).join(", ");
+  if (f.downloaded) return setupLine(true, `Fonts: the open look-alikes are downloaded.${instead ? ` Linux draws ${instead}.` : ""}`);
+  if (!f.offered) return setupLine(true, "Fonts: Microsoft's fonts are installed, so videos look as they do on Windows.");
+  return setupLine(false, `Linux doesn't have Windows' fonts, so captions and thumbnails draw ${instead}. Free look-alikes ` +
+    "(Anton, Archivo Black, Comic Neue and Noto Sans, from Google Fonts) look closer. ", fontsDownload(() => renderSetup()));
+}
+
+// Linux's AppImage in the applications menu (system.py): for setup's "This computer"; nothing elsewhere
+async function menuLine() {
+  if (onWindows()) return null;
+  const m = await api("/api/menu");
+  if (!m.offered) return null;
+  if (m.added) return setupLine(true, "Recap Studio is in your applications menu.");
+  const add = el("button", { type: "button", class: "small" }, "Add it");
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    try { await api("/api/menu", { method: "POST" }); renderSetup(); }
+    catch (e) { notify(e.message); add.disabled = false; }
+  });
+  return setupLine(false, m.elsewhere ? "Your applications menu starts another copy of Recap Studio. Put this one there instead? "
+    : "Recap Studio isn't in your applications menu yet, so it starts from this file only. ", add);
+}
+
 async function loadEnv() {
   const url = globals ? globals.ollama_url : "http://localhost:11434";
   env = await api(`/api/status?ollama_url=${encodeURIComponent(url)}`);
+  systemWording();
   const line = (ok, good, bad) => el("div", { class: ok ? "" : "bad" }, ok ? good : bad);
   const addon = env.gpu.addon || {};  // GPU support, the download
   $("#env").replaceChildren(
     line(!env.ollama_error, `Ollama: ${env.ollama_models.length} model(s)`, "Ollama: not reachable"),
-    line(env.tts_ready, `Voice: ${env.voices.length} voices`, "Voice model missing (run setup.ps1)"),
+    line(env.tts_ready, `Voice: ${env.voices.length} voices`, "Voice model missing (Settings → Run setup again)"),
     line(env.ffmpeg, "ffmpeg: found", "ffmpeg: missing"),
     line(env.gpu.available, `GPU: ${globals && !globals.use_gpu ? "available (turned off)" : "on"}`,
       addon.installed ? "GPU: restart to use GPU support" : env.gpu.card ? "GPU: text and voice on the CPU (CPU build)"
@@ -482,9 +559,21 @@ function captionsPreview(s, pid) {
 function renderCaptionsBox() {
   const s = current.settings, on = (s.captions || "off") !== "off";
   $("#captions-color-row").hidden = $("#captions-font-row").hidden = $("#captions-preview").hidden = !on;
+  renderCaptionsFont(on ? s.captions_font || "Arial Black" : null);
   const src = on ? captionsPreview(s, current.id) : "";
   if (on && $("#captions-preview").dataset.src !== src) $("#captions-preview").src = $("#captions-preview").dataset.src = src;
   $("#shorts-label-row").hidden = !Number(s.shorts);
+}
+
+// On Linux, the font that stands in for the chosen one (fonts.py)
+async function renderCaptionsFont(name) {
+  const hint = $("#captions-font-hint");
+  const f = name && await loadFonts().catch(() => null);
+  const look = f && f.looks.find((x) => x.id === FONT_LOOKS[name]);
+  hint.hidden = !look || look.exact;
+  if (hint.hidden) return;
+  hint.replaceChildren(`Linux doesn't have ${name}, so the captions use ${look.font}. `,
+    ...(f.offered ? [`A free look-alike looks closer: `, fontsDownload(() => {})] : []));
 }
 
 // ---- background music (music.py): the project's own tracks, in the order they play ----
@@ -1226,17 +1315,22 @@ async function renderClaudeCode(refresh = false) {
   catch (e) { box.className = "bad"; box.textContent = e.message; return; }
   $("#cc-login").hidden = !st.found || st.logged_in;
   box.className = st.found && st.logged_in && st.skill ? "ok" : "bad";
-  box.textContent = !st.found ? "Claude Code wasn't found on this PC. Install it (claude.com/code), or the Claude desktop app, which includes it."
+  box.textContent = !st.found ? `Claude Code wasn't found on this computer. Install it (claude.com/code)${onWindows() ? ", or the Claude desktop app, which includes it" : ""}.`
     : !st.logged_in ? `Claude Code ${st.version} is here but not logged in.`
     : !st.skill ? "Claude Code is ready, but the recap-studio-narration skill isn't next to the app (.claude\skills, beside the app's folder): its agents need the brief there."
     : `Claude Code ${st.version}, logged in. Ready.`;
 }
 $("#cc-check").addEventListener("click", () => renderClaudeCode(true));
+// what to say once the sign-in was started: in a console window (a terminal on Linux), or the command to run
+const claudeLoginSaid = (r) => r.started === false
+  ? `No terminal was found to sign in with. Open one, run ${r.command}, then press Check again.`
+  : `Finish signing in in the ${onWindows() ? "window" : "terminal"} and browser that opened, then press Check again.`;
+
 $("#cc-login").addEventListener("click", async () => {
   try {
-    await api("/api/claude-code/login", { method: "POST" });
+    const r = await api("/api/claude-code/login", { method: "POST" });
     $("#cc-status").className = "muted";
-    $("#cc-status").textContent = "Finish signing in in the window and browser that opened, then press Check again.";
+    $("#cc-status").textContent = claudeLoginSaid(r);
   } catch (e) { notify(e.message); }
 });
 
@@ -3906,7 +4000,7 @@ const SETUP_TITLES = { computer: "Welcome to Recap Studio", writer: "Script writ
   extras: "Optional downloads", done: "All set" };
 const WRITERS = [
   ["claude", "Claude (Anthropic)", "Read the story best in testing: kept track of who was narrating, who said what and what was only imagined. From about 1¢ (Haiku) to 40¢ (Opus) per chapter."],
-  ["claude_code", "Claude Code (your Claude plan)", "Claude on your Claude subscription instead of API credit: a Claude Code agent writes each chapter. Needs Claude Code on this PC (the Claude desktop app includes it), logged in to your Claude account."],
+  ["claude_code", "Claude Code (your Claude plan)", "Claude on your Claude subscription instead of API credit: a Claude Code agent writes each chapter. Needs Claude Code on this computer (on Windows, the Claude desktop app includes it), logged in to your Claude account."],
   ["openrouter", "OpenRouter", null],
   ["gemini", "Google Gemini", null],
   ["deepseek", "DeepSeek", null],
@@ -3967,7 +4061,10 @@ async function setupComputer(body) {
     v.installed ? setupLine(true, `Voice model ready (${plural(env.voices.length, "voice")}).`)
       : setupLine(false, "The voice model isn't downloaded yet. It reads the narration aloud.", voiceDownload(v)),
     env.ffmpeg ? setupLine(true, "ffmpeg found: it puts the videos together.")
-      : setupLine(false, "ffmpeg is missing, so videos can't be made. Run setup.ps1 again, or install ffmpeg and restart the app."),
+      : setupLine(false, onWindows() ? "ffmpeg is missing, so videos can't be made. Run setup.ps1 again, or install ffmpeg and restart the app."
+        : "ffmpeg is missing, so videos can't be made. Install it with your system's package manager (sudo apt install ffmpeg, " +
+          "or sudo dnf install ffmpeg on Fedora with RPM Fusion), then restart the app."),
+    ...[await fontsLine().catch(() => null), await menuLine().catch(() => null)].filter(Boolean),
     env.gpu.available ? setupLine(true, `NVIDIA GPU found${env.gpu.card ? ` (${env.gpu.card})` : ""}: text reading and the voice run on it.`)
       : env.gpu.card && g.offered ? setupLine(false, `Text reading and the voice run on the CPU. Your ${env.gpu.card} still encodes ` +
         "the videos, but this copy carries the CPU build of the engine that reads text and speaks. That works, just more " +
@@ -4052,16 +4149,16 @@ function claudeCodeDetails(box) {
     catch (e) { status.className = "bad"; status.textContent = e.message; return; }
     login.hidden = !st.found || st.logged_in;
     status.className = st.found && st.logged_in && st.skill ? "ok" : "bad";
-    status.textContent = !st.found ? "Claude Code wasn't found on this PC. Install it (claude.com/code), or the Claude desktop app, which includes it, then press Check again."
+    status.textContent = !st.found ? `Claude Code wasn't found on this computer. Install it (claude.com/code)${onWindows() ? ", or the Claude desktop app, which includes it," : ""} then press Check again.`
       : !st.logged_in ? `Claude Code ${st.version} is here, but not logged in yet.`
       : !st.skill ? "Claude Code is ready, but the narration skill its agents follow is missing from the app's folder."
       : `✓ Claude Code ${st.version}, logged in to your Claude account.`;
   };
   login.addEventListener("click", async () => {
     try {
-      await api("/api/claude-code/login", { method: "POST" });
+      const r = await api("/api/claude-code/login", { method: "POST" });
       status.className = "muted";
-      status.textContent = "Finish signing in in the window and browser that opened, then press Check again.";
+      status.textContent = claudeLoginSaid(r);
     } catch (e) { notify(e.message); }
   });
   const sel = el("select", { onchange: () => saveGlobal({ claude_code_model: sel.value }) },

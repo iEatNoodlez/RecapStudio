@@ -31,6 +31,9 @@ from .tts import SAMPLE_RATE
 
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+FFMPEG_MISSING = ("ffmpeg not found. Install it or run setup.ps1." if os.name == "nt" else
+                  "ffmpeg not found. Install it with your system's package manager (sudo apt install ffmpeg), "
+                  "then restart Recap Studio.")
 CPU_ENCODER = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
 # NVIDIA's hardware encoder. On a 1080p webtoon export it ran ~2.5x faster than CPU_ENCODER,
 # with a slightly closer match to the source (SSIM) and a ~13% smaller file.
@@ -565,7 +568,7 @@ def render(items, out_dir: Path, settings: dict, progress=None, cancelled=None, 
     """
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found. Install it or run setup.ps1.")
+        raise RuntimeError(FFMPEG_MISSING)
     W, H = frame_size(settings)
     fps = int(settings["fps"])
     timeline = _Timeline([segment(it, settings, W, H) for it in items], fps, float(settings["transition_seconds"]))
@@ -872,7 +875,7 @@ def render_piece(items, base: Path, settings, encoder_args, workers, progress=No
     and <base>.json (its length and subtitles). Files only take their final names once complete."""
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found. Install it or run setup.ps1.")
+        raise RuntimeError(FFMPEG_MISSING)
     W, H = frame_size(settings)
     fps = int(settings["fps"])
     tr = float(settings["transition_seconds"])
@@ -937,7 +940,7 @@ def render_reel(segments, lengths, path: Path, settings, encoder_args, workers, 
     smoothly. The file only takes its name once complete."""
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found. Install it or run setup.ps1.")
+        raise RuntimeError(FFMPEG_MISSING)
     W, H = frame_size(settings)
     fps = int(settings["fps"])
     tmp = path.with_name(path.stem + ".part.mp4")
@@ -968,7 +971,7 @@ def render_chapters(chapters, split, out_dir: Path, cache_dir: Path, settings, p
     Returns {"parts": [...], "made": n, "reused": n, "joined": seconds of video joined, "join_time": seconds}."""
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found. Install it or run setup.ps1.")
+        raise RuntimeError(FFMPEG_MISSING)
     order = list(range(len(chapters)))
     first = chapter_encoder(settings)
     encoders = [first, CPU_ENCODER] if is_hardware(first) else [CPU_ENCODER]
@@ -1144,9 +1147,11 @@ def short_spans(lines, total: float, most: float) -> list[tuple[float, float]]:
 
 def _label(text: str, settings, W: int, H: int, path: Path):
     """"Part 3" in big white capitals with a black outline, as a PNG to lay over a Short."""
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
+
+    from . import fonts
     size = round(0.06 * min(W, H))
-    font = ImageFont.truetype(captions.font_path(settings), size)
+    font = fonts.truetype(captions.font_path(settings), size)
     stroke = max(2, round(size * 0.1))
     box = font.getbbox(text.upper(), stroke_width=stroke)
     img = Image.new("RGBA", (box[2] - box[0] + 8, box[3] - box[1] + 8), (0, 0, 0, 0))

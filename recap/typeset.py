@@ -16,7 +16,6 @@ Copies are kept in the project's typeset folder, under a fingerprint of the pict
 """
 import hashlib
 import json
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -25,7 +24,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from . import textless
+from . import fonts, textless
 from .panels import imread
 
 VERSION = 14
@@ -33,18 +32,14 @@ LETTERED = ("speech", "thought", "narration")  # put back in their bubble (speec
 CAPTIONED = ("sign",)                            # given a caption box
 BIG = 0.11    # lettering taller than this share of the picture's width (and 60 px) is part of the art: left.
               # (A Korean webtoon 720 px wide: dialogue 40-55 px, a shout drawn into the art 170 px)
-FONTS_DIR = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
-FONTS = ["comicbd.ttf", "arialbd.ttf"]          # Comic Sans MS Bold, the usual comic look on every Windows PC
+LOOK = "comic-bold"  # Comic Sans MS Bold, the usual comic look (fonts.py: Linux's stand-ins)
 # a scan site's watermark: a web address, or "site" in Korean (가장 빠른 웹툰 제공 사이트, "the fastest webtoon site")
 STAMP = re.compile(r"https?|\.(c[o0]m|net|org)\b|\bwww\.|newt[o0]k[i1]|사이트|webt[o0]{2}n", re.I)
 MARGIN = 0.25  # of a page's height, taken from the pages either side when it's lettered
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
-    for name in FONTS:
-        if (FONTS_DIR / name).exists():
-            return ImageFont.truetype(str(FONTS_DIR / name), size)
-    return ImageFont.load_default(size)
+    return fonts.load(LOOK, size)
 
 
 def _rows(mask: np.ndarray, cx=None) -> list:

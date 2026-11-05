@@ -10,12 +10,12 @@
   (Read text looks again)."""
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from helpers import App, check, data_folder, done
 
 app = App(data_folder())
-from recap import ocr  # noqa: E402
+from recap import fonts, ocr  # noqa: E402
 
 W = 720
 EDGE_AT = max(W * 2, 1600)  # where read_lines' first chunk ends
@@ -26,7 +26,7 @@ def strip(lines, height=2600):
     img = Image.new("RGB", (W, height), "white")
     draw = ImageDraw.Draw(img)
     for top, words, size in lines:
-        draw.text((40, top), words, fill="black", font=ImageFont.truetype("arialbd.ttf", size))
+        draw.text((40, top), words, fill="black", font=fonts.load("arial-bold", size))
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 

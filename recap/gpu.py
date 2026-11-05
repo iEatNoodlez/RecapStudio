@@ -24,7 +24,7 @@ _ready = None
 
 # onnxruntime-gpu[cuda,cudnn]==1.31.0 (CUDA 13, cuDNN 9) for Python 3.12 on 64-bit Windows, as setup.ps1 installs
 # it: each wheel pinned with its size and SHA-256 from PyPI, by its folder on PyPI's file server
-DOWNLOAD = addon.Download(store.ADDONS_DIR / "gpu", {
+WINDOWS_WHEELS = {
     "onnxruntime_gpu-1.31.0-cp312-cp312-win_amd64.whl": (
         "PyPI", "7e/ff/035730b399eea860df5952a76cc489cb34a663e5341eb6f53d892a5f7f2c",
         "onnxruntime_gpu-1.31.0-cp312-cp312-win_amd64.whl", 168098204,
@@ -57,11 +57,52 @@ DOWNLOAD = addon.Download(store.ADDONS_DIR / "gpu", {
         "PyPI", "87/6a/e55ff0ac26a5c6e2b21f41c9d04ad096b4ed6da593fba7e25845c61b0532",
         "nvidia_cudnn_cu13-9.27.0.42-py3-none-win_amd64.whl", 436469905,
         "7d96f634adafd55c72231eb0500ca77ab109ec8ebff7b33000b76e081bc4558e"),
-}, url="https://files.pythonhosted.org/packages/{rev}/{path}", unzip=True)
-UNPACKED = 1_900_000_000  # on disk once unpacked
+}
+# the same packages for Python 3.12 on 64-bit Linux (manylinux: glibc 2.28 or newer, as the AppImage needs anyway)
+LINUX_WHEELS = {
+    "onnxruntime_gpu-1.31.0-cp312-cp312-manylinux_2_28_x86_64.whl": (
+        "PyPI", "8f/48/6fbfdbce25e5756c7b9ff8f40645d98b166b8022cf00ede58a2bb4571b8e",
+        "onnxruntime_gpu-1.31.0-cp312-cp312-manylinux_2_28_x86_64.whl", 255569162,
+        "b52998a075de27ff30e46a125001822541fa5b03f5d31398ab0e50789d80c51c"),
+    "nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl": (
+        "PyPI", "98/8a/3431271f6344874b8f1ac03f16b3d679c91493f8da63f716160403e6d0a0",
+        "nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", 2494438,
+        "9641f797da20ce1dd8e779b6e96d08cf9ba564cec8e8225458811ee26423f3a5"),
+    "nvidia_cuda_nvrtc-13.4.92-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl": (
+        "PyPI", "56/9c/1342ebb460ce2afd014ec5a002adc99108e3c53a6b70f399cf64dd1f267d",
+        "nvidia_cuda_nvrtc-13.4.92-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", 53301733,
+        "5ce8c97b00b232c4f50c8c4b5a3b68cafee08bdb82ea86f2052ff01d03194f4a"),
+    "nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl": (
+        "PyPI", "7a/38/bdd540bf511d2c9b6f9efc71a81c60cb88e295be0b9312b61d19bbed2212",
+        "nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl", 439317144,
+        "9f17797dfcc048694461f4e47de17d2e3c25adf172ef723d2db0a07cd8744b89"),
+    "nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl": (
+        "PyPI", "76/bf/3fea3d1c6262bded26ae00e3106432d63235954965d7785f5051ac146651",
+        "nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", 161750089,
+        "0e8385013596b112d29c9ce8c63dc575b308d77636c7169104e18714f03961a8"),
+    "nvidia_curand-10.4.4.72-py3-none-manylinux_2_27_x86_64.whl": (
+        "PyPI", "07/73/3ee8e5b4cb891401e603ffd3a59b35c6afe785fd2de123afe7c7029603dc",
+        "nvidia_curand-10.4.4.72-py3-none-manylinux_2_27_x86_64.whl", 61498332,
+        "25c3457ae7a224fdd484dab90b0fc5dc0e842fab5db3012afa4a5bd2af4eb7e5"),
+    "nvidia_nvjitlink-13.4.92-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl": (
+        "PyPI", "1d/6b/eef7a9e32872b8f41e145bf10cddc9af26e153c338852811fe9a9baddf9e",
+        "nvidia_nvjitlink-13.4.92-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", 42452378,
+        "e0391f24ed94ec879b84e3da4d4ec320c879aff681f2c7a638462f7199284323"),
+    "nvidia_cudnn_cu13-9.27.0.42-py3-none-manylinux_2_27_x86_64.whl": (
+        "PyPI", "af/75/96ea5c5368eb595c39d629cde08a66227a864e71ccb0e593add2612bb952",
+        "nvidia_cudnn_cu13-9.27.0.42-py3-none-manylinux_2_27_x86_64.whl", 536771498,
+        "9677e76f21862eb5da7ee5ed69d544738b2d8b5c3ce7e5ec125c5592e6cdbdc8"),
+}
+LINUX = sys.platform.startswith("linux")
+DOWNLOAD = addon.Download(store.ADDONS_DIR / "gpu", LINUX_WHEELS if LINUX else WINDOWS_WHEELS,
+                          url="https://files.pythonhosted.org/packages/{rev}/{path}", unzip=True)
+UNPACKED = 2_490_000_000 if LINUX else 1_900_000_000  # on disk once unpacked
 DRIVER = 580              # the oldest NVIDIA driver CUDA 13 runs on
-# the wheels are for the app's own Python (3.12, 64-bit Windows); a source copy on another Python uses setup.ps1
-SUPPORTED = sys.platform == "win32" and sys.version_info[:2] == (3, 12) and platform.machine().lower() == "amd64"
+# the wheels are for the app's own Python (3.12, 64-bit Windows or Linux); a source copy on another Python installs
+# onnxruntime-gpu itself (setup.ps1 on Windows)
+SUPPORTED = sys.version_info[:2] == (3, 12) and (
+    (sys.platform == "win32" and platform.machine().lower() == "amd64")
+    or (LINUX and platform.machine().lower() == "x86_64"))
 
 
 def activate() -> None:
@@ -174,8 +215,8 @@ def install() -> dict:
     if not nvidia_card():
         raise ValueError("No NVIDIA graphics card was found")
     if not SUPPORTED:
-        raise ValueError("GPU support is made for the app's own Python (3.12, 64-bit Windows); from source, "
-                         "setup.ps1 installs it")
+        raise ValueError("GPU support is made for the app's own Python (3.12, 64-bit Windows or Linux); from "
+                         "source on another Python, install onnxruntime-gpu yourself (setup.ps1 does on Windows)")
     if loaded() and not DOWNLOAD.installed():
         raise ValueError("Restart Recap Studio first: the GPU support you removed is still in use until then")
     if DOWNLOAD.state["state"] != "installing" and not DOWNLOAD.installed():  # (otherwise start says why not)

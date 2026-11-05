@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/iEatNoodlez/RecapStudio/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/iEatNoodlez/RecapStudio?style=flat-square&color=4f6bed"></a>
   <img alt="For Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-4f6bed?style=flat-square">
+  <img alt="For Linux" src="https://img.shields.io/badge/Linux-AppImage-4f6bed?style=flat-square">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-4f6bed?style=flat-square"></a>
 </p>
 
@@ -32,17 +33,19 @@ Add the chapters, press **Make the recap**, and Recap Studio cuts the pages into
 
 ## Download
 
-For Windows 10 or 11 (64-bit), from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page. It comes in two editions, both free:
+For Windows 10 or 11 and for Linux (64-bit), from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page. It comes in two editions, both free:
 
 - **Lite** is the whole app.
 - **Full Suite** is Lite with [Recap Studio's plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins#readme) built in: finding the series, what's trending to make a project of, automation, posting to YouTube, branding, passing a site's Cloudflare check yourself in a window, and more languages and file types. Lite can add them one at a time, in Settings → Plugins.
 
-| | Installer | Portable |
-|---|---|---|
-| Lite | `Recap-Studio-Lite-<version>-setup.exe` | `Recap-Studio-Lite-<version>-portable.zip` |
-| Full Suite | `Recap-Studio-Full-Setup-<version>.exe` | `Recap-Studio-Full-Portable-<version>.zip` |
+| | Windows installer | Windows portable | Linux |
+|---|---|---|---|
+| Lite | `Recap-Studio-Lite-<version>-setup.exe` | `Recap-Studio-Lite-<version>-portable.zip` | `Recap-Studio-Lite-<version>-x86_64.AppImage` |
+| Full Suite | `Recap-Studio-Full-Setup-<version>.exe` | `Recap-Studio-Full-Portable-<version>.zip` | `Recap-Studio-Full-<version>-x86_64.AppImage` |
 
 The installer installs it for everyone on the PC or just for you. Unzip the portable copy anywhere you can write to, on a short path, and run `Recap Studio.exe`. Installing one edition over the other switches between them, and keeps your projects and settings.
+
+On Linux (Ubuntu 22.04, Debian 12, Fedora 36 or newer), make the AppImage executable and start it: see [Linux](docs/linux.md).
 
 Everything it needs is included. The first start downloads the voice model (354 MB) and walks you through a short setup. After that, the app checks for updates when it starts and installs them with one click.
 
@@ -113,7 +116,7 @@ Everything runs on your PC unless you choose an online service. A local model wi
 ## Good to know
 
 - **Speed**: with an NVIDIA card, text reading and the voice run several times faster (GPU support, a 1.3 GB download, offered in setup). An NVIDIA, AMD or Intel card also speeds up video encoding.
-- **Space**: projects are saved in `Documents\Recap Studio`, one folder each. A recap takes several GB.
+- **Space**: projects are saved in `Recap Studio` in your Documents folder, one folder each. A recap takes several GB.
 - **Your phone**: scan a QR code in Settings to check the recaps from a phone on the same Wi-Fi, and run again one that stopped. Only your home network can reach it.
 - **YouTube-safe**: for an age-restricted upload of an adult comic, this tones down sex scenes and covers nudity with black boxes. It can make mistakes, so check the video before you upload.
 
@@ -122,6 +125,7 @@ Everything runs on your PC unless you choose an online service. A local model wi
 The [docs](docs/README.md) cover every feature in detail:
 
 - [Install, files and updates](docs/install.md)
+- [Linux](docs/linux.md)
 - [Using Recap Studio](docs/using.md)
 - [Script writers and the prompt](docs/script-writers.md)
 - [Korean, Chinese and Japanese comics](docs/translation.md)
@@ -143,7 +147,7 @@ With Python 3.10 or newer:
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-Then double-click `run.bat`. Building the installer is covered in [Install, files and updates](docs/install.md#building-the-installer).
+Then double-click `run.bat`. Building the installer is covered in [Install, files and updates](docs/install.md#building-the-installer). On Linux, with Python 3.12 or newer: `./setup.sh`, then `./run.sh` ([Linux](docs/linux.md#running-from-source)).
 
 ## License and credits
 

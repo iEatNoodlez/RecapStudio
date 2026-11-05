@@ -9,11 +9,14 @@ that release's file for this copy's edition, checks it against the SHA-256 GitHu
   data and models folders, and starts the app again;
 - a portable copy unpacks the new zip and leaves a small PowerShell helper (powershell.exe comes with Windows) to
   swap the program files in once the app has closed, putting the old ones back if anything fails, and then start
-  it again. The data and models folders are never touched.
+  it again. The data and models folders are never touched;
+- an AppImage (Linux) downloads the new one beside itself, then puts it in its own place (same name, so menu
+  entries and shortcuts keep working) and starts it. Its data is in the XDG folders, which it never touches.
 RECAP_UPDATE_URL points the check at another address (testing)."""
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -25,13 +28,13 @@ import webbrowser
 import zipfile
 from pathlib import Path
 
-from . import store
+from . import store, system
 
 REPO = "iEatNoodlez/RecapStudio"
 PAGE = f"https://github.com/{REPO}/releases/latest"
 API = os.environ.get("RECAP_UPDATE_URL") or f"https://api.github.com/repos/{REPO}/releases/latest"
 WORK = store.DATA_ROOT / "updates"  # downloads and the portable copy's unpacked update, removed on the next start
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+NO_WINDOW = system.NO_WINDOW
 DETACHED = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
 _state = {"state": "idle", "checked": None, "latest": None, "available": False, "progress": 0.0, "message": "",
@@ -48,9 +51,12 @@ def version() -> str | None:
 
 
 def kind() -> str:
-    """"installed" (by the setup), "portable" (the zip) or "source" (run from a clone, or the dev copy)."""
+    """"installed" (by the setup), "portable" (the zip), "appimage" (Linux) or "source" (run from a clone, or the
+    dev copy)."""
     if not version():
         return "source"
+    if system.appimage():
+        return "appimage"
     return "installed" if (store.ROOT / "unins000.exe").exists() else "portable"
 
 
@@ -90,9 +96,16 @@ def _asset_for(assets: list) -> dict | None:
     """The release file this copy updates from: its edition's setup for an installed copy, or zip for a portable one.
     Lite's names end the way 0.1.x copies look for (Recap-Studio-Lite-0.2.0-setup.exe, -portable.zip), so those
     stay Lite; Full Suite's don't (Recap-Studio-Full-Setup-0.2.0.exe, Recap-Studio-Full-Portable-0.2.0.zip). None
-    when the release has no file for this edition (it can still be downloaded from its page)."""
-    installed = kind() == "installed"
-    if edition() == "full":
+    when the release has no file for this edition (it can still be downloaded from its page). Linux's are
+    AppImages: Recap-Studio-Lite-0.3.0-x86_64.AppImage and Recap-Studio-Full-0.3.0-x86_64.AppImage."""
+    k = kind()
+    installed = k == "installed"
+    if k == "appimage":
+        name = "Full" if edition() == "full" else "Lite"
+        pattern = rf"Recap-Studio-{name}-.+-{re.escape(platform.machine())}\.AppImage"
+    elif not system.WINDOWS:
+        return None  # (an unpacked copy on Linux: there's nothing to swap it with)
+    elif edition() == "full":
         pattern = r"Recap-Studio-Full-Setup-.+\.exe" if installed else r"Recap-Studio-Full-Portable-.+\.zip"
     else:
         pattern = r".+-setup\.exe" if installed else r".+-portable\.zip"
@@ -172,6 +185,9 @@ def start() -> dict:
     if not latest["asset"]["sha256"]:
         raise ValueError("GitHub didn't list a checksum for this release's file, so it can't be checked. Download "
                          "it from the release's page instead.")
+    if k == "appimage" and not os.access(Path(system.appimage()).parent, os.W_OK):
+        raise ValueError(f"Recap Studio can't replace {system.appimage()}: its folder isn't yours to change. "
+                         "Download the new AppImage from the release's page instead.")
     with _lock:
         if _state["state"] in ("downloading", "installing"):
             raise ValueError("The update is already under way.")
@@ -181,11 +197,13 @@ def start() -> dict:
 
 
 def _run(latest, k):
-    asset = latest["asset"]
+    asset, file, part = latest["asset"], None, None
     try:
         shutil.rmtree(WORK, ignore_errors=True)
         WORK.mkdir(parents=True)
         file = WORK / asset["name"]
+        if k == "appimage":  # (beside it, so it's put in place by a rename, never a copy)
+            file = Path(system.appimage()).with_name(f".{asset['name']}.update")
         part = file.with_name(file.name + ".part")
         digest, got = hashlib.sha256(), 0
         req = urllib.request.Request(asset["url"], headers={"User-Agent": f"RecapStudio/{version()}"})
@@ -201,6 +219,14 @@ def _run(latest, k):
         part.replace(file)
         _state.update(state="installing", progress=1.0,
                       message=f"Installing {latest['version']}: Recap Studio closes and opens again by itself.")
+        if k == "appimage":
+            # the running copy keeps its own (open, mounted) file; the new one takes its name and starts once this
+            # one has closed
+            os.chmod(file, 0o755)
+            os.replace(file, system.appimage())
+            time.sleep(1.5)  # time for the page to hear it
+            restart()
+            return
         if k == "installed":
             # the setup updates the folder it installed (same app id), keeps data and models, and starts the app
             # again (/update=1)
@@ -211,6 +237,13 @@ def _run(latest, k):
         threading.Timer(1.5, _quit).start()  # time for the page to hear it
     except Exception as e:
         shutil.rmtree(WORK, ignore_errors=True)
+        if k == "appimage":
+            for left in (file, part):
+                try:
+                    if left:
+                        left.unlink(missing_ok=True)
+                except OSError:
+                    pass
         _state.update(state="error", progress=0.0, message="The update failed", error=str(e))
 
 
@@ -242,16 +275,15 @@ LAUNCH = {"port": 0, "mode": "window"}  # how this copy was started (__main__), 
 
 def restart() -> None:
     """Start the app again, the way this copy was started (a new copy that waits for this one to close, on the same
-    port), then close this one. Plugins installed or switched since this copy started are loaded by the new one."""
-    cmd = [sys.executable, "-m", "recap"]
+    port), then close this one. Plugins installed or switched since this copy started are loaded by the new one.
+    An AppImage starts its file again: this copy's own files go when it closes."""
+    cmd = system.app_command(windowless=False)
     if LAUNCH["mode"] != "window":
         cmd.append(f"--{LAUNCH['mode']}")
     if LAUNCH["port"]:
         cmd += ["--port", str(LAUNCH["port"])]
     cmd += ["--after", str(os.getpid())]
-    subprocess.Popen(cmd, cwd=str(store.ROOT), env=os.environ.copy(), close_fds=True,
-                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
-                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    subprocess.Popen(cmd, cwd=str(store.ROOT), env=os.environ.copy(), stdin=subprocess.DEVNULL, **system.detached())
     threading.Timer(0.8, _quit).start()  # (after the page has its answer)
 
 

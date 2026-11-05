@@ -192,6 +192,7 @@
             <select data-key="captions_color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="red">Red</option><option value="purple">Purple</option><option value="white">White (not picked out)</option></select></label>
           <label id="captions-font-row">Letters
             <select data-key="captions_font"><option value="Arial Black">Arial Black</option><option value="Segoe UI Black">Segoe UI Black</option><option value="Impact">Impact</option><option value="Comic Sans">Comic Sans (bold)</option></select></label>
+          <span id="captions-font-hint" class="hint" hidden></span>
           <img id="captions-preview" class="caption-preview" alt="How the captions look" hidden>
           <span class="hint">The narration is drawn into the picture a few words at a time, the way CapCut's captions look, with the word being said picked out. Its timing comes from each line's sound, or from the speech recognizer when it's installed (Settings → Voice, for your own recordings), which is exact. The whole video is drawn again the next time it's made.</span>
           <label>Shorts
@@ -651,7 +652,7 @@
           <div class="phone-steps">
             <b>Scan it with your phone's camera</b>
             <span class="hint">It opens <code id="phone-url"></code> with a key the phone keeps as a small cookie, so it only needs scanning once (typing the address in doesn't link a phone).</span>
-            <span class="hint warn">If Windows asks whether to let Recap Studio on networks, allow it on private networks, or your phone can't connect.</span>
+            <span id="phone-firewall" class="hint warn">If Windows asks whether to let Recap Studio on networks, allow it on private networks, or your phone can't connect.</span>
             <div><button type="button" id="phone-forget" class="ghost small" title="A new code: phones that scanned the old one have to scan again">Forget phones</button></div>
           </div>
         </div>

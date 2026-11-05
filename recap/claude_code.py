@@ -29,7 +29,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 
-from . import claude, panels, pipeline, scenes, script, store
+from . import claude, panels, pipeline, scenes, script, store, system
 
 SERVER = "recap-studio"   # the MCP server's name: its tools are mcp__recap-studio__<tool> in Claude Code
 MODEL_ID = "claude-code"  # what claude.ask is told the model is (the agents' model is the setting below)
@@ -41,7 +41,7 @@ TRANSLATION = "translation"  # and the translating agent's (a raw comic's text, 
 SKILL = next((d for d in (store.ROOT / ".claude" / "skills" / "recap-studio-narration",
                           store.ROOT.parent / ".claude" / "skills" / "recap-studio-narration") if d.is_dir()),
              store.ROOT / ".claude" / "skills" / "recap-studio-narration")
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # the app runs without a console: no flashing windows
+NO_WINDOW = system.NO_WINDOW  # the app runs without a console: no flashing windows
 WAIT_LIMIT = 120          # longest a next_request call waits for something new, in seconds
 COL_W, SHEET_H, COLS, GAP, BAND = 380, 1500, 4, 14, 28  # picture sheets: column width, height, columns, gaps
 DRAFT_HEAD = ("The story so far isn't here yet: the chapter before this one is still being written. Read the pictures "
@@ -76,13 +76,29 @@ class ToolError(Exception):
 
 # ---- the claude command ----------------------------------------------------------
 
+def _newest(paths) -> str | None:
+    def version(p):
+        return tuple(int(x) for x in re.findall(r"\d+", str(p))[-3:])
+    found = sorted((p for p in paths if p.is_file()), key=version)
+    return str(found[-1]) if found else None
+
+
 def find_cli() -> str | None:
     """The claude command: on PATH, from Claude Code's own installer, or the copy inside the Claude desktop app
-    (the newest version there)."""
+    (the newest version there). On Linux, a menu-started app may not have ~/.local/bin or npm's folders on PATH, so
+    those are looked in too."""
     found = shutil.which("claude")
     if found:
         return found
-    native = Path.home() / ".local" / "bin" / "claude.exe"
+    home = Path.home()
+    if not system.WINDOWS:
+        for p in (home / ".local/bin/claude", home / ".claude/local/claude", home / ".npm-global/bin/claude",
+                  home / ".bun/bin/claude", home / ".volta/bin/claude", Path("/usr/local/bin/claude"),
+                  Path("/usr/bin/claude")):
+            if p.is_file() and os.access(p, os.X_OK):
+                return str(p)
+        return _newest(home.glob(".nvm/versions/node/*/bin/claude"))
+    native = home / ".local" / "bin" / "claude.exe"
     if native.exists():
         return str(native)
     bundled = Path(os.environ.get("APPDATA", "")) / "Claude" / "claude-code"
@@ -127,13 +143,15 @@ def status(refresh: bool = False) -> dict:
 
 
 def login() -> dict:
-    """Open a console window running `claude auth login` (it opens the browser to sign in to the Claude account)."""
+    """Open a console window (a terminal on Linux) running `claude auth login`, which opens the browser to sign in
+    to the Claude account. Without a terminal to open, "command" is what to run."""
     cli = find_cli()
     if not cli:
         raise RuntimeError("Claude Code wasn't found on this computer.")
-    subprocess.Popen([cli, "auth", "login"], env=_env(), creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+    cmd = [cli, "auth", "login"]
+    started = system.in_terminal(cmd, env=_env())
     _status["value"] = None
-    return {"started": True}
+    return {"started": started, "command": " ".join(f'"{c}"' if " " in c else c for c in cmd)}
 
 
 def app_url() -> str:
@@ -142,7 +160,7 @@ def app_url() -> str:
         info = json.loads((store.DATA_ROOT / "app.json").read_text(encoding="utf-8"))
         return f"http://127.0.0.1:{int(info['port'])}"
     except (OSError, ValueError, KeyError) as e:
-        raise RuntimeError("The app's address isn't known (data\\app.json): start the app with run.bat.") from e
+        raise RuntimeError("The app's address isn't known (data\\app.json): start Recap Studio first.") from e
 
 
 # ---- requests ----------------------------------------------------------------------

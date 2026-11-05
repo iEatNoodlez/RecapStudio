@@ -1,6 +1,7 @@
-# Builds the Windows installer and the portable zip of each edition, Lite and Full Suite (packaging/build.ps1).
-# Push a tag like v1.0.0 to publish the four files as a GitHub release; run it by hand (Actions → Build → Run
-# workflow) to get them as the run's artifacts instead.
+# Builds Recap Studio's release files: for Windows, the installer and the portable zip of each edition, Lite and
+# Full Suite (packaging/build.ps1); for Linux, an AppImage of each (packaging/linux/build.sh). Push a tag like v1.0.0
+# to publish the six files as a GitHub release; run it by hand (Actions → Build → Run workflow) to get them as the
+# run's artifacts instead.
 name: Build
 
 on:
@@ -16,25 +17,32 @@ permissions:
   contents: write  # to create the release
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: Version
         id: version
-        shell: pwsh
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ inputs.version }}
           SHA: ${{ github.sha }}
         run: |
-          if ($env:REF_TYPE -eq "tag") { $v = $env:REF_NAME.TrimStart("v") }
-          elseif ($env:INPUT_VERSION) { $v = $env:INPUT_VERSION }
-          else { $v = "0.0.0-" + $env:SHA.Substring(0, 7) }
-          if ($v -notmatch '^[0-9A-Za-z.\-]+$') { throw "Version '$v' can only have letters, digits, dots and dashes." }
-          "version=$v" >> $env:GITHUB_OUTPUT
+          if [ "$REF_TYPE" = tag ]; then v="${REF_NAME#v}"
+          elif [ -n "$INPUT_VERSION" ]; then v="$INPUT_VERSION"
+          else v="0.0.0-${SHA:0:7}"; fi
+          if ! [[ "$v" =~ ^[0-9A-Za-z.-]+$ ]]; then
+            echo "Version '$v' can only have letters, digits, dots and dashes."; exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Inno Setup
         shell: pwsh
@@ -43,31 +51,70 @@ jobs:
 
       - name: Build Lite
         shell: pwsh
-        run: ./packaging/build.ps1 -Version "${{ steps.version.outputs.version }}" -Edition lite
+        run: ./packaging/build.ps1 -Version "${{ needs.version.outputs.version }}" -Edition lite
 
       - name: Build Full Suite
         shell: pwsh
-        run: ./packaging/build.ps1 -Version "${{ steps.version.outputs.version }}" -Edition full
+        run: ./packaging/build.ps1 -Version "${{ needs.version.outputs.version }}" -Edition full
 
       - uses: actions/upload-artifact@v4
         with:
-          name: recap-studio-${{ steps.version.outputs.version }}
+          name: recap-studio-${{ needs.version.outputs.version }}-windows
           path: |
             dist/*.exe
             dist/*.zip
           if-no-files-found: error
           compression-level: 0  # already compressed
 
+  linux:
+    needs: version
+    # the oldest Ubuntu GitHub runs: the AppImages need a glibc at least as new as the one they're built with
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Qt's X libraries (they go inside the AppImages)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 libxcb-render-util0 \
+            libxkbcommon-x11-0
+
+      - name: Build Lite
+        run: bash packaging/linux/build.sh "${{ needs.version.outputs.version }}" lite
+
+      - name: Build Full Suite
+        run: bash packaging/linux/build.sh "${{ needs.version.outputs.version }}" full
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recap-studio-${{ needs.version.outputs.version }}-linux
+          path: dist/*.AppImage
+          if-no-files-found: error
+          compression-level: 0  # already compressed
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [version, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Release
-        if: github.ref_type == 'tag'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          $files = (Get-ChildItem dist\*.exe, dist\*.zip).FullName
-          if ($files.Count -ne 4) { throw "Expected four files (Lite's and Full Suite's), found $($files.Count)." }
+          shopt -s nullglob
+          files=(dist/*.exe dist/*.zip dist/*.AppImage)
+          if [ "${#files[@]}" -ne 6 ]; then
+            echo "Expected six files (Lite's and Full Suite's, for Windows and Linux), found ${#files[@]}."; exit 1
+          fi
           # which file is which, above GitHub's list of changes
-          (Get-Content packaging\release-notes.md -Raw).Replace("{version}", $env:VERSION) | Set-Content -Encoding utf8 notes.md
-          gh release create $env:TAG @files --title "Recap Studio $env:VERSION" --notes-file notes.md --generate-notes
+          sed "s/{version}/$VERSION/g" packaging/release-notes.md > notes.md
+          gh release create "$TAG" "${files[@]}" --title "Recap Studio $VERSION" --notes-file notes.md --generate-notes

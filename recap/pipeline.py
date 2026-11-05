@@ -1400,7 +1400,7 @@ def run_voiceover(job):
     d = store.project_dir(pid)
     ffmpeg = video.find_ffmpeg()
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found. Install it or run setup.ps1.")
+        raise RuntimeError(video.FFMPEG_MISSING)
     if not voiceover.installed():
         raise RuntimeError("The speech recognizer isn't downloaded yet: get it from the chapter's 🎙 button.")
     for k, chapter in enumerate(_chapters(job, p)):

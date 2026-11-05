@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# Build Recap Studio for Linux as an AppImage, in dist/: Lite (the app, with no plugins) or Full Suite (the app with
+# the feature plugins on Recap Studio's own plugin list built in, as on Windows):
+#   Recap-Studio-Lite-<version>-x86_64.AppImage
+#   Recap-Studio-Full-<version>-x86_64.AppImage
+#
+#   packaging/linux/build.sh 1.0.0 lite
+#   packaging/linux/build.sh 1.0.0 full                         # its plugins from GitHub (packaging/plugins.json)
+#   packaging/linux/build.sh 1.0.0 full --plugins-from ../Plugins   # or from a checkout of the list
+#
+# One file that runs on most distributions: the AppImage carries its own Python (python-build-standalone, as Windows'
+# build does), the packages (with Qt for the window) and the app, and mounts itself when started. It needs a glibc
+# as new as the machine it was built on: GitHub Actions builds it on Ubuntu 22.04 (.github/workflows/build.yml), so
+# it runs on Ubuntu 22.04 and later, Debian 12 and later, Fedora 36 and later.
+#
+# Needs: bash, curl, tar, sha256sum, and the few X libraries Qt needs that not every desktop has (they go inside it):
+#   sudo apt install libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 libxcb-render-util0 libxkbcommon-x11-0
+# Python, appimagetool and the AppImage runtime are downloaded at fixed versions, each checked against its SHA-256.
+set -euo pipefail
+
+VERSION="${1:-0.0.0-dev}"
+EDITION="${2:-lite}"
+shift $(( $# < 2 ? $# : 2 ))
+PLUGINS_FROM=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --plugins-from) PLUGINS_FROM="$(cd "$2" && pwd)"; shift 2 ;;
+    *) echo "Unknown option: $1"; exit 2 ;;
+  esac
+done
+case "$EDITION" in
+  lite) NAME=Lite ;;
+  full) NAME=Full ;;
+  *) echo "The edition is lite or full, not $EDITION"; exit 2 ;;
+esac
+if ! [[ "$VERSION" =~ ^[0-9A-Za-z.-]+$ ]]; then
+  echo "The version can only have letters, digits, dots and dashes: $VERSION"; exit 2
+fi
+ARCH=x86_64
+[ "$(uname -m)" = "$ARCH" ] || { echo "This builds the $ARCH AppImage, on an $ARCH machine."; exit 1; }
+
+# a relocatable CPython (the same release as Windows'), and AppImage's own tools
+PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-x86_64-unknown-linux-gnu-install_only.tar.gz"
+PYTHON_SHA256=6a79e922e50006b601f29e688407659da1c2b86ebcd4e9c7254cf234be8b89de
+TOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+TOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+# the static runtime: members need FUSE (every desktop has it), not libfuse2
+RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64"
+RUNTIME_SHA256=2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+# Qt's X11 window needs these; not every desktop has them, so they go next to Qt's own libraries (found there first)
+QT_EXTRA_LIBS=(libxcb-cursor.so.0 libxcb-icccm.so.4 libxcb-keysyms.so.1 libxcb-image.so.0 libxcb-render-util.so.0
+               libxcb-util.so.1 libxkbcommon-x11.so.0)
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+DIST="$ROOT/dist"
+CACHE="$ROOT/build"
+APPDIR="$DIST/AppDir-$EDITION"
+OUT="$DIST/Recap-Studio-$NAME-$VERSION-$ARCH.AppImage"
+mkdir -p "$DIST" "$CACHE"
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR"
+
+fetch() {  # url sha256 file: downloaded once, and always checked
+  local url="$1" sha="$2" file="$3"
+  if [ ! -f "$file" ] || ! echo "$sha  $file" | sha256sum -c --status; then
+    curl -fsSL --retry 3 -o "$file.part" "$url"
+    mv -f "$file.part" "$file"
+  fi
+  if ! echo "$sha  $file" | sha256sum -c --status; then
+    rm -f "$file"
+    echo "$(basename "$file") doesn't match its SHA-256."; exit 1
+  fi
+}
+
+echo "== Python"
+fetch "$PYTHON_URL" "$PYTHON_SHA256" "$CACHE/python-3.12.16-linux.tar.gz"
+tar -xzf "$CACHE/python-3.12.16-linux.tar.gz" -C "$APPDIR"  # makes $APPDIR/python
+PY="$APPDIR/python/bin/python3"
+SITE="$APPDIR/python/lib/python3.12/site-packages"
+
+echo "== Packages"
+# the CPU build of ONNX Runtime (requirements.txt), ffmpeg from imageio-ffmpeg (the app prefers the system's, which
+# can use the graphics card), and Qt for the window
+"$PY" -m pip install --no-warn-script-location --disable-pip-version-check --no-compile -r requirements.txt \
+  imageio-ffmpeg "pywebview[qt]"
+
+echo "== Qt's extra libraries"
+QT_LIB="$SITE/PyQt6/Qt6/lib"
+for lib in "${QT_EXTRA_LIBS[@]}"; do
+  src="$(/sbin/ldconfig -p | awk -v l="$lib" '$1 == l && /x86-64/ { print $NF; exit }')"
+  if [ -z "$src" ]; then
+    echo "$lib isn't installed here: sudo apt install libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0" \
+         "libxcb-render-util0 libxkbcommon-x11-0"; exit 1
+  fi
+  cp -L "$src" "$QT_LIB/$lib"
+done
+
+echo "== App"
+cp -r recap "$APPDIR/recap"
+mkdir -p "$APPDIR/.claude/skills"
+cp -r .claude/skills/recap-studio-narration "$APPDIR/.claude/skills/"
+cp README.md LICENSE "$APPDIR/"
+find "$APPDIR/recap" "$APPDIR/.claude" -name __pycache__ -prune -exec rm -rf {} +
+printf '%s\n' "$VERSION" > "$APPDIR/VERSION"
+printf '%s\n' "$EDITION" > "$APPDIR/EDITION"
+: > "$APPDIR/INSTALLED"  # (recap/paths.py: its own folder is read-only, so data goes in the XDG folders)
+
+if [ "$EDITION" = full ]; then
+  echo "== Full Suite's plugins"
+  bundle=(-I packaging/bundle_plugins.py "$APPDIR")
+  [ -n "$PLUGINS_FROM" ] && bundle+=(--from "$PLUGINS_FROM")
+  "$PY" "${bundle[@]}"
+  # Python packages a plugin needs that the app doesn't have (none do yet)
+  for req in "$APPDIR"/plugins/*/requirements.txt; do
+    [ -f "$req" ] && "$PY" -m pip install --no-warn-script-location --disable-pip-version-check --no-compile -r "$req"
+  done
+fi
+
+# everything compiled ahead: the AppImage is read-only, so Python couldn't keep what it compiles, and would compile
+# it all again on every start (a few files that don't compile are only tests)
+"$PY" -m compileall -q -j 0 "$APPDIR/python/lib/python3.12" "$APPDIR/recap" \
+  $([ -d "$APPDIR/plugins" ] && echo "$APPDIR/plugins") > /dev/null || true
+
+echo "== AppImage"
+cp packaging/linux/AppRun "$APPDIR/AppRun"
+chmod 755 "$APPDIR/AppRun"
+cp packaging/linux/recap-studio.desktop "$APPDIR/recap-studio.desktop"
+cp packaging/launcher/icon.png "$APPDIR/recap-studio.png"
+mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+cp packaging/launcher/icon.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/recap-studio.png"
+ln -sf recap-studio.png "$APPDIR/.DirIcon"
+
+fetch "$TOOL_URL" "$TOOL_SHA256" "$CACHE/appimagetool-1.9.1-x86_64.AppImage"
+fetch "$RUNTIME_URL" "$RUNTIME_SHA256" "$CACHE/runtime-x86_64-20251108"
+chmod 755 "$CACHE/appimagetool-1.9.1-x86_64.AppImage"
+rm -f "$OUT"
+# (appimagetool is an AppImage itself: unpacked to run, so the build needs no FUSE)
+ARCH=$ARCH APPIMAGE_EXTRACT_AND_RUN=1 "$CACHE/appimagetool-1.9.1-x86_64.AppImage" --no-appstream \
+  --runtime-file "$CACHE/runtime-x86_64-20251108" --comp zstd "$APPDIR" "$OUT"
+rm -rf "$APPDIR"
+echo "Done: $OUT ($(du -h "$OUT" | cut -f1))"

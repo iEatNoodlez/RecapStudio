@@ -28,9 +28,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import requests
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
-from . import charscan, cloud, cover, naming, ocr, panels, script, store
+from . import charscan, cloud, cover, fonts, naming, ocr, panels, script, store
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +43,8 @@ CELL_W, CELL_H = 300, 225
 STORY_CHARS = 24000  # the summaries sent, at most
 MAX_UP = 1.7         # a picture is enlarged at most this much (more looks soft)
 LABELS, LINE_CHARS = 4, 40
-FONTS = [r"C:\Windows\Fonts\impact.ttf", r"C:\Windows\Fonts\ariblk.ttf", r"C:\Windows\Fonts\arialbd.ttf"]
-LABEL_FONTS = [r"C:\Windows\Fonts\seguibli.ttf", r"C:\Windows\Fonts\seguibl.ttf", *FONTS[1:]]
-BUBBLE_FONTS = [r"C:\Windows\Fonts\seguibl.ttf", *FONTS[1:]]
+# the looks (fonts.py): Impact, Segoe UI Black (italic for labels), each falling back to Arial Black, then Arial Bold
+FONTS, LABEL_FONTS, BUBBLE_FONTS = "impact", "segoe-black-italic", "segoe-black"
 WHITE, YELLOW, BLACK = (255, 255, 255), (255, 222, 23), (0, 0, 0)
 SWEARING = re.compile(r"fuck|shit|bitch|cunt|\bdick|\bass(hole)?\b|bastard|\bdamn|\bpiss|\bslut|\bwhore", re.I)
 # a site's name stamped on the art (TOOMICS.com, read as "TOMICS.CHM"), a web address, a scan group's tag
@@ -545,11 +544,8 @@ def _paint_out(img, lines):
     return cv2.inpaint(img, mask, 7, cv2.INPAINT_TELEA)
 
 
-def _font(size, fonts=FONTS):
-    for f in fonts:
-        if Path(f).exists():
-            return ImageFont.truetype(f, size)
-    return ImageFont.load_default(size)
+def _font(size, look=FONTS):
+    return fonts.load(look, size)
 
 
 def _tile(text, font, fill, stroke, angle=0.0) -> Image.Image:

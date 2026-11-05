@@ -56,6 +56,8 @@ $app = "$env:LOCALAPPDATA\Programs\Recap Studio"
 claude mcp add --scope user recap-studio -- "$app\python\python.exe" "$app\recap\mcp_stdio.py"
 ```
 
+On Linux, register the AppImage with `--mcp` instead ([Linux](linux.md#claude-codes-mcp-server)).
+
 That starts `recap/mcp_stdio.py`, which finds the open app through `data\app.json` (written while the app runs) and passes each call to its `/mcp`; with the app closed, the tools say so, and `open_app` starts it. Everything goes through the app's own code and store, so the app never needs closing for Claude Code to change a project.
 
 The tools: `list_projects`; `project_status` (per chapter: pieces, text read, scenes narrated, lines voiced, summary); `run_steps` (any step: panels, ocr, script, audio, video, scan, names, credits, boxes, editors); `write_script` (with Claude Code agents: the app's own, or the session's, which then answer with `next_request` and `submit_answer`); `detect_characters` (the character scan, then Suggest names); `job_status` and `cancel_job`; `get_narration` and `set_narration` (one scene's line, its voice cleared). The narration skill uses them: it ships in `.claude\skills\recap-studio-narration` inside the app's folder (the app's own Claude Code writer reads its brief from there), and copying that folder into `%USERPROFILE%\.claude\skills` makes it available in your own Claude Code sessions.

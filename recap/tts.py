@@ -38,7 +38,7 @@ def _get(use_gpu: bool | None = None):
     if engine is None or (use_gpu is not None and bool(use_gpu) != built_gpu):
         if not available():
             raise RuntimeError(
-                "Kokoro voice model not found. Download it from Settings → Run setup again, or run setup.ps1."
+                "Kokoro voice model not found. Download it from Settings → Run setup again."
             )
         import onnxruntime as ort
         from kokoro_onnx import Kokoro

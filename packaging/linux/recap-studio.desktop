@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Recap Studio
+GenericName=Recap video maker
+Comment=Turn comic and webtoon chapters into narrated recap videos
+Exec=recap-studio
+Icon=recap-studio
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=recap-studio
+StartupNotify=true

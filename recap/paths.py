@@ -6,6 +6,9 @@ uses Windows' places for each kind of file:
   %LOCALAPPDATA%\\Recap Studio   LOCAL: the voice model and the add-ons, gigabytes kept out of roaming profiles
   Documents\\Recap Studio        projects, one folder each, named after the project (Settings → Projects folder
                                 moves them anywhere)
+On Linux, an installed copy is the AppImage (INSTALLED inside it; its own folder is read-only), with the XDG places:
+  ~/.local/share/recap-studio   DATA, the voice model and the add-ons ($XDG_DATA_HOME)
+  ~/Documents/Recap Studio      projects (the XDG Documents folder, as xdg-user-dir finds it)
 A portable copy, or one run from source, keeps everything next to itself: data, models, and data\\projects.
 RECAP_DATA puts the data, add-ons and projects in that folder instead (testing)."""
 import ctypes
@@ -15,7 +18,8 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
 NAME = "Recap Studio"
-INSTALLED = (APP / "unins000.exe").exists() and not os.environ.get("RECAP_DATA")
+INSTALLED = ((APP / "unins000.exe").exists() or (APP / "INSTALLED").exists()) and not os.environ.get("RECAP_DATA")
+WINDOWS = os.name == "nt"
 
 
 def _known_folder(guid: str) -> Path | None:
@@ -35,13 +39,39 @@ def _known_folder(guid: str) -> Path | None:
         return None
 
 
+def _xdg(var: str, default: str) -> Path:
+    value = os.environ.get(var)
+    return Path(value) if value and os.path.isabs(value) else Path.home() / default
+
+
+def _xdg_documents() -> Path | None:
+    """The XDG Documents folder, from ~/.config/user-dirs.dirs as xdg-user-dir reads it (it follows the desktop's
+    language: ~/Dokumente, ~/Documents...). None when it isn't set, or is the home folder itself (meaning none)."""
+    try:
+        lines = (_xdg("XDG_CONFIG_HOME", ".config") / "user-dirs.dirs").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        name, _, value = line.strip().partition("=")
+        if name == "XDG_DOCUMENTS_DIR":
+            value = value.strip().strip('"').replace("$HOME", str(Path.home()))
+            path = Path(value)
+            return path if path.is_absolute() and path != Path.home() else None
+    return None
+
+
 def documents() -> Path:
+    if not WINDOWS:
+        return _xdg_documents() or Path.home() / "Documents"
     return _known_folder("FDD39AD0-238F-46AF-ADB4-6C85480369C7") or Path.home() / "Documents"
 
 
 if os.environ.get("RECAP_DATA"):
     DATA = Path(os.environ["RECAP_DATA"])
     ADDONS, MODELS, DEFAULT_PROJECTS = DATA / "addons", APP / "models", DATA / "projects"
+elif INSTALLED and not WINDOWS:
+    DATA = _xdg("XDG_DATA_HOME", ".local/share") / "recap-studio"
+    ADDONS, MODELS, DEFAULT_PROJECTS = DATA / "addons", DATA / "models", documents() / NAME
 elif INSTALLED:
     DATA = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / NAME
     LOCAL = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / NAME

@@ -54,7 +54,16 @@ def _page(*parts: str) -> str:
 
 
 def _dark() -> bool:
-    """Windows set to dark apps: the window starts dark, with no white flash before its page."""
+    """Windows set to dark apps (or Linux's desktop to a dark style): the window starts dark, with no white flash
+    before its page."""
+    if sys.platform.startswith("linux"):
+        try:
+            import subprocess
+            r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                               capture_output=True, text=True, timeout=2)
+            return "dark" in r.stdout
+        except (OSError, subprocess.SubprocessError):
+            return False
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
@@ -66,6 +75,36 @@ def _dark() -> bool:
 # pythonw.exe with Python's; the installer's shortcuts carry the same id (packaging\installer.iss), so pinning
 # the button pins Recap Studio
 APP_ID = "RecapStudio.App"
+
+
+_qt = []  # (Qt's app, kept: it goes when nothing holds it)
+
+
+def _qt_app() -> str | None:
+    """Linux: Qt's app made here rather than by pywebview, named recap-studio, so docks and the menu entry
+    (StartupWMClass, Wayland's app id) know the window as Recap Studio rather than python3. "qt" when the window is
+    Qt's; None when pywebview chooses (GTK from source, with the distro's WebKitGTK, and on Windows)."""
+    if not sys.platform.startswith("linux"):
+        return None
+    gui = os.environ.get("PYWEBVIEW_GUI", "").lower()
+    if gui == "gtk":
+        return None
+    if not gui:
+        try:
+            import gi  # noqa: F401  (pywebview tries GTK first)
+            return None
+        except ImportError:
+            pass
+    try:
+        import qtpy.QtWebEngineWidgets  # noqa: F401  (before the app is made: it shares its OpenGL contexts)
+        from qtpy.QtWidgets import QApplication
+    except Exception:  # noqa: BLE001  (no Qt: pywebview says what's missing)
+        return None
+    app = QApplication.instance() or QApplication(["recap-studio", *sys.argv[1:]])
+    app.setApplicationName("recap-studio")
+    app.setDesktopFileName("recap-studio")
+    _qt.append(app)
+    return "qt"
 
 
 def _free_port() -> int:
@@ -88,18 +127,6 @@ def _log_to_file_without_console():
         sys.stderr = sys.stderr or log
 
 
-def _wait_for(pid: int, seconds: float = 30.0) -> None:
-    """Restart: wait for the copy that's closing to be gone, so its port and files are free."""
-    try:
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
-        if handle:
-            kernel32.WaitForSingleObject(handle, int(seconds * 1000))
-            kernel32.CloseHandle(handle)
-    except (AttributeError, OSError):  # (not Windows)
-        time.sleep(3)
-
-
 def _note_address(port: int):
     """data\\app.json: where the running app answers (removed when it quits)."""
     from .store import DATA_ROOT
@@ -117,6 +144,9 @@ def _note_address(port: int):
 
 
 def main():
+    from .paths import DATA
+    from .system import keep_private
+    keep_private(DATA)  # (Linux: before the log or anything else is written in it)
     _log_to_file_without_console()
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("recap").setLevel(logging.INFO)  # e.g. Claude's token use per chapter
@@ -127,7 +157,8 @@ def main():
     ap.add_argument("--after", type=int, default=0, help=argparse.SUPPRESS)  # (Restart: the copy closing first)
     args = ap.parse_args()
     if args.after:
-        _wait_for(args.after)
+        from .system import wait_for
+        wait_for(args.after)
     from .store import move_old_layout
     move_old_layout()  # an installed copy that kept its data beside itself: before anything reads its settings
     from . import gpu
@@ -138,7 +169,14 @@ def main():
     server = uvicorn.Server(config)
     url = f"http://127.0.0.1:{port}/"
     _note_address(port)
-    from . import updates
+    from . import system, updates
+    if not (args.no_window or args.browser) and not system.web_view_can_start():
+        # Linux: Chromium's sandbox, inside Qt's web view, can't start here (as root, or where the distribution
+        # keeps user namespaces from programs it doesn't know, as Ubuntu 24.04 does); Chromium would end the whole
+        # app, so the default browser shows it instead (docs/linux.md says how to get the window back)
+        logging.getLogger("recap").warning("Qt's web view can't start its sandbox here: opening in the browser")
+        args.browser = True
+        updates.LAUNCH["why_browser"] = "sandbox"
     updates.LAUNCH.update(port=port, mode="no-window" if args.no_window else "browser" if args.browser else "window")
 
     if args.no_window:
@@ -159,6 +197,7 @@ def main():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     except (AttributeError, OSError):
         pass  # (not Windows)
+    gui = _qt_app()  # (Qt named: pywebview doesn't try GTK first, logging that it isn't there)
     # The window opens at once, saying the app is starting, and goes to the app once its server answers
     window = webview.create_window(updates.label(), html=_page("<div>Starting Recap Studio…</div>",
                                                                '<div class="bar"></div>'),
@@ -201,7 +240,7 @@ def main():
         return result[0] if result else None
 
     window.expose(pick_folder, pick_project_file)
-    webview.start(open_app, icon=str(ICON))  # (without an icon, the window takes pythonw.exe's)
+    webview.start(open_app, icon=str(ICON), **({"gui": gui} if gui else {}))  # (without an icon, the window takes pythonw.exe's)
     server.should_exit = True
 
 

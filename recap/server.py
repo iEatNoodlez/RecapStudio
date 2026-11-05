@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import sys
 import threading
 import time
 import uuid
@@ -22,9 +23,9 @@ from fastapi.staticfiles import StaticFiles
 
 import requests
 
-from . import (bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, gpu,
-               importer, magi, mcp, music, ocr, online_voices, package, panels, phone, pipeline, plugins, scenes,
-               script, sources, store, translate, tts, updates, video, voiceover, youtube)
+from . import (bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, fonts,
+               gpu, importer, magi, mcp, music, ocr, online_voices, package, panels, phone, pipeline, plugins, scenes,
+               script, sources, store, system, translate, tts, updates, video, voiceover, youtube)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
@@ -195,10 +196,18 @@ def rename_project(pid: str, name: str = Body(..., embed=True)):
     return p
 
 
+def _show(folder: Path):
+    """A folder in File Explorer (Windows) or the desktop's file manager (Linux)."""
+    try:
+        system.open_folder(folder)
+    except OSError as e:
+        raise HTTPException(500, f"Couldn't open {folder}: {e}")
+
+
 @app.post("/api/projects/{pid}/show-folder")
 def show_project_folder(pid: str):
     _project(pid)
-    os.startfile(store.project_dir(pid))
+    _show(store.project_dir(pid))
     return {"ok": True}
 
 
@@ -216,7 +225,7 @@ def storage():
 def storage_show():
     root = store.projects_root()
     root.mkdir(parents=True, exist_ok=True)
-    os.startfile(root)
+    _show(root)
     return {"ok": True}
 
 
@@ -967,6 +976,9 @@ def status(ollama_url: str = "http://localhost:11434"):
     except Exception as e:
         models, ollama_err = [], str(e)
     return {
+        "os": "windows" if system.WINDOWS else "mac" if sys.platform == "darwin" else "linux",
+        "file_manager": system.file_manager(),
+        "why_browser": updates.LAUNCH.get("why_browser"),  # (Linux: opened in the browser, its window can't start)
         "ollama_models": models,
         "ollama_error": ollama_err,
         "tts_ready": tts.available(),
@@ -1719,6 +1731,41 @@ def claude_code_status(refresh: bool = False):
     return claude_code.status(refresh)
 
 
+# ---- fonts (fonts.py): Linux's stand-ins for Windows' fonts, and the open look-alikes to download ----
+
+@app.get("/api/fonts")
+def fonts_status():
+    return fonts.status()
+
+
+@app.post("/api/fonts/download")
+def fonts_download():
+    try:
+        return fonts.download()
+    except (OSError, RuntimeError) as e:
+        raise HTTPException(502, f"The fonts couldn't be downloaded: {e}")
+
+
+# ---- Linux: the AppImage in the applications menu (system.py) ----
+
+@app.get("/api/menu")
+def menu_status():
+    return system.menu_status()
+
+
+@app.post("/api/menu")
+def menu_add():
+    try:
+        return system.add_to_menu()
+    except (OSError, ValueError) as e:
+        raise HTTPException(400, f"Recap Studio couldn't be added to the menu: {e}")
+
+
+@app.delete("/api/menu")
+def menu_remove():
+    return system.remove_from_menu()
+
+
 @app.post("/api/claude-code/login")
 def claude_code_login():
     try:
@@ -1823,7 +1870,7 @@ def captions_preview(style: str = "classic", color: str = "yellow", font: str = 
 @app.post("/api/projects/{pid}/open-folder")
 def open_folder(pid: str):
     _project(pid)
-    os.startfile(store.project_dir(pid) / "output")
+    _show(store.project_dir(pid) / "output")
     return {"ok": True}
 
 

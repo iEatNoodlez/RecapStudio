@@ -2,8 +2,8 @@
 passes each tool call to the open app's /mcp (mcp.py), which it finds through data\\app.json, and answers the
 handshake and the tool list itself, so Claude Code connects even while the app is closed; open_app starts it.
 
-Run it with the app's Python: .venv\\Scripts\\python.exe recap\\mcp_stdio.py from source, or
-python\\python.exe recap\\mcp_stdio.py in an installed copy.
+Run it with the app's Python: .venv\\Scripts\\python.exe recap\\mcp_stdio.py from source (.venv/bin/python on
+Linux), or python\\python.exe recap\\mcp_stdio.py in an installed copy. A Linux AppImage runs it with --mcp.
 Tool calls are answered in their own threads, since Claude Code's agents can wait in next_request side by side."""
 import json
 import os
@@ -17,7 +17,7 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
-from recap import mcp, paths  # noqa: E402  (they import nothing else from the app)
+from recap import mcp, paths, system  # noqa: E402  (they import nothing else from the app)
 
 DATA = paths.DATA  # where the running app writes app.json
 _out = threading.Lock()
@@ -45,13 +45,10 @@ def _is_open() -> bool:
 def _open_app(mid):
     if _is_open():
         return mcp.text_result(mid, "Recap Studio is already open.")
-    # the windowless Python next to the one running this: the app's .venv, or the Python the installer bundles
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    if not pythonw.exists():
-        pythonw = Path(sys.executable)
-    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen([str(pythonw), "-m", "recap"], cwd=APP, creationflags=flags, stdin=subprocess.DEVNULL,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    # the windowless Python next to the one running this (the app's .venv, or the Python the installer bundles), or
+    # the AppImage this runs from
+    subprocess.Popen(system.app_command(), cwd=APP, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, **system.detached())
     end = time.time() + 60
     while time.time() < end:
         time.sleep(1)

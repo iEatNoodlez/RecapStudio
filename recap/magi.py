@@ -61,12 +61,42 @@ def env_python() -> Path:
     return ENV_DIR / "Scripts" / "python.exe" if os.name == "nt" else ENV_DIR / "bin" / "python"
 
 
+def _repoint() -> None:
+    """Linux: the add-on's environment points at the app's own Python, which in an AppImage moves on every start
+    (its mount's folder is new each time). Point it at this run's: its pyvenv.cfg, and its python links."""
+    if os.name == "nt":
+        return
+    cfg = ENV_DIR / "pyvenv.cfg"
+    try:
+        lines = cfg.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    base = Path(_base_python())
+    want = {"home": str(base.parent), "executable": str(base)}
+    out = []
+    for line in lines:
+        key, sep, value = line.partition("=")
+        if sep and key.strip() in want and value.strip() != want[key.strip()]:
+            line = f"{key.strip()} = {want[key.strip()]}"
+        out.append(line)
+    try:
+        if out != lines:
+            cfg.write_text("\n".join(out) + "\n", encoding="utf-8")
+        for link in (ENV_DIR / "bin").iterdir():  # (python links to the base; python3 and python3.12 to python)
+            if link.is_symlink() and os.path.isabs(os.readlink(link)) and Path(os.readlink(link)) != base:
+                link.unlink()
+                link.symlink_to(base)
+    except OSError:
+        pass
+
+
 def installed() -> dict | None:
     """What was installed (device, size), or None when Magi isn't ready to use."""
     try:
         info = json.loads(STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    _repoint()
     return info if env_python().exists() else None
 
 

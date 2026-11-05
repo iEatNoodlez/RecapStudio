@@ -1,6 +1,6 @@
 """Restart (Settings → Plugins → Restart now): the app, run as its own process, closes and opens again on the same
 address, and a plugin switched on since it started is running in the new copy. While a job runs it asks first (409),
-and restarts when told to anyway."""
+and restarts when told to anyway. On Linux, its data folder (settings, keys) is open to its owner only."""
 import json
 import os
 import shutil
@@ -45,6 +45,8 @@ first = subprocess.Popen([sys.executable, "-m", "recap", "--no-window", "--port"
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
     check("the app starts", until(answering, 60))
+    check("its data folder is its owner's only (Linux)", os.name == "nt" or os.stat(data).st_mode & 0o777 == 0o700,
+          oct(os.stat(data).st_mode))
     old = app_pid()
     check("Hello is off", not any(p["running"] for p in requests.get(base + "/api/plugins").json()["plugins"]))
     requests.put(base + "/api/plugins/hello", json={"enabled": True})
