@@ -46,7 +46,10 @@ def _xdg(var: str, default: str) -> Path:
 
 def _xdg_documents() -> Path | None:
     """The XDG Documents folder, from ~/.config/user-dirs.dirs as xdg-user-dir reads it (it follows the desktop's
-    language: ~/Dokumente, ~/Documents...). None when it isn't set, or is the home folder itself (meaning none)."""
+    language: ~/Dokumente, ~/Documents...), or $XDG_DOCUMENTS_DIR when that's set (the server's service sets it).
+    None when it isn't set, or is the home folder itself (meaning none)."""
+    if os.environ.get("XDG_DOCUMENTS_DIR") and os.path.isabs(os.environ["XDG_DOCUMENTS_DIR"]):
+        return Path(os.environ["XDG_DOCUMENTS_DIR"])
     try:
         lines = (_xdg("XDG_CONFIG_HOME", ".config") / "user-dirs.dirs").read_text(encoding="utf-8").splitlines()
     except OSError:

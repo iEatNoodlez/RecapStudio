@@ -4,7 +4,7 @@ The full guide, one page per topic. For a quick start, see the [main README](../
 
 | Page | What's in it |
 |---|---|
-| [Linux](linux.md) | The AppImages, where files go, fonts, video encoding, Ubuntu 24.04's sandbox, Claude Code's MCP server and running from source on Linux |
+| [Linux](linux.md) | The AppImages, where files go, fonts, video encoding, Ubuntu 24.04's sandbox, Claude Code's MCP server and running from source on Linux. As a server: [RecapStudio-Cloud](https://github.com/iEatNoodlez/RecapStudio-Cloud) |
 | [Install, files and updates](install.md) | Lite and Full Suite, the installer and the portable zip, first-run setup, where your files go, updates, running from source and building the installer |
 | [Using Recap Studio](using.md) | Projects, adding chapters, the main button, advanced mode, scenes, settings, pause and resume, time estimates, project files, cutting webtoons around speech bubbles, limits |
 | [Script writers and the prompt](script-writers.md) | The local model, Claude Code, Claude, OpenRouter, Gemini, DeepSeek, Groq and Mistral; the prompt; text reading; the MCP server for Claude Code |

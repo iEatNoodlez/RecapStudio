@@ -11,6 +11,9 @@ import time
 from pathlib import Path
 
 WINDOWS = os.name == "nt"
+# Server mode (__main__ --server, or the server AppImage): on the network, behind a login (auth.py), no window
+SERVER = False
+ALLOW_PLUGINS = False  # (--allow-plugins: source plugins and plugin lists may be added from the browser)
 APP = Path(__file__).resolve().parent.parent
 # (each 0 off Windows)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # the app runs without a console: no flashing windows
@@ -114,6 +117,7 @@ def menu_status() -> dict:
         text = entry.read_text(encoding="utf-8")
     except OSError:
         text = ""
+    image = image if not SERVER else None  # (a server isn't started from a menu)
     return {"offered": bool(image), "added": bool(image) and f"Exec={_exec_quoted(image)}" in text,
             "elsewhere": bool(text) and bool(image) and f"Exec={_exec_quoted(image)}" not in text,
             "entry": str(entry)}

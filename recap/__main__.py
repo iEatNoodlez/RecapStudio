@@ -3,6 +3,11 @@
     python -m recap              # desktop window
     python -m recap --browser    # open in your default browser instead
     python -m recap --no-window  # just the server (for testing; Claude Code's MCP still finds it)
+    python -m recap --server     # a server on the network, behind a login (auth.py; RecapStudio-Cloud ships it)
+        --host 0.0.0.0 --port 8780   where it listens (else Settings → Server's, else these)
+        --allow-plugins              source plugins and plugin lists may be added from the browser
+    python -m recap --reset-login    forget the server's login: the next visit sets it up again, with a new code
+A copy with a SERVER file beside it (the server AppImage) starts as a server.
 
 The address goes in data\\app.json while it runs, for Claude Code's MCP server (mcp_stdio.py) and the agents the
 Claude Code writer starts.
@@ -127,12 +132,14 @@ def _log_to_file_without_console():
         sys.stderr = sys.stderr or log
 
 
-def _note_address(port: int):
-    """data\\app.json: where the running app answers (removed when it quits)."""
+def _note_address(port: int, host: str = "127.0.0.1"):
+    """data\\app.json: where the running app answers (removed when it quits), for programs on this computer."""
     from .store import DATA_ROOT
     info = DATA_ROOT / "app.json"
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
-    info.write_text(json.dumps({"port": port, "pid": os.getpid(), "started": time.time()}), encoding="utf-8")
+    reach = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    info.write_text(json.dumps({"port": port, "host": reach, "pid": os.getpid(), "started": time.time()}),
+                    encoding="utf-8")
 
     def remove():
         try:
@@ -141,6 +148,24 @@ def _note_address(port: int):
         except (OSError, ValueError):
             pass
     atexit.register(remove)
+
+
+def _serve(args) -> None:
+    """Server mode: on the network (Settings → Server's address, or --host and --port), every request behind the
+    login (auth.py). Restart and updates start it again the same way."""
+    from . import auth, phone, system, updates
+    system.SERVER, system.ALLOW_PLUGINS = True, bool(args.allow_plugins)
+    saved_host, saved_port = auth.address()
+    host, port = args.host or saved_host, args.port or saved_port
+    extra = (["--host", args.host] if args.host else []) + (["--allow-plugins"] if args.allow_plugins else [])
+    updates.LAUNCH.update(port=args.port, mode="server", extra=extra, listen=f"{host}:{port}")
+    _note_address(port, host)
+    shown = phone.lan_ip() if host in ("0.0.0.0", "::", "") else host
+    print(f"Recap Studio is running as a server at http://{shown}:{port}/  (Ctrl+C to stop)", flush=True)
+    if not auth.configured():
+        print(f"Its login isn't set up yet. Open that address and give this setup code: {auth.setup_code()}",
+              flush=True)
+    uvicorn.Server(uvicorn.Config("recap.server:app", host=host, port=port, log_level="warning")).run()
 
 
 def main():
@@ -153,9 +178,22 @@ def main():
     ap = argparse.ArgumentParser(prog="recap")
     ap.add_argument("--browser", action="store_true", help="use the default browser instead of a window")
     ap.add_argument("--no-window", action="store_true", help="only the server, with no window or browser")
+    ap.add_argument("--server", action="store_true", help="a server on the network, behind a login")
+    ap.add_argument("--host", default="", help="(server) the address to listen on, such as 0.0.0.0")
     ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--allow-plugins", action="store_true",
+                    help="(server) let source plugins and plugin lists be added from the browser")
+    ap.add_argument("--reset-login", action="store_true", help="forget the server's login, then stop")
     ap.add_argument("--after", type=int, default=0, help=argparse.SUPPRESS)  # (Restart: the copy closing first)
     args = ap.parse_args()
+    from . import auth, system
+    if args.reset_login:
+        auth.reset()
+        print("Recap Studio's server login is forgotten. Open the server's address to set a new one: the server writes "
+              "the setup code it asks for in its log.")
+        return
+    if not (args.browser or args.no_window) and (system.APP / "SERVER").exists():
+        args.server = True  # (the server AppImage)
     if args.after:
         from .system import wait_for
         wait_for(args.after)
@@ -164,12 +202,15 @@ def main():
     from . import gpu
     gpu.activate()  # the downloaded GPU build of ONNX Runtime, if any: before anything imports onnxruntime
 
+    from . import updates
+    if args.server:
+        _serve(args)
+        return
     port = args.port or _free_port()
     config = uvicorn.Config("recap.server:app", host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
     url = f"http://127.0.0.1:{port}/"
     _note_address(port)
-    from . import system, updates
     if not (args.no_window or args.browser) and not system.web_view_can_start():
         # Linux: Chromium's sandbox, inside Qt's web view, can't start here (as root, or where the distribution
         # keeps user namespaces from programs it doesn't know, as Ubuntu 24.04 does); Chromium would end the whole

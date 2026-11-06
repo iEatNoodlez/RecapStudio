@@ -1,7 +1,12 @@
 """Local HTTP API and static UI. Binds to 127.0.0.1; with Phone access on, phone.py also serves it to the home
-network, where only a phone with the key gets through, and only to the phone page and what it uses."""
+network, where only a phone with the key gets through, and only to the phone page and what it uses.
+
+In server mode (system.SERVER: __main__ --server) it listens on the network instead, and every request needs the
+login (auth.py): a session cookie from the login page, or the API key. Nothing is trusted for coming from this
+computer, since a reverse proxy on it makes every visitor look local."""
 import asyncio
 import copy
+import hashlib
 import io
 import json
 import os
@@ -20,10 +25,12 @@ import soundfile as sf
 from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 import requests
 
-from . import (bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus, fonts,
+from . import (auth, bubbles, captions, charscan, claude, claude_code, cloud, cover, credits, editors, estimates, focus,
+               fonts,
                gpu, importer, magi, mcp, music, ocr, online_voices, package, panels, phone, pipeline, plugins, scenes,
                script, sources, store, system, translate, tts, updates, video, voiceover, youtube)
 
@@ -54,9 +61,10 @@ REFUSED = {
 @app.middleware("http")
 async def _phone_guard(request: Request, call_next):
     """A request from another device (Phone access, phone.py): through only from a linked phone on the home network,
-    and only to the phone page and what it uses. The QR code's link sets the phone's cookie."""
+    and only to the phone page and what it uses. The QR code's link sets the phone's cookie. (A server checks its
+    login instead: _login_guard.)"""
     host = request.client.host if request.client else ""
-    if phone.local(host):
+    if system.SERVER or phone.local(host):
         return await call_next(request)
     verdict = phone.check(request.method, request.url.path, host, request.cookies.get(phone.COOKIE),
                           request.query_params.get("key"))
@@ -75,13 +83,162 @@ async def _phone_guard(request: Request, call_next):
                         status_code=403)
 
 
+# what a server answers before its login: the login page and what it asks
+OPEN = {"/login", "/icon.ico", "/api/auth", "/api/auth/login", "/api/auth/setup"}
+
+
+def signed_in(request: Request) -> str | None:
+    """Server mode: who the request comes from (the session's user, or "api" for the API key); None if nobody."""
+    return auth.session_user(request.cookies.get(auth.COOKIE)) or (
+        "api" if auth.api_key_ok(request.headers.get("x-api-key")) else None)
+
+
+@app.middleware("http")
+async def _login_guard(request: Request, call_next):
+    """Server mode: every request needs the login, except the login page and what it asks. A page is sent to the
+    login page; anything else is refused (401)."""
+    if not system.SERVER or request.url.path in OPEN or signed_in(request):
+        return await call_next(request)
+    if request.url.path.startswith(("/api/", "/files/", "/mcp", "/plugin-web/")) or request.method != "GET":
+        return JSONResponse({"detail": "Sign in to Recap Studio first."}, status_code=401)
+    return RedirectResponse("/login", status_code=303)
+
+
+# ---- the server's login (auth.py) ----
+
+@app.get("/login")
+def login_page():
+    return FileResponse(WEB_DIR / "login.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/auth")
+def auth_status(request: Request):
+    """Whether this is a server, whether its login is set up yet, and who's signed in."""
+    if not system.SERVER:
+        return {"server": False}
+    who = signed_in(request)
+    if not auth.configured():
+        auth.setup_code()  # (made and logged now, if it wasn't: after --reset-login while it ran)
+    return {"server": True, "configured": auth.configured(), "user": who if who and who != "api" else None,
+            "code_place": None if auth.configured() else os.environ.get("RECAP_CODE_PLACE")}
+
+
+def _client(request: Request) -> str:
+    return request.client.host if request.client else ""
+
+
+def _signed_in_response(name: str, request: Request) -> JSONResponse:
+    response = JSONResponse({"ok": True, "user": name})
+    response.set_cookie(auth.COOKIE, auth.session(name), max_age=auth.SESSION_DAYS * 86400, httponly=True,
+                        samesite="strict", secure=request.url.scheme == "https")
+    return response
+
+
+@app.post("/api/auth/setup")
+def auth_setup(request: Request, code: str = Body(..., embed=True), user: str = Body(..., embed=True),
+               password: str = Body(..., embed=True)):
+    """The first visit: the setup code from the server's log, then the login."""
+    if not system.SERVER:
+        raise HTTPException(404, "Only a server has a login")
+    host = _client(request)
+    if auth.wait(host):
+        raise HTTPException(429, f"Too many wrong tries: wait {auth.wait(host)} seconds.")
+    try:
+        auth.setup(code, user, password)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except PermissionError as e:
+        auth.failed(host)
+        raise HTTPException(403, str(e))
+    auth.succeeded(host)
+    return _signed_in_response(auth.user(), request)
+
+
+@app.post("/api/auth/login")
+def auth_login(request: Request, user: str = Body(..., embed=True), password: str = Body(..., embed=True)):
+    if not system.SERVER:
+        raise HTTPException(404, "Only a server has a login")
+    host = _client(request)
+    if auth.wait(host):
+        raise HTTPException(429, f"Too many wrong passwords: wait {auth.wait(host)} seconds.")
+    if not auth.password_ok(user, password):
+        auth.failed(host)
+        raise HTTPException(401, "That username and password don't match.")
+    auth.succeeded(host)
+    return _signed_in_response(auth.user(), request)
+
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(auth.COOKIE)
+    return response
+
+
+@app.post("/api/auth/password")
+def auth_password(request: Request, current: str = Body(..., embed=True), user: str = Body(..., embed=True),
+                  password: str = Body(..., embed=True)):
+    """A new username and password: every browser is signed out, then this one signed in again."""
+    if not system.SERVER:
+        raise HTTPException(404, "Only a server has a login")
+    try:
+        auth.change(current, user, password)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    return _signed_in_response(auth.user(), request)
+
+
+@app.get("/api/server")
+def server_settings():
+    """Settings → Server: where it listens (from the next start), the API key, and whether plugins can be added."""
+    if not system.SERVER:
+        raise HTTPException(404, "This copy isn't a server")
+    host, port = auth.address()
+    return {"user": auth.user(), "api_key": auth.api_key(), "host": host, "port": port,
+            "listening": updates.LAUNCH.get("listen") or f"{host}:{port}", "allow_plugins": system.ALLOW_PLUGINS,
+            # (started with --host or --port: those win over the saved address, at every start)
+            "command_line": bool(updates.LAUNCH.get("port") or "--host" in updates.LAUNCH.get("extra", []))}
+
+
+@app.put("/api/server")
+def server_address(host: str = Body(..., embed=True), port: int = Body(..., embed=True)):
+    if not system.SERVER:
+        raise HTTPException(404, "This copy isn't a server")
+    host = host.strip()
+    if not re.fullmatch(r"[0-9a-fA-F:.]+|[A-Za-z0-9.-]+", host) or not 1 <= port <= 65535:
+        raise HTTPException(400, "That isn't an address and port to listen on.")
+    auth.set_address(host, port)
+    return server_settings()
+
+
+@app.post("/api/server/api-key")
+def server_new_key():
+    """A new API key: programs with the old one (Claude Code's MCP server, scripts) need the new one."""
+    if not system.SERVER:
+        raise HTTPException(404, "This copy isn't a server")
+    auth.new_api_key()
+    return server_settings()
+
+
+def _may_add_code():
+    """Server mode: a plugin list or source plugin (code that runs on the server) is added from the server itself,
+    unless it was started with --allow-plugins: a stolen session can't add code."""
+    if system.SERVER and not system.ALLOW_PLUGINS:
+        raise HTTPException(403, "On a server, source plugins and plugin lists are added only when it's started with "
+                                 "--allow-plugins (see the server's docs). Recap Studio's own plugins can be installed "
+                                 "as usual.")
+
+
 @app.on_event("startup")
 def _startup():
     store.move_old_layout()  # an installed copy that kept its data beside itself (__main__ does it first)
     store.name_folders()     # folders still named by project id take their project's name
     store.move_video_settings()  # video settings were app-wide until 0.1.1: each project keeps its own
     pipeline.start_worker()
-    phone.restore(app)       # Phone access, when it was on
+    if not system.SERVER:
+        phone.restore(app)   # Phone access, when it was on (a server's browser is the interface already)
     def check_sources():
         sources.sync_lists()  # the member's plugin lists: new plugins installed, new versions got
         if store.global_settings().get("check_new_chapters"):  # each project's new chapters, from its source
@@ -103,6 +260,8 @@ def phone_status():
 
 @app.put("/api/phone")
 def phone_switch(enabled: bool = Body(..., embed=True)):
+    if enabled and system.SERVER:
+        raise HTTPException(400, "A server has no phone page: open Recap Studio's own address in the phone's browser.")
     return phone.start(app) if enabled else phone.stop()
 
 
@@ -179,10 +338,26 @@ def new_project_settings():
 
 
 @app.get("/api/projects/{pid}")
-def get_project(pid: str):
+def get_project(pid: str, request: Request):
+    """The project with its latest job. The page asks for it every 1.5 s while a job runs, and a big project
+    (200 chapters, 12 MB) took a second to answer, mostly in FastAPI's encoder, which starved the job of the
+    interpreter lock: so it's written out directly, and with an ETag of the project (the job left out, as it changes
+    every second), so a page that sends it back gets 304 and nothing to parse when nothing has changed."""
     p = _project(pid)
-    p["job"] = pipeline.public(pipeline.latest_for(pid))
-    return p
+    body = json.dumps(p, ensure_ascii=False, separators=(",", ":"))
+    tag = '"' + hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest() + '"'
+    if request.headers.get("if-none-match") == tag:
+        return Response(status_code=304, headers={"ETag": tag})
+    job = json.dumps(pipeline.public(pipeline.latest_for(pid)), ensure_ascii=False, separators=(",", ":"))
+    return Response(f'{body[:-1]},"job":{job}}}'.encode("utf-8"), media_type="application/json",
+                    headers={"ETag": tag})
+
+
+@app.get("/api/projects/{pid}/job")
+def get_project_job(pid: str):
+    """Just the project's latest job (null when it never had one): what the page polls while one runs."""
+    _project(pid)
+    return pipeline.public(pipeline.latest_for(pid))
 
 
 @app.patch("/api/projects/{pid}")
@@ -198,6 +373,8 @@ def rename_project(pid: str, name: str = Body(..., embed=True)):
 
 def _show(folder: Path):
     """A folder in File Explorer (Windows) or the desktop's file manager (Linux)."""
+    if system.SERVER:
+        raise HTTPException(400, "On a server, there's no folder to show here: download the files from the Video tab.")
     try:
         system.open_folder(folder)
     except OSError as e:
@@ -268,6 +445,21 @@ def open_project_file(path: str = Body(..., embed=True)):
     except (FileNotFoundError, ValueError, zipfile.BadZipFile) as e:
         raise HTTPException(400, str(e) if not isinstance(e, zipfile.BadZipFile) else "That file isn't a zip archive")
     return {"id": p["id"], "name": p["name"]}
+
+
+@app.post("/api/projects/open-file/upload")
+async def open_project_upload(file: UploadFile):
+    """A project file sent from the browser (a server's, or any browser's): saved beside the data, then opened."""
+    folder = store.DATA_ROOT / "uploads"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{uuid.uuid4().hex}.recap"
+    try:
+        with open(target, "wb") as f:
+            while chunk := await file.read(1 << 20):
+                f.write(chunk)
+        return await run_in_threadpool(open_project_file, str(target))  # (a big project takes a minute)
+    finally:
+        target.unlink(missing_ok=True)
 
 
 @app.get("/api/update")
@@ -970,6 +1162,8 @@ def resume(job_id: str):
 
 @app.get("/api/status")
 def status(ollama_url: str = "http://localhost:11434"):
+    if system.SERVER:  # (a server asks only the saved address, never one a request names)
+        ollama_url = store.global_settings().get("ollama_url") or "http://localhost:11434"
     try:
         models = script.list_models(ollama_url)
         ollama_err = None
@@ -979,6 +1173,7 @@ def status(ollama_url: str = "http://localhost:11434"):
         "os": "windows" if system.WINDOWS else "mac" if sys.platform == "darwin" else "linux",
         "file_manager": system.file_manager(),
         "why_browser": updates.LAUNCH.get("why_browser"),  # (Linux: opened in the browser, its window can't start)
+        "server": system.SERVER,  # (on the network behind a login: no folders to show, no phone page)
         "ollama_models": models,
         "ollama_error": ollama_err,
         "tts_ready": tts.available(),
@@ -1238,6 +1433,7 @@ def sources_new_counts():
 
 @app.post("/api/sources/plugins")
 async def sources_add_plugin(file: UploadFile):
+    _may_add_code()
     data = await file.read(sources.MAX_FILE + 1)
     return _sourced(sources.add_plugin, file.filename or "plugin.py", data)
 
@@ -1276,6 +1472,7 @@ def sources_repo(url: str):
 
 @app.post("/api/sources/repos")
 def sources_add_repo(url: str = Body(..., embed=True)):
+    _may_add_code()
     """Add a plugin list, and install every source plugin on it (sources.sync_repo: adult ones switched off)."""
     url = url.strip()
     _sourced(sources.repo, url)  # only a link that gives a plugin list is kept
@@ -1303,6 +1500,7 @@ def sources_remove_repo(url: str = Body(..., embed=True), plugins: bool = Body(F
 
 @app.post("/api/sources/repos/install")
 def sources_install(url: str = Body(..., embed=True), id: str = Body(..., embed=True)):
+    _may_add_code()
     return _sourced(sources.install, url, id)
 
 

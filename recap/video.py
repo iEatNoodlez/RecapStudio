@@ -14,6 +14,7 @@ import os
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -46,10 +47,17 @@ AMD_ENCODER = ["-c:v", "h264_amf", "-usage", "transcoding", "-quality", "balance
 INTEL_ENCODER = ["-c:v", "h264_qsv", "-preset", "medium", "-global_quality", "23", "-look_ahead", "0"]
 # tried in this order when the encoder is Automatic: (who makes it, its arguments)
 HARDWARE = {"nvidia": ("NVIDIA", GPU_ENCODER), "amd": ("AMD", AMD_ENCODER), "intel": ("Intel", INTEL_ENCODER)}
-# drawing in several processes (see _encode_parallel)
-BLOCK = 30   # frames a drawing process draws in a row before the next one takes over
-SLOTS = 4    # frames each drawing process can have ready ahead of ffmpeg
+# drawing in several processes (see _encode_parallel). A process can have its whole run of frames ready ahead of
+# ffmpeg: with fewer slots than the run (4 and 30, as before 0.4.0) the others filled their slots and waited while
+# one run was handed over, so only one process drew at a time (measured: 4 processes at one process's speed; with
+# 6 and 6, 40% faster on a 720p webtoon chapter, the encoder then being the limit)
+BLOCK = 6    # frames a drawing process draws in a row before the next one takes over
+SLOTS = 6    # frames each drawing process can have ready ahead of ffmpeg
 PARALLEL_PIX_FMT = "yuv420p"  # drawing processes convert to the video's colour format themselves
+# While frames are handed to ffmpeg, Python's threads switch more often than the usual 5 ms: the hand-off loop
+# gives the interpreter lock up at every wait and write, and a busy thread (a request building a big project's
+# answer) would otherwise keep it for up to 5 ms each time, which cut a render to a tenth of its speed
+HANDOFF_SWITCH_INTERVAL = 0.0005
 # automatic: (at most, one per this many cores). Measured at 1080p on 12 cores: 2 processes gave
 # ~12% (GPU encoder) and ~8% (CPU encoder) over 1; more gave no more, as the encoder is then the limit
 AUTO_PROCESSES = {"gpu": (2, 4), "cpu": (2, 6)}
@@ -666,6 +674,8 @@ def _encode(cmd, timeline, W, H, progress, cancelled):
     writer.start()
     total_frames = timeline.frames
     f = 0
+    switch = sys.getswitchinterval()
+    sys.setswitchinterval(HANDOFF_SWITCH_INTERVAL)
     try:
         for f in range(total_frames):
             if cancelled and cancelled():
@@ -694,6 +704,8 @@ def _encode(cmd, timeline, W, H, progress, cancelled):
             except OSError:
                 pass
         raise
+    finally:
+        sys.setswitchinterval(switch)
 
 
 def _encode_parallel(cmd, pix_fmt, timeline, W, H, workers, progress, cancelled):
@@ -709,6 +721,8 @@ def _encode_parallel(cmd, pix_fmt, timeline, W, H, workers, progress, cancelled)
     filled = [ctx.Semaphore(0) for _ in range(workers)]
     stop, errors = ctx.Event(), ctx.Queue()
     procs, proc, f = [], None, 0
+    switch = sys.getswitchinterval()
+    sys.setswitchinterval(HANDOFF_SWITCH_INTERVAL)
     try:
         try:
             for k in range(workers):
@@ -755,6 +769,7 @@ def _encode_parallel(cmd, pix_fmt, timeline, W, H, workers, progress, cancelled)
         if proc.wait() != 0 or broken:
             raise _EncoderFailed(f"ffmpeg failed: {err[-800:] or broken}", f)
     finally:
+        sys.setswitchinterval(switch)
         stop.set()
         if proc and proc.poll() is None:  # stopped early: cancelled or failed
             proc.kill()

@@ -19,6 +19,7 @@ async function api(path, opts = {}) {
     init.headers = { "Content-Type": "application/json" };
   }
   const r = await fetch(path, init);
+  if (r.status === 401 && path !== "/api/auth/login") location.href = "/login";  // (a server's login ran out)
   if (!r.ok) {
     let msg = r.statusText;
     try { msg = (await r.json()).detail || msg; } catch {}
@@ -27,6 +28,23 @@ async function api(path, opts = {}) {
     if (err.check) siteCheck(err.check, msg);
     throw err;
   }
+  return r.json();
+}
+
+// A project, with its ETag kept: asked for again with it, the server answers 304 and nothing when the project hasn't
+// changed (null here), so polling a big project costs neither it nor the page anything. fresh: the whole thing anyway.
+const projectTags = new Map();  // project id -> the ETag of the copy this page holds
+async function fetchProject(id, { fresh = false } = {}) {
+  const tag = fresh ? null : projectTags.get(id);
+  const r = await fetch(`/api/projects/${id}`, tag ? { headers: { "If-None-Match": tag } } : {});
+  if (r.status === 304) return null;
+  if (r.status === 401) location.href = "/login";
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).detail || msg; } catch {}
+    throw new Error(msg);
+  }
+  projectTags.set(id, r.headers.get("ETag"));
   return r.json();
 }
 
@@ -156,7 +174,7 @@ async function openProject(id) {
     selected.clear();
     selectedCh = new Set(JSON.parse(localStorage.getItem(`sel:${id}`) || "[]"));
   }
-  current = await api(`/api/projects/${id}`);
+  current = await fetchProject(id, { fresh: true });
   const ids = new Set(current.chapters.map((c) => c.id));
   selectedCh = new Set([...selectedCh].filter((c) => ids.has(c)));
   localStorage.setItem("last", id);
@@ -398,6 +416,11 @@ let globals = null;  // app-wide settings (writer, voice, video), shared by ever
 // Buttons and hints that name Windows' own things, said Linux's way there
 let toldWhyBrowser = false;
 function systemWording() {
+  if (env.server) {  // (on the network behind a login: no folders to show, no phone page, Settings → Server)
+    for (const x of ["#show-folder", "#projects-show", "#open-folder", "#phone-box"]) $(x).hidden = true;
+    $("#server-box").hidden = false;
+    renderServer();
+  }
   if (onWindows()) return;
   if (env.why_browser === "sandbox" && !toldWhyBrowser) {
     toldWhyBrowser = true;
@@ -411,6 +434,46 @@ function systemWording() {
   $("#phone-firewall").textContent = "If a firewall runs on this computer (ufw or firewalld, say), it has to let other " +
     "devices on your network reach Recap Studio, or your phone can't connect.";
 }
+
+// Settings → Server (auth.py): the login, the API key, where it listens
+async function renderServer(message = "") {
+  let s;
+  try { s = await api("/api/server"); } catch (e) { $("#server-error").textContent = e.message; return; }
+  $("#server-who").textContent = `Signed in as ${s.user}. Listening on ${s.listening}.`;
+  if (!$("#server-user").value) $("#server-user").value = s.user;
+  $("#server-key").textContent = s.api_key;
+  if (document.activeElement !== $("#server-host")) $("#server-host").value = s.host;
+  if (document.activeElement !== $("#server-port")) $("#server-port").value = s.port;
+  $("#server-address-note").textContent = message || (s.command_line
+    ? "It was started with --host or --port, which win over these. Change them where it's started (its service)."
+    : `${s.host}:${s.port}` !== s.listening ? `From the next start: ${s.host}:${s.port}.`
+    : "0.0.0.0 listens on every network this server is on.");
+  $("#server-error").textContent = "";
+}
+$("#server-save-login").addEventListener("click", async () => {
+  try {
+    await api("/api/auth/password", { method: "POST", json: { current: $("#server-current").value,
+      user: $("#server-user").value.trim(), password: $("#server-new").value } });
+    $("#server-current").value = $("#server-new").value = "";
+    renderServer("The login is changed.");
+  } catch (e) { $("#server-error").textContent = e.message; }
+});
+$("#server-logout").addEventListener("click", async () => {
+  await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  location.href = "/login";
+});
+$("#server-key-new").addEventListener("click", async () => {
+  if (!await ask("Make a new API key?", "Programs using the old one (Claude Code's MCP server, scripts) stop until they have the new one.")) return;
+  try { await api("/api/server/api-key", { method: "POST" }); renderServer(); }
+  catch (e) { $("#server-error").textContent = e.message; }
+});
+$("#server-address-save").addEventListener("click", async () => {
+  try {
+    await api("/api/server", { method: "PUT", json: { host: $("#server-host").value.trim() || "0.0.0.0",
+      port: Number($("#server-port").value) } });
+    renderServer();
+  } catch (e) { $("#server-error").textContent = e.message; }
+});
 
 // Linux has none of Windows' fonts (fonts.py): which ones stand in, and the open look-alikes to download
 const FONT_LOOKS = { "Arial Black": "arial-black", "Segoe UI Black": "segoe-black", "Impact": "impact", "Comic Sans": "comic-bold" };
@@ -1323,7 +1386,8 @@ async function renderClaudeCode(refresh = false) {
 $("#cc-check").addEventListener("click", () => renderClaudeCode(true));
 // what to say once the sign-in was started: in a console window (a terminal on Linux), or the command to run
 const claudeLoginSaid = (r) => r.started === false
-  ? `No terminal was found to sign in with. Open one, run ${r.command}, then press Check again.`
+  ? env && env.server ? `Sign in on the server itself: in its terminal (over SSH, as the user it runs as), run ${r.command}, then press Check again.`
+    : `No terminal was found to sign in with. Open one, run ${r.command}, then press Check again.`
   : `Finish signing in in the ${onWindows() ? "window" : "terminal"} and browser that opened, then press Check again.`;
 
 $("#cc-login").addEventListener("click", async () => {
@@ -2635,7 +2699,7 @@ async function checkWording(c, flags) {
     } else if (pick === "redo") {
       if (job) {
         await api(`/api/jobs/${job.id}/cancel`, { method: "POST" });
-        for (let i = 0; i < 40 && ACTIVE.includes((await api(`/api/projects/${current.id}`)).job.status); i++) {
+        for (let i = 0; i < 40 && ACTIVE.includes(((await api(`/api/projects/${current.id}/job`)) || {}).status); i++) {
           await new Promise((r) => setTimeout(r, 250));
         }
       }
@@ -2871,16 +2935,20 @@ function poll() {
   let lastStep = current.job && current.job.step, lastStatus = current.job && current.job.status;
   polling = setInterval(async () => {
     if (!current || !current.job) return clearInterval(polling);
-    const p = await api(`/api/projects/${current.id}`);
-    if (p.id !== current.id) return;
-    const job = p.job;
+    const id = current.id;
+    const job = await api(`/api/projects/${id}/job`);  // (the job alone: the project itself only when it matters)
+    if (!current || current.id !== id) return;
+    if (!job) return clearInterval(polling);
     const finished = !ACTIVE.includes(job.status);
     // refresh the lists when a step finishes, and while panels/text/script are streaming in
     const streaming = job.status === "running" && ["panels", "ocr", "script", "download"].includes(job.step);
     // (and when it pauses or resumes: Check wording works while Voice waits for it)
-    if (finished || job.step !== lastStep || job.status !== lastStatus || streaming) {
-      current = p;
-      render();
+    const changed = job.step !== lastStep || job.status !== lastStatus;
+    if (finished || changed || streaming) {
+      const p = await fetchProject(id);  // null: nothing in the project has changed since this page got it
+      if (!current || current.id !== id) return;
+      if (p) current = p; else current.job = job;
+      if (p || finished || changed) render(); else renderJob();
       if (job.status === "paused" && lastStatus !== "paused" && waitingForCharacters()) openReview();
       if (job.status === "paused" && lastStatus !== "paused" && waitingForCredits()) openCredits();
     } else {
@@ -3606,6 +3674,9 @@ function renderOutput() {
   const src = `/files/${current.id}/${encodeURI(shownShort >= 0 ? shorts[shownShort] : part.video)}?t=${out.time}`;
   if (!$("#player").src.endsWith(src)) $("#player").src = src;
   $("#srt-link").href = fileUrl(encodeURI(part.srt), out.time);
+  $("#video-download").hidden = !(env && env.server);
+  $("#video-download").href = src;
+  $("#video-download").textContent = shownShort >= 0 ? `Download Short ${shownShort + 1}` : parts.length > 1 ? `Download part ${shownPart + 1}` : "Download the video";
   $("#chapters-link").hidden = !part.chapters;
   if (part.chapters) $("#chapters-link").href = fileUrl(encodeURI(part.chapters), out.time);
   $("#output-parts").replaceChildren(...(parts.length > 1 ? parts.map((x, k) => el("button", {
@@ -3975,6 +4046,24 @@ $("#open-file").addEventListener("click", async () => {
   }
 });
 $("#open-file-path").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#open-file-go").click(); } });
+$("#open-file-upload").addEventListener("change", async () => {
+  const file = $("#open-file-upload").files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  $("#open-file-go").disabled = true;
+  $("#open-file-status").textContent = `Sending ${file.name}… (a big project takes a while)`;
+  try {
+    const r = await fetch("/api/projects/open-file/upload", { method: "POST", body: form });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    const p = await r.json();
+    $("#open-file-dialog").close();
+    await loadProjects();
+    await openProject(p.id);
+  } catch (e) { $("#open-file-status").textContent = e.message; }
+  $("#open-file-upload").value = "";
+  $("#open-file-go").disabled = false;
+});
 $("#open-file-go").addEventListener("click", async () => {
   const path = $("#open-file-path").value.trim();
   if (!path) return;

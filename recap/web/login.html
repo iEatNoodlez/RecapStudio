@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Recap Studio</title>
+<link rel="icon" href="/icon.ico">
+<style>
+:root { --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6d6c67; --line: #dcdad4; --accent: #3d63dd;
+  --accent-text: #ffffff; --danger: #c4372b; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #18181a; --panel: #222225; --text: #ececea; --muted: #9b9a95; --line: #34343a; --accent: #6d8cf0;
+    --accent-text: #0e0e10; --danger: #ec6a5f; }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg);
+  color: var(--text); font: 15px "Segoe UI", system-ui, sans-serif; }
+main { width: 100%; max-width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 28px 24px; }
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.head img { width: 40px; height: 40px; }
+h1 { font-size: 18px; margin: 0; }
+p { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0 0 14px; }
+label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+input { display: block; width: 100%; margin-top: 4px; padding: 9px 10px; font: inherit; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button { width: 100%; margin-top: 6px; padding: 10px; font: inherit; font-weight: 600; color: var(--accent-text);
+  background: var(--accent); border: 0; border-radius: 6px; cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: progress; }
+.error { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 10px; }
+code { font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="head"><img src="/icon.ico" alt=""><h1 id="title">Recap Studio</h1></div>
+  <form id="login" hidden>
+    <label>Username <input id="user" autocomplete="username" spellcheck="false" required autofocus></label>
+    <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit">Sign in</button>
+  </form>
+  <form id="setup" hidden>
+    <p>This server's login isn't set up yet. The setup code is in the server's log: <span id="code-place">the
+      terminal it was started from, or <code>journalctl -u recap-studio</code></span>.</p>
+    <label>Setup code <input id="code" autocomplete="one-time-code" spellcheck="false" placeholder="ABCD-EFGH-JKLM" required></label>
+    <label>Username <input id="new-user" autocomplete="username" spellcheck="false" required></label>
+    <label>Password (at least 8 characters) <input id="new-password" type="password" autocomplete="new-password" minlength="8" required></label>
+    <label>The password again <input id="again" type="password" autocomplete="new-password" minlength="8" required></label>
+    <button type="submit">Set up the login</button>
+  </form>
+  <div id="error" class="error" role="alert"></div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+function sending(form, on) {
+  form.querySelector("button").disabled = on;
+  if (on) $("#error").textContent = "";
+}
+
+$("#login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  sending(e.target, true);
+  try {
+    await post("/api/auth/login", { user: $("#user").value.trim(), password: $("#password").value });
+    location.href = "/";
+  } catch (err) {
+    $("#error").textContent = err.message;
+    $("#password").select();
+  }
+  sending(e.target, false);
+});
+
+$("#setup").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if ($("#new-password").value !== $("#again").value) {
+    $("#error").textContent = "The two passwords aren't the same.";
+    return;
+  }
+  sending(e.target, true);
+  try {
+    await post("/api/auth/setup", { code: $("#code").value.trim(), user: $("#new-user").value.trim(),
+      password: $("#new-password").value });
+    location.href = "/";
+  } catch (err) { $("#error").textContent = err.message; }
+  sending(e.target, false);
+});
+
+(async () => {
+  let s;
+  try { s = await (await fetch("/api/auth")).json(); } catch { $("#error").textContent = "Recap Studio isn't answering."; return; }
+  if (!s.server || s.user) { location.href = "/"; return; }
+  const form = s.configured ? $("#login") : $("#setup");
+  $("#title").textContent = s.configured ? "Sign in to Recap Studio" : "Set up Recap Studio";
+  if (s.code_place) $("#code-place").textContent = s.code_place;  // (a package's own place: QNAP's event log)
+  form.hidden = false;
+  form.querySelector("input").focus();
+})();
+</script>
+</body>
+</html>

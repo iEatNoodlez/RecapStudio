@@ -30,7 +30,12 @@ from pathlib import Path
 
 from . import store, system
 
-REPO = "iEatNoodlez/RecapStudio"
+def server_build() -> bool:
+    """The server AppImage (RecapStudio-Cloud's): a SERVER file beside the app. It updates from that repository."""
+    return (store.ROOT / "SERVER").exists()
+
+
+REPO = "iEatNoodlez/RecapStudio-Cloud" if server_build() else "iEatNoodlez/RecapStudio"
 PAGE = f"https://github.com/{REPO}/releases/latest"
 API = os.environ.get("RECAP_UPDATE_URL") or f"https://api.github.com/repos/{REPO}/releases/latest"
 WORK = store.DATA_ROOT / "updates"  # downloads and the portable copy's unpacked update, removed on the next start
@@ -75,7 +80,7 @@ def edition() -> str:
 def label() -> str:
     """The app's name as the window, the sidebar and Settings show it: "Recap Studio Full Suite 0.2.0"."""
     v = version()
-    return f"Recap Studio {EDITIONS[edition()]}" + (f" {v}" if v else "")
+    return f"Recap Studio {'Server ' if server_build() else ''}{EDITIONS[edition()]}" + (f" {v}" if v else "")
 
 
 def _key(v: str):
@@ -100,8 +105,8 @@ def _asset_for(assets: list) -> dict | None:
     AppImages: Recap-Studio-Lite-0.3.0-x86_64.AppImage and Recap-Studio-Full-0.3.0-x86_64.AppImage."""
     k = kind()
     installed = k == "installed"
-    if k == "appimage":
-        name = "Full" if edition() == "full" else "Lite"
+    if k == "appimage":  # (the server's: Recap-Studio-Server-Lite-0.4.0-x86_64.AppImage, from RecapStudio-Cloud)
+        name = ("Server-" if server_build() else "") + ("Full" if edition() == "full" else "Lite")
         pattern = rf"Recap-Studio-{name}-.+-{re.escape(platform.machine())}\.AppImage"
     elif not system.WINDOWS:
         return None  # (an unpacked copy on Linux: there's nothing to swap it with)
@@ -277,11 +282,18 @@ def restart() -> None:
     """Start the app again, the way this copy was started (a new copy that waits for this one to close, on the same
     port), then close this one. Plugins installed or switched since this copy started are loaded by the new one.
     An AppImage starts its file again: this copy's own files go when it closes."""
+    if system.SERVER and (os.environ.get("INVOCATION_ID") or os.environ.get("RECAP_SUPERVISED")):
+        # a service that starts the app again when it ends, and would stop a copy started from here along with this
+        # one: systemd (the server's install script makes one, with Restart=always), or the QNAP package's own
+        # service script (RECAP_SUPERVISED; QTS has no systemd)
+        threading.Timer(0.8, _quit).start()
+        return
     cmd = system.app_command(windowless=False)
     if LAUNCH["mode"] != "window":
         cmd.append(f"--{LAUNCH['mode']}")
     if LAUNCH["port"]:
         cmd += ["--port", str(LAUNCH["port"])]
+    cmd += LAUNCH.get("extra", [])  # (a server's --host and --allow-plugins)
     cmd += ["--after", str(os.getpid())]
     subprocess.Popen(cmd, cwd=str(store.ROOT), env=os.environ.copy(), stdin=subprocess.DEVNULL, **system.detached())
     threading.Timer(0.8, _quit).start()  # (after the page has its answer)

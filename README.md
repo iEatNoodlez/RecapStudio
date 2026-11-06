@@ -47,6 +47,8 @@ The installer installs it for everyone on the PC or just for you. Unzip the port
 
 On Linux (Ubuntu 22.04, Debian 12, Fedora 36 or newer), make the AppImage executable and start it: see [Linux](docs/linux.md).
 
+**As a server** on a Linux machine you use from a browser (a NAS, a mini PC): [Recap Studio Server](https://github.com/iEatNoodlez/RecapStudio-Cloud) is the same app with no window, behind a login, installed as a service by one script.
+
 Everything it needs is included. The first start downloads the voice model (354 MB) and walks you through a short setup. After that, the app checks for updates when it starts and installs them with one click.
 
 ## Make a recap

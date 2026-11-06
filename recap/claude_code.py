@@ -29,7 +29,7 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 
-from . import claude, panels, pipeline, scenes, script, store, system
+from . import auth, claude, panels, pipeline, scenes, script, store, system
 
 SERVER = "recap-studio"   # the MCP server's name: its tools are mcp__recap-studio__<tool> in Claude Code
 MODEL_ID = "claude-code"  # what claude.ask is told the model is (the agents' model is the setting below)
@@ -149,7 +149,7 @@ def login() -> dict:
     if not cli:
         raise RuntimeError("Claude Code wasn't found on this computer.")
     cmd = [cli, "auth", "login"]
-    started = system.in_terminal(cmd, env=_env())
+    started = not system.SERVER and system.in_terminal(cmd, env=_env())  # (a server's screen is nobody's)
     _status["value"] = None
     return {"started": started, "command": " ".join(f'"{c}"' if " " in c else c for c in cmd)}
 
@@ -158,7 +158,7 @@ def app_url() -> str:
     """The running app's address, from data\\app.json (written when the app starts)."""
     try:
         info = json.loads((store.DATA_ROOT / "app.json").read_text(encoding="utf-8"))
-        return f"http://127.0.0.1:{int(info['port'])}"
+        return f"http://{info.get('host') or '127.0.0.1'}:{int(info['port'])}"
     except (OSError, ValueError, KeyError) as e:
         raise RuntimeError("The app's address isn't known (data\\app.json): start Recap Studio first.") from e
 
@@ -331,8 +331,10 @@ class Run:
                 break
         self.cli = st["path"]
         (self.dir / "brief.md").write_text(brief, encoding="utf-8")
-        (self.dir / "mcp.json").write_text(json.dumps(
-            {"mcpServers": {SERVER: {"type": "http", "url": app_url() + "/mcp"}}}, indent=1), encoding="utf-8")
+        # (a server's /mcp needs its API key, like any other program's request)
+        mcp_server = {"type": "http", "url": app_url() + "/mcp",
+                      **({"headers": {"X-Api-Key": auth.api_key()}} if system.SERVER else {})}
+        (self.dir / "mcp.json").write_text(json.dumps({"mcpServers": {SERVER: mcp_server}}, indent=1), encoding="utf-8")
 
     def _launch(self, ch: Chapter):
         """Start a fresh agent for this chapter: Claude Code with only the Read tool and this app's MCP tools."""

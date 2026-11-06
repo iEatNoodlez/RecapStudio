@@ -140,6 +140,7 @@
         <div id="output-shorts" class="output-parts" hidden></div>
         <div class="output-actions">
           <button id="open-folder">Open output folder</button>
+          <a id="video-download" class="link" download hidden>Download the video</a>
           <a id="srt-link" class="link" target="_blank">Subtitles (.srt)</a>
           <a id="chapters-link" class="link" target="_blank" title="Paste into the video's description: YouTube turns it into chapters">YouTube chapters (.txt)</a>
         </div>
@@ -643,6 +644,29 @@
         </div>
         <span id="storage-other" class="hint adv"></span>
       </fieldset>
+      <fieldset id="server-box" hidden>
+        <legend>Server</legend>
+        <span id="server-who" class="hint"></span>
+        <label>Username <input id="server-user" autocomplete="username" spellcheck="false"></label>
+        <label>Current password <input id="server-current" type="password" autocomplete="current-password"></label>
+        <label>New password (at least 8 characters) <input id="server-new" type="password" autocomplete="new-password"></label>
+        <div class="key-row">
+          <button id="server-save-login" type="button">Change the login</button>
+          <button id="server-logout" type="button" class="ghost small">Sign out</button>
+        </div>
+        <span class="hint">Changing it signs out every browser, this one too, and signs this one in again.</span>
+        <span class="field-head">API key</span>
+        <span class="hint">For other programs (Claude Code's MCP server, scripts): they send it in the <code>X-Api-Key</code> header instead of signing in. A new key stops the old one.</span>
+        <div class="key-row"><code id="server-key" class="path"></code><button id="server-key-new" type="button" class="ghost small">New key</button></div>
+        <span class="field-head">Address</span>
+        <div class="key-row">
+          <label>Listen on <input id="server-host" spellcheck="false" placeholder="0.0.0.0"></label>
+          <label>Port <input id="server-port" type="number" min="1" max="65535"></label>
+          <button id="server-address-save" type="button" class="ghost small">Save</button>
+        </div>
+        <span id="server-address-note" class="hint"></span>
+        <span id="server-error" class="error"></span>
+      </fieldset>
       <fieldset id="phone-box">
         <legend>Phone</legend>
         <label class="check"><input id="phone-on" type="checkbox"> Open Recap Studio on my phone (this Wi-Fi only)</label>
@@ -842,6 +866,7 @@
     <div class="import-path">
       <input id="open-file-path" placeholder="File path, e.g. D:\Backups\My Series.recap" spellcheck="false">
     </div>
+    <label class="muted">Or send one from this device: <input id="open-file-upload" type="file" accept=".recap"></label>
     <div id="open-file-status" class="muted"></div>
     <div class="import-actions">
       <button value="cancel" class="ghost">Cancel</button>

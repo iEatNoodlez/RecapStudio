@@ -25,12 +25,22 @@ _out = threading.Lock()
 
 def _url() -> str:
     info = json.loads((DATA / "app.json").read_text(encoding="utf-8"))
-    return f"http://127.0.0.1:{int(info['port'])}/mcp"
+    return f"http://{info.get('host') or '127.0.0.1'}:{int(info['port'])}/mcp"
+
+
+def _api_key() -> str:
+    """A server's API key (its server.json, beside app.json: readable here, as its owner): its /mcp needs it."""
+    try:
+        return json.loads((DATA / "server.json").read_text(encoding="utf-8")).get("api_key") or ""
+    except (OSError, ValueError):
+        return ""
 
 
 def _post(msg: dict, timeout: float) -> dict:
-    req = urllib.request.Request(_url(), data=json.dumps(msg).encode("utf-8"), method="POST",
-                                 headers={"Content-Type": "application/json", "Accept": "application/json"})
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if _api_key():
+        headers["X-Api-Key"] = _api_key()
+    req = urllib.request.Request(_url(), data=json.dumps(msg).encode("utf-8"), method="POST", headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8"))
 

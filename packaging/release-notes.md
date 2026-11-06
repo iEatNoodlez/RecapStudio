@@ -13,6 +13,8 @@ Copies on 0.1.x update to Lite. To move to Full Suite, install its setup over Li
 
 ## What's new
 
-- **Recap Studio for Linux:** both editions as AppImages, one file each that carries everything and updates itself like the Windows copies. Projects go in your Documents folder and settings in `~/.local/share/recap-studio`; first-run setup can add Recap Studio to your applications menu.
-- **Fonts on Linux:** captions, thumbnails and re-lettered bubbles use Microsoft's fonts when they're installed, and the closest fonts your distribution has otherwise. Setup offers free look-alikes (Anton, Archivo Black, Comic Neue and Noto Sans, 4.7 MB). Windows keeps its own fonts, so its videos look as before.
-- **When a video is done 1.1.0:** its command quotes each value so that nothing in a title can run, on Linux's shell as well as Windows'.
+- **Videos render several times faster.** Two things held the render back: the drawing processes took turns instead of drawing at the same time, and the page asking for a big project every 1.5 seconds starved the hand-off to ffmpeg. A 720p webtoon chapter that took 5 minutes on a project of 200 chapters now takes well under one. A render you stopped carries on from the chapters already made.
+- **The app stays light while a job runs.** The page now asks only for the job's progress, and for the project itself only when something in it changed, so a long project no longer makes the app sluggish.
+- **Recap Studio Server:** the same app with no window, on a Linux machine you reach from a browser (a NAS, a mini PC), behind a login, installed as a service by one script. It's a release of its own: [RecapStudio-Cloud](https://github.com/iEatNoodlez/RecapStudio-Cloud#readme). On the desktop nothing changes.
+- **Download the video** from the Video tab, beside Show in folder.
+- **Full Suite's plugins:** Post to YouTube 1.1.0, When a video is done 1.1.1 and Site check 1.0.1 (what they do on a server; the desktop is as before).

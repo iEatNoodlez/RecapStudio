@@ -7,6 +7,8 @@
 #   packaging/linux/build.sh 1.0.0 lite
 #   packaging/linux/build.sh 1.0.0 full                         # its plugins from GitHub (packaging/plugins.json)
 #   packaging/linux/build.sh 1.0.0 full --plugins-from ../Plugins   # or from a checkout of the list
+#   packaging/linux/build.sh 1.0.0 full --server                # the server (RecapStudio-Cloud's), with no window:
+#                                                                 Recap-Studio-Server-Full-<version>-x86_64.AppImage
 #
 # One file that runs on most distributions: the AppImage carries its own Python (python-build-standalone, as Windows'
 # build does), the packages (with Qt for the window) and the app, and mounts itself when started. It needs a glibc
@@ -22,9 +24,11 @@ VERSION="${1:-0.0.0-dev}"
 EDITION="${2:-lite}"
 shift $(( $# < 2 ? $# : 2 ))
 PLUGINS_FROM=""
+SERVER=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugins-from) PLUGINS_FROM="$(cd "$2" && pwd)"; shift 2 ;;
+    --server) SERVER=1; shift ;;
     *) echo "Unknown option: $1"; exit 2 ;;
   esac
 done
@@ -55,8 +59,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 DIST="$ROOT/dist"
 CACHE="$ROOT/build"
-APPDIR="$DIST/AppDir-$EDITION"
-OUT="$DIST/Recap-Studio-$NAME-$VERSION-$ARCH.AppImage"
+APPDIR="$DIST/AppDir-$EDITION${SERVER:+-server}"
+OUT="$DIST/Recap-Studio-${SERVER:+Server-}$NAME-$VERSION-$ARCH.AppImage"
 mkdir -p "$DIST" "$CACHE"
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR"
@@ -82,12 +86,19 @@ SITE="$APPDIR/python/lib/python3.12/site-packages"
 echo "== Packages"
 # the CPU build of ONNX Runtime (requirements.txt), ffmpeg from imageio-ffmpeg (the app prefers the system's, which
 # can use the graphics card), and Qt for the window
+# (the server has no window: no Qt, about half the size)
 "$PY" -m pip install --no-warn-script-location --disable-pip-version-check --no-compile -r requirements.txt \
-  imageio-ffmpeg "pywebview[qt]"
+  imageio-ffmpeg $([ -z "$SERVER" ] && echo "pywebview[qt]")
+# one OpenCV, the headless one requirements.txt asks for: rapidocr asks for opencv-python as well, the same cv2 with
+# Qt 5 inside, which needs X11 and OpenGL libraries a server or a NAS doesn't have (whichever installed last was cv2)
+CV_VERSION="$("$PY" -m pip show opencv-python-headless | awk '/^Version:/ { print $2 }')"
+"$PY" -m pip uninstall -y --disable-pip-version-check opencv-python > /dev/null
+"$PY" -m pip install --no-warn-script-location --disable-pip-version-check --no-compile --force-reinstall --no-deps \
+  "opencv-python-headless==$CV_VERSION"
 
-echo "== Qt's extra libraries"
+[ -z "$SERVER" ] && echo "== Qt's extra libraries"
 QT_LIB="$SITE/PyQt6/Qt6/lib"
-for lib in "${QT_EXTRA_LIBS[@]}"; do
+for lib in $([ -z "$SERVER" ] && echo "${QT_EXTRA_LIBS[@]}"); do
   src="$(/sbin/ldconfig -p | awk -v l="$lib" '$1 == l && /x86-64/ { print $NF; exit }')"
   if [ -z "$src" ]; then
     echo "$lib isn't installed here: sudo apt install libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0" \
@@ -105,6 +116,7 @@ find "$APPDIR/recap" "$APPDIR/.claude" -name __pycache__ -prune -exec rm -rf {} 
 printf '%s\n' "$VERSION" > "$APPDIR/VERSION"
 printf '%s\n' "$EDITION" > "$APPDIR/EDITION"
 : > "$APPDIR/INSTALLED"  # (recap/paths.py: its own folder is read-only, so data goes in the XDG folders)
+[ -n "$SERVER" ] && : > "$APPDIR/SERVER"  # (recap/__main__.py: it starts as a server; it updates from RecapStudio-Cloud)
 
 if [ "$EDITION" = full ]; then
   echo "== Full Suite's plugins"
@@ -126,6 +138,9 @@ echo "== AppImage"
 cp packaging/linux/AppRun "$APPDIR/AppRun"
 chmod 755 "$APPDIR/AppRun"
 cp packaging/linux/recap-studio.desktop "$APPDIR/recap-studio.desktop"
+if [ -n "$SERVER" ]; then  # (run from a terminal or a service, not a menu)
+  sed -i -e 's/^Name=.*/Name=Recap Studio Server/' -e 's/^Terminal=.*/Terminal=true/' "$APPDIR/recap-studio.desktop"
+fi
 cp packaging/launcher/icon.png "$APPDIR/recap-studio.png"
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 cp packaging/launcher/icon.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/recap-studio.png"
