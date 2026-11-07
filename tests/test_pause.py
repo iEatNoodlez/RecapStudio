@@ -1,6 +1,6 @@
 """Pause during a render, with a made-up project rendered for real: Pause pressed (or the Overnight queue's stop
-time come) while the last chapter is drawn holds the job before the join, with no video joined yet; Resume joins it.
-Pause before a chapter holds it there, as before."""
+time come) while the last chapter is drawn holds the job before the join, with no video joined yet; Resume joins it,
+named after the project. Pause before a chapter holds it there, as before."""
 import time
 
 from helpers import App, check, data_folder, done, make_project, until
@@ -45,8 +45,15 @@ def main():  # (the video is drawn in several processes: they import this file, 
     app.post(f"/api/jobs/{job['id']}/resume")
     until(lambda: not paused(), 10)  # (it looks every 0.3 s)
     job = app.wait_job(pid, 300)
-    check("Resume joins it", job.get("status") == "done" and [x.name for x in joined()] == ["recap.mp4"]
-          and store.load(pid)["output"]["video"] == "output/recap.mp4", (job, [x.name for x in joined()]))
+    check("Resume joins it", job.get("status") == "done" and [x.name for x in joined()] == ["Paused.mp4"]
+          and store.load(pid)["output"]["video"] == "output/Paused.mp4", (job, [x.name for x in joined()]))
+    chs = [{"name": f"Chapter {k}"} for k in (1, 2, 3)]
+    named = lambda name, some: pipeline._output_stem({"name": name, "chapters": chs}, some)  # noqa: E731
+    check("the video is named after the project, some chapters with their range",
+          (named("Solo Leveling", chs), named("Solo Leveling", chs[:2]), named("Solo Leveling", chs[1:2]))
+          == ("Solo Leveling", "Solo Leveling - Chapter 1 to Chapter 2", "Solo Leveling - Chapter 2"))
+    check("as a name Windows takes", (named("Re: Zero? <2>", chs), named("con", chs), named("  ", chs))
+          == ("Re Zero 2", "con_", "Untitled"), (named("Re: Zero? <2>", chs), named("con", chs), named("  ", chs)))
     check("each chapter drawn once", len(drawn) == 3, drawn)
     done()
 

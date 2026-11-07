@@ -4545,7 +4545,7 @@ function renderUpdate() {
   $("#app-label").textContent = u.label;
   $("#update-edition").hidden = u.kind === "source" || u.edition !== "lite";
   $("#update-info").textContent = u.kind === "source" ? `${u.label}, running from source: git pull updates it.`
-    : `${u.label} (${u.kind === "installed" ? "installed" : "portable"}). ` +
+    : `${u.label} (${{ installed: "installed", appimage: "AppImage", container: "in Docker" }[u.kind] || "portable"}). ` +
       (u.state === "checking" ? "Checking GitHub…" : u.state === "error" ? `The last update failed: ${u.error}`
         : u.error ? u.error : !u.checked ? "" : u.available ? `${latest.version} is out.` : "This is the latest version.");
   $("#update-check").hidden = u.kind === "source";
@@ -4560,7 +4560,10 @@ async function offerUpdate() {
   const notes = (latest.notes || "").replace(/^#+\s*/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\* /gm, "- ").trim();
   const pick = await choose(`Recap Studio ${u.edition_name} ${latest.version} is out`,
     `You have ${u.version}.` + (notes ? `\n\n${notes}` : "") + "\n\n" +
-    (canInstall ? `Update now downloads it from GitHub (${Math.round(latest.asset.size / 1e6)} MB), checks it, closes ` +
+    (u.kind === "container" ? "Recap Studio runs in Docker here, so it's updated with a newer image: docker " +
+      "compose pull, then docker compose up -d (or your NAS's container app's update). Your projects and settings " +
+      "stay in /data."
+      : canInstall ? `Update now downloads it from GitHub (${Math.round(latest.asset.size / 1e6)} MB), checks it, closes ` +
       "Recap Studio, installs it and opens it again. Your projects, settings and downloads stay."
       : "This release can't be installed from here: download it from its page on GitHub."),
     [{ value: "skip", label: "Skip this version" },

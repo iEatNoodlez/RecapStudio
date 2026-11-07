@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Site check**, **When a video is done**, **Post to YouTube**, **Branding**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
+Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Autopilot**, **Site check**, **When a video is done**, **Post to YouTube**, **Branding**, **Advanced Cutting**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
 
 ## Installing
 
@@ -113,11 +113,28 @@ Projects made from a site (Get chapters from a site) are checked for new chapter
    - **Don't check.**
    - **Check, and tell me:** the count shows, as with the check when the app starts.
    - **Get them** (the default): a "Getting chapters" job, placed by their numbers.
-   - **Get them, and recap just them:** then Make the recap for the new chapters alone, so the video is of them ("recap - Chapter 12 to 14.mp4"). The script writer still gets the earlier chapters' summaries.
+   - **Get them, and recap just them:** then Make the recap for the new chapters alone, so the video is of them ("Solo Leveling - Chapter 12 to Chapter 14.mp4"). The script writer still gets the earlier chapters' summaries.
    - **Get them, and make the whole recap:** then Make the recap for the whole project.
 3. **A project with a job running** gets its chapters once that job has finished. A chapter is never got twice: one the project has, or was told to pass over, isn't new.
 
 A new project starts from the last project's choice, as it does for the kind of comic. Settings lists what each check found and did. The settings and that list are kept in `data\plugin-data\new-chapters\`.
+
+## Autopilot
+
+Sit back. On the days and at the time you choose, Autopilot reads a chart of your own sources (Popular, Trending, Hot: whatever lists they offer), takes the series still coming out, gets their newest chapters into projects and makes the recaps, one series after another. With Post to YouTube connected, the videos it makes go up by themselves. **Autopilot…** is in the sidebar, under Open project file, and Settings → Autopilot opens the same cockpit. It gets nothing by itself: the charts, the series and the chapters come through the sources you added (Settings → Sources), as Get chapters does.
+
+1. **Settings** (the cockpit's Settings view):
+   - **On**, and **when**: the days and the time. Recap Studio has to be open then (a server is always open); a time missed while it was closed is made up for when it next opens. Off, it still runs when you say **Run now**.
+   - **Charts:** tick the lists of your sources to read; each run reads each one's first page. Charts of NSFW sources are offered only when you allow them below.
+   - **How much:** the number of series taken from each chart (the first from the top that pass the sieve below); how recent a series' newest chapter has to be for it to count as still coming out (45 days by default; a series whose chapters carry no dates is taken, since nothing says it's over; 0 looks at no dates); the newest chapters a series gets the first time it's seen (2 by default) and at most how many new ones a run after that (5); and the chapters a run may get in all (10), which is what your script writer and voice will be billed for.
+   - **Skip:** words a series' title mustn't have (one a line).
+   - **The recap:** Make the recap for just the chapters it got, so the video is of them, as New chapters on a schedule does, or for the whole project.
+   - **YouTube:** with [Post to YouTube](#post-to-youtube) installed and a channel connected, the projects it makes are set to post their video when it's made, as private, unlisted or public. Projects it finds already made keep their own choice.
+2. **Dry run** shows what a run would do now, with what it passed over and why (on the skip list, finished or stalled, an NSFW source, no new chapters, a site that wants its check for a person), without getting anything. **Run now** does it.
+3. **A run,** series by series: the project (one it made or used before, else any project got from the same source, else a new one named after the series, with the last project's choices, the kind of comic the source says, and nothing set to stop and ask), a Getting chapters job, then Make the recap. The app does one job at a time, so a project with a job of its own waits for it. **Stop after this one** lets the job going on finish and starts no other series; chapters got but not yet recapped are recapped first thing next run.
+4. **A recap that stops to ask something** (a key, credit or a service that's busy, the wording check when a project is YouTube-safe) ends the run: its job is cancelled where it waited (nothing it did is lost), and that project's recap is first next time. The cockpit's log says what was asked. A site that wants Cloudflare's check for a person is passed over: pass it yourself with [Site check](#site-check), and the next run gets it.
+
+The cockpit shows the run going on (each series' step), the last plan, past runs' digests and the log. The settings, the series it has seen, the run and its log are kept in `data\plugin-data\autopilot\`. Nothing is ever deleted: the projects it makes are projects like any other.
 
 ## Site check
 
@@ -154,6 +171,24 @@ Your channel's logo in a corner of every video, and an intro and an outro before
 - **Not in:** the Shorts (cut before) and Export for editors.
 
 Its files are kept in `data\plugin-data\branding\`.
+
+## Advanced Cutting
+
+Cuts a finished video into pieces, each starting where a chapter starts, with its own subtitles and YouTube chapter list. Nothing is encoded again: the pieces are copied out of the video as they are, so even a 25-hour video is cut in a few minutes. The whole video stays as it is.
+
+- **How to cut it:**
+  - **By size:** each piece under so many GB, with as many whole chapters as fit. A GB here is 1,000,000,000 bytes, so a piece is under its size however it's counted (Windows shows 1.5 GB as 1.39 GB).
+  - **By chapters:** so many chapters in each piece.
+  - **By length:** each piece up to so many hours.
+- **A chapter too big for a piece** (by size or by length) is cut inside it, and the next piece says "continued" (`Solo Leveling - Part 4 (Ch.012 continued to Ch.015).mp4`).
+- **When:** the Video tab → **Cut the video…** (choose how, then **Cut**), or each time a project's video is made, when its Project settings say so ("Cut its video into pieces when it's made"). Both use the choices in Settings → Advanced Cutting; the dialog changes them there.
+- **Where the pieces go:** the project's output folder, in `Pieces`, or a folder of yours, in a folder named after the project if you like (a NAS, say: each piece is copied under a passing name and renamed once it's complete). A folder of yours has to be there already: one on a drive or share that isn't connected is refused, rather than made again on the computer's own disk. They're named as the app names its parts: `Solo Leveling - Part 2 (Ch.040 to Ch.074).mp4`, with `.srt` and ` - YouTube chapters.txt` beside it. A cut made again replaces the pieces the one before made in that folder. A cut that's stopped keeps what it had made.
+- **On a server** ([Recap Studio Server](https://github.com/iEatNoodlez/RecapStudio-Cloud)): the folder is one on the server (a mounted share, say), which the user the server runs as (`recap-studio`, with its install script) must be allowed to write in. Cut the video… lists the last cut's pieces with links to save each one, its subtitles and its chapter list on the device you're on.
+- **With the app's own parts** (Settings → Video → Split into parts), each part is cut, and the pieces are numbered on across them.
+- **Each piece is checked** once it's cut: its size, its length, and that it plays at both ends. One that came out over its size is cut again with less in it.
+- **How it finds the cuts:** the app draws each chapter on its own, so each starts on a keyframe (a frame a video can start on): the plugin finds it from the chapter's mark in the YouTube chapter list, and adds up each frame's and each bit of sound's size to know how big a piece will be.
+- **How it cuts:** the picture is cut at those keyframes, then each piece gets its sound from the same moment to the same length, read on its own. Cut together, the end of a piece's sound would go to the next piece: a keyframe is stored a moment ahead of the time it's shown, and the sound stored after it would go with it. Tried with ffmpeg 4.2 (older than any Linux the server supports, which uses its Linux's own ffmpeg when it has one) and 5.1.
+- **Good to know:** the cutting runs on its own, one video after another, so the next job doesn't wait for it, and stops if the project's video is made again meanwhile. Settings → Advanced Cutting shows the cut being made (with **Stop**) and what happened. Post to YouTube and When a video is done still take the whole video. The plugin's files are kept in `data\plugin-data\advanced-cutting\`.
 
 ## Post to YouTube
 

@@ -100,6 +100,18 @@ for edition, want in (("full", "Recap-Studio-Full-0.2.1-x86_64.AppImage"),
 copy("full", "0.2.0", False, on="linux")
 check("an unpacked copy on Linux: nothing to install (its page is offered)",
       updates.kind() == "portable" and picked() is None and updates.status()["available"], updates.status())
+copy("lite", "0.2.0", False, on="appimage")
+os.environ["RECAP_CONTAINER"] = "1"  # (the server's Docker image, its AppImage unpacked)
+s = updates.check(force=True)
+try:
+    updates.start()
+    refused = ""
+except ValueError as e:
+    refused = str(e)
+check("in Docker: a newer release is found, but it's updated by pulling the image, not installed",
+      updates.kind() == "container" and s["available"] and s["latest"]["asset"] is None
+      and "docker compose pull" in refused, (updates.kind(), s["latest"], refused))
+del os.environ["RECAP_CONTAINER"]
 release = {**RELEASE, "assets": [a for a in RELEASE["assets"] if not a["name"].endswith(".AppImage")]}
 copy("lite", "0.2.0", False, on="appimage")
 check("a release without AppImages: nothing for one to install", picked() is None)

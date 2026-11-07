@@ -1,7 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 # Recap Studio's AppImage: starts the app with the Python inside it, passing on any options (--browser,
 # --no-window). The AppImage's runtime mounts it and sets APPDIR (where) and APPIMAGE (its file), which the app
-# uses to update and restart itself (recap/system.py).
+# uses to update and restart itself (recap/system.py). Plain sh: the server's AppImage runs where there's no bash
+# (Alpine, a NAS's BusyBox), its Python starting through its own glibc (own_glibc.sh).
 #   Recap-Studio-*.AppImage --mcp    Recap Studio's MCP server for Claude Code (recap/mcp_stdio.py)
 APPDIR="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 export APPDIR

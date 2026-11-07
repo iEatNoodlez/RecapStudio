@@ -10,7 +10,7 @@ The video is made one chapter at a time. Each chapter is kept as a finished piec
 - The pieces take about as much disk space as the video. Old versions of a chapter are deleted when it's made again, and a deleted chapter's pieces go with it.
 - The time estimate for Render video counts the chapters still to make, plus joining them all into the video (about a minute and a half per hour of video, on one CPU thread; the app learns this computer's own speed). The progress bar gives each its share: it moves with ffmpeg's position while the chapters are joined, instead of waiting at the end.
 
-**Split into parts** (the project's Video tab, advanced mode): one video; a new video every N chapters; or videos of at most N hours (YouTube takes up to 12 hours per video; the default is 11). Parts are cut between chapters, from each chapter's exact length, and named `recap - Part 2 (Chapter 21 to Chapter 40).mp4` and so on, each with its own subtitles, narration and chapter list. Changing the split only joins the pieces again, which takes about a minute and a half per hour of video.
+**Split into parts** (the project's Video tab, advanced mode): one video; a new video every N chapters; or videos of at most N hours (YouTube takes up to 12 hours per video; the default is 11). Parts are cut between chapters, from each chapter's exact length, and named `Solo Leveling - Part 2 (Chapter 21 to Chapter 40).mp4` and so on, each with its own subtitles, narration and chapter list. Changing the split only joins the pieces again, which takes about a minute and a half per hour of video.
 
 **YouTube chapters**: next to each video is `<name> - YouTube chapters.txt`, one line per chapter with its start time (`0:00 Chapter 1`, `6:12 Chapter 2`, or `1:02:05 …` past an hour). Paste it into the video's description and YouTube shows the chapters on the timeline (it needs at least three, each 10 seconds or longer). Under the player, the app has a button for each part and links to its subtitles and chapter list.
 
@@ -38,7 +38,7 @@ Turn on **Background music under the narration** in New project (How its video l
 
 - **Even loudness.** Each track is converted once (48 kHz stereo, kept in the project's `render\music` folder) with its loudness evened out to the same level, so a loudly mastered song doesn't drown the narration and a quiet one doesn't vanish, and its ends fade so one track gives way to the next. **Volume** then sets the music against the voice: 25% (the default) puts it about 13 dB under the narration.
 - **Quick to change.** The music is mixed in when the chapters are joined, so turning it on or off, changing the tracks or the volume, then **Make the video again** only joins the video again (about half a minute for an 11-minute video), without drawing anything.
-- **Left out:** the narration file (`recap.wav`) and **Export for editors** stay voice only, so the music can be laid in the editor instead.
+- **Left out:** the narration file (the video's name with `.wav`) and **Export for editors** stay voice only, so the music can be laid in the editor instead.
 - **Your music, your rights.** Nothing is bundled. Use music you're allowed to put on YouTube, such as tracks from the YouTube Audio Library, or the video may get a Content ID claim.
 - Tracks are part of the project: **Save as file** takes them along. Ones under 6 seconds aren't taken.
 
@@ -56,7 +56,7 @@ Turn on **Background music under the narration** in New project (How its video l
 
 ## Shorts
 
-**Shorts** (New project, How its video looks: **Also cut the video into Shorts**; or the Video tab → Captions and Shorts) cuts the finished video into parts of up to 1 minute, 90 seconds or 3 minutes, saved in the output folder's `shorts` folder (`recap - Short 01.mp4` and on); the Video tab lists them under the player to watch.
+**Shorts** (New project, How its video looks: **Also cut the video into Shorts**; or the Video tab → Captions and Shorts) cuts the finished video into parts of up to 1 minute, 90 seconds or 3 minutes, saved in the output folder's `shorts` folder (`Solo Leveling - Short 01.mp4` and on); the Video tab lists them under the player to watch.
 
 - **Where it's cut**: each Short is as long as it can be and ends in the middle of a pause between two narration lines, never mid-sentence (and never in its first 40%, so none is very short; the last one is what's left). The 11-minute sample made 13 one-minute Shorts: 12 of 48 to 59 seconds, and a last one of 20.
 - **"Part 1", "Part 2"…** in big white capitals at the top of each, unless turned off in the Video tab.

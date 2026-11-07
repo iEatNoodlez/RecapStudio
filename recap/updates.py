@@ -56,15 +56,20 @@ def version() -> str | None:
 
 
 def kind() -> str:
-    """"installed" (by the setup), "portable" (the zip), "appimage" (Linux) or "source" (run from a clone, or the
-    dev copy)."""
+    """"installed" (by the setup), "portable" (the zip), "appimage" (Linux), "container" (the server's Docker image,
+    which sets RECAP_CONTAINER: updated by pulling a newer image) or "source" (run from a clone, or the dev copy)."""
     if not version():
         return "source"
+    if os.environ.get("RECAP_CONTAINER"):
+        return "container"
     if system.appimage():
         return "appimage"
     return "installed" if (store.ROOT / "unins000.exe").exists() else "portable"
 
 
+CONTAINER_UPDATE = ("Recap Studio runs in Docker here, so it's updated with a newer image: docker compose pull, then "
+                    "docker compose up -d (or your NAS's container app's update). Your projects and settings stay "
+                    "in /data.")
 EDITIONS = {"lite": "Lite", "full": "Full Suite"}
 
 
@@ -185,6 +190,8 @@ def start() -> dict:
     latest, k = _state["latest"], kind()
     if k == "source":
         raise ValueError("This copy runs from source: update it with git pull.")
+    if k == "container":
+        raise ValueError(CONTAINER_UPDATE)
     if not (_state["available"] and latest and latest.get("asset")):
         raise ValueError("There's no newer release to install. Check again first.")
     if not latest["asset"]["sha256"]:

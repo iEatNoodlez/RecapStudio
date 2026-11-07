@@ -1447,11 +1447,14 @@ def run_voiceover(job):
 
 
 def _output_stem(project, chapters) -> str:
-    """recap.mp4 for the whole project, otherwise named after the chapter range."""
+    """The video's name (without .mp4): the project's, as its folder is named (store.folder_name: one Windows
+    takes, up to 60 characters), and for some of its chapters the range after it ("Solo Leveling - Chapter 1 to
+    Chapter 10")."""
+    title = store.folder_name(project.get("name") or "")
     if len(chapters) == len(project["chapters"]):
-        return "recap"
+        return title
     names = [chapters[0]["name"]] + ([chapters[-1]["name"]] if len(chapters) > 1 else [])
-    stem = "recap - " + " to ".join(names)
+    stem = f"{title} - " + " to ".join(names)
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", stem)[:120].strip(" .")
 
 

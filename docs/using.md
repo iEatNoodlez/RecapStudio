@@ -36,7 +36,7 @@ In simple mode, long help text shows two lines: hover it for the rest, or click 
    - The main button picks up where you left off: it only detects panels in chapters that have none, reads text and writes narration only for panels that don't have them yet, and voices only lines without audio, then renders. It never redoes or overwrites finished work, including narration you edited by hand.
    - A single step that's already partly done asks whether to **Continue** (only what's left) or **Redo all**; one that's fully done asks before redoing.
 3. Edit any narration line, untick panels you don't want, or select panels and **Re-run script + voice for selected**. Changing a line clears its audio; run **Voice** again to regenerate it.
-4. Run **Render video**. It renders the ticked chapters, in order, into the project's `output` folder: `recap.mp4` for the whole project, or `recap - Chapter 1 to Chapter 10.mp4` for a range, each with matching `.srt` subtitles, `.wav` narration and a YouTube chapter list (see [Video](video.md)).
+4. Run **Render video**. It renders the ticked chapters, in order, into the project's `output` folder: named after the project, `Solo Leveling.mp4` for the whole project or `Solo Leveling - Chapter 1 to Chapter 10.mp4` for a range (as its folder is named, so a name with `:` or `?` loses them), each with matching `.srt` subtitles, `.wav` narration and a YouTube chapter list (see [Video](video.md)).
 
 ## Scenes
 

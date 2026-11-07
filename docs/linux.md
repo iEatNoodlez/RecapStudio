@@ -2,7 +2,7 @@
 
 Recap Studio runs on Linux as well as Windows: the same app, in the same two editions (Lite and Full Suite), as an AppImage. That's one file that carries everything it needs, runs on most distributions and updates itself.
 
-**As a server**, on a Linux machine you reach from a browser (a NAS, a mini PC), Recap Studio comes from [RecapStudio-Cloud](https://github.com/iEatNoodlez/RecapStudio-Cloud): the same app with no window, behind a login, installed as a service by one script. This page is about the desktop app.
+**As a server**, on a Linux machine you reach from a browser (a NAS, a mini PC), Recap Studio comes from [RecapStudio-Cloud](https://github.com/iEatNoodlez/RecapStudio-Cloud): the same app with no window, behind a login: one file that runs on any 64-bit Linux, old or new (Alpine's too), installed as a service by one script, or a Docker image. This page is about the desktop app.
 
 ## Download and start
 
@@ -101,6 +101,6 @@ With Python 3.12 or newer, and its `venv` module (`sudo apt install python3.12-v
 
 `setup.sh` makes the Python environment, installs the packages with Qt for the window, adds GPU support when there's an NVIDIA card, and downloads the voice model. Qt's window needs the X libraries most desktops have. On a minimal install: `sudo apt install libxcb-cursor0 libxkbcommon-x11-0 libnss3`.
 
-**Building the AppImages:** `packaging/linux/build.sh <version> lite` (or `full`) on Ubuntu 22.04, as GitHub Actions does for every release. The script's first lines say what it needs. `--server` builds the server's AppImage (RecapStudio-Cloud's), with no window.
+**Building the AppImages:** `packaging/linux/build.sh <version> lite` (or `full`) on Ubuntu 22.04, as GitHub Actions does for every release. The script's first lines say what it needs. `--server` builds the server's AppImage (RecapStudio-Cloud's), with no window and its own glibc (`packaging/linux/own_glibc.sh`), so it runs on any x86-64 Linux.
 
 **The server from source:** `./run.sh --server` runs it on the network behind a login, as the server AppImage does (`--host`, `--port`, `--allow-plugins`, `--reset-login`; [RecapStudio-Cloud](https://github.com/iEatNoodlez/RecapStudio-Cloud#the-appimages-options) explains them).

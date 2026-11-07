@@ -11,11 +11,13 @@
 #                                                                 Recap-Studio-Server-Full-<version>-x86_64.AppImage
 #
 # One file that runs on most distributions: the AppImage carries its own Python (python-build-standalone, as Windows'
-# build does), the packages (with Qt for the window) and the app, and mounts itself when started. It needs a glibc
-# as new as the machine it was built on: GitHub Actions builds it on Ubuntu 22.04 (.github/workflows/build.yml), so
-# it runs on Ubuntu 22.04 and later, Debian 12 and later, Fedora 36 and later.
+# build does), the packages (with Qt for the window) and the app, and mounts itself when started. The desktop's needs
+# a glibc as new as the machine it was built on: GitHub Actions builds it on Ubuntu 22.04 (.github/workflows/
+# build.yml), so it runs on Ubuntu 22.04 and later, Debian 12 and later, Fedora 36 and later. The server's carries
+# that glibc too (own_glibc.sh), so it runs on any x86-64 Linux: older ones, and Alpine's musl.
 #
-# Needs: bash, curl, tar, sha256sum, and the few X libraries Qt needs that not every desktop has (they go inside it):
+# Needs: bash, curl, tar, sha256sum, file (appimagetool's), and the few X libraries Qt needs that not every desktop
+# has (they go inside it):
 #   sudo apt install libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 libxcb-render-util0 libxkbcommon-x11-0
 # Python, appimagetool and the AppImage runtime are downloaded at fixed versions, each checked against its SHA-256.
 set -euo pipefail
@@ -133,6 +135,10 @@ fi
 # it all again on every start (a few files that don't compile are only tests)
 "$PY" -m compileall -q -j 0 "$APPDIR/python/lib/python3.12" "$APPDIR/recap" \
   $([ -d "$APPDIR/plugins" ] && echo "$APPDIR/plugins") > /dev/null || true
+
+# the server: its own glibc, and its programs started through it (a desktop's Qt and graphics drivers need the
+# system's own)
+[ -n "$SERVER" ] && bash packaging/linux/own_glibc.sh "$APPDIR"
 
 echo "== AppImage"
 cp packaging/linux/AppRun "$APPDIR/AppRun"

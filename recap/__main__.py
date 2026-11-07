@@ -160,8 +160,13 @@ def _serve(args) -> None:
     extra = (["--host", args.host] if args.host else []) + (["--allow-plugins"] if args.allow_plugins else [])
     updates.LAUNCH.update(port=args.port, mode="server", extra=extra, listen=f"{host}:{port}")
     _note_address(port, host)
-    shown = phone.lan_ip() if host in ("0.0.0.0", "::", "") else host
-    print(f"Recap Studio is running as a server at http://{shown}:{port}/  (Ctrl+C to stop)", flush=True)
+    if os.environ.get("RECAP_CONTAINER"):  # (its own address in Docker is the container's, which no one opens)
+        print(f"Recap Studio is running as a server in Docker, on port {port} inside it: open the port Docker maps "
+              f"to it, at the machine's own address (http://<the machine>:{port}/ with the example compose file)",
+              flush=True)
+    else:
+        shown = phone.lan_ip() if host in ("0.0.0.0", "::", "") else host
+        print(f"Recap Studio is running as a server at http://{shown}:{port}/  (Ctrl+C to stop)", flush=True)
     if not auth.configured():
         print(f"Its login isn't set up yet. Open that address and give this setup code: {auth.setup_code()}",
               flush=True)

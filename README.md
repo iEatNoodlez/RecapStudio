@@ -81,7 +81,7 @@ The **Script** tab (at the top of this page) shows each scene's pictures, narrat
 
 ### 5. Watch the video and take the title
 
-The **Video** tab plays the recap. The project's `output` folder has `recap.mp4`, with its subtitles, the narration and a YouTube chapter list.
+The **Video** tab plays the recap. The project's `output` folder has the video, named after the project (`Solo Leveling.mp4`), with its subtitles, the narration and a YouTube chapter list.
 
 <p align="center">
   <img src="docs/images/video.png" width="100%" alt="The Video tab playing the finished recap at 2:30 of 11:13, on a page where Saito introduces himself at the hospital">

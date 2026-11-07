@@ -124,7 +124,7 @@ def main():  # (the video is drawn in several processes: they import this file, 
     r = app.post(f"/api/projects/{on}/run", json={"steps": ["video"]})
     job = app.wait_job(on, 300)
     check("the video renders", job.get("status") == "done", job)
-    out = store.project_dir(on) / "output" / "recap.mp4"
+    out = store.project_dir(on) / "output" / "Hooks on.mp4"  # (named after the project)
     cap = cv2.VideoCapture(str(out))
     cap.set(cv2.CAP_PROP_POS_FRAMES, 5)  # half a second in: the first scene
     ok, frame = cap.read()
@@ -137,11 +137,11 @@ def main():  # (the video is drawn in several processes: they import this file, 
     corner = frame[int(H * 0.05), int(W * 0.05)].astype(int) if ok else None
     check("the overlay is drawn over the frame, where it said", ok and corner[1] > 200 and corner[0] < 60 and corner[2] < 60, corner)
     rendered = data / "plugin-data" / "hooks-test" / "rendered.txt"
-    check("video_rendered heard, with the parts", rendered.exists() and rendered.read_text() == f"{on}:recap.mp4",
+    check("video_rendered heard, with the parts", rendered.exists() and rendered.read_text() == f"{on}:Hooks on.mp4",
           rendered.read_text() if rendered.exists() else None)
     r = app.post(f"/api/projects/{off}/run", json={"steps": ["video"]})
     job = app.wait_job(off, 300)
-    cap = cv2.VideoCapture(str(store.project_dir(off) / "output" / "recap.mp4"))
+    cap = cv2.VideoCapture(str(store.project_dir(off) / "output" / "Hooks off.mp4"))
     cap.set(cv2.CAP_PROP_POS_FRAMES, 5)
     ok, frame = cap.read()
     cap.release()
