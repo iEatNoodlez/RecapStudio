@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Give an AppDir its own glibc, so the AppImage starts on any x86-64 Linux whatever C library it has: an old glibc
-# (CentOS 7, Debian 10, a NAS's), a new one, or none at all (Alpine's musl). build.sh --server runs it.
+# Give an AppDir its own glibc, so the AppImage starts on any Linux of its architecture (x86_64 or aarch64) whatever C
+# library it has: an old glibc (CentOS 7, Debian 10, a NAS's), a new one, or none at all (Alpine's musl). build.sh
+# --server runs it.
 #
 #   packaging/linux/own_glibc.sh <AppDir>
 #
@@ -18,8 +19,11 @@ set -euo pipefail
 
 D="$(cd "${1:?Usage: own_glibc.sh <AppDir>}" && pwd)"
 G="$D/glibc"
-LOADER=ld-linux-x86-64.so.2
-[ "$(uname -m)" = x86_64 ] || { echo "This is for x86_64 AppDirs, on an x86_64 machine."; exit 1; }
+case "$(uname -m)" in  # the loader, where it is, and how ldconfig -p names the architecture
+  x86_64)  LOADER=ld-linux-x86-64.so.2;  LOADER_AT=/lib64;  LDCONFIG_ARCH=x86-64 ;;
+  aarch64) LOADER=ld-linux-aarch64.so.1; LOADER_AT=/lib;    LDCONFIG_ARCH=AArch64 ;;
+  *) echo "This is for x86_64 or aarch64 AppDirs, on a machine of that kind, not $(uname -m)."; exit 1 ;;
+esac
 [ -d "$D/python" ] || { echo "$D isn't Recap Studio's AppDir (no python/)"; exit 1; }
 W="$(mktemp -d)"
 trap 'rm -rf "$W"' EXIT
@@ -47,11 +51,11 @@ fi
 for lib in libc.so.6 libm.so.6 libmvec.so.1 libpthread.so.0 libdl.so.2 librt.so.1 libutil.so.1 libanl.so.1 \
            libresolv.so.2 libnss_files.so.2 libnss_dns.so.2 libgcc_s.so.1; do
   grep -q "^$lib " "$W/libs.txt" && continue
-  path="$(/sbin/ldconfig -p | awk -v l="$lib" '$1 == l && /x86-64/ { print $NF; exit }')"
+  path="$(/sbin/ldconfig -p | awk -v l="$lib" -v a="$LDCONFIG_ARCH" '$1 == l && index($0, a) { print $NF; exit }')"
   [ -n "$path" ] && echo "$lib $path" >> "$W/libs.txt"
 done
 while read -r name path; do cp -L "$path" "$G/$name"; done < "$W/libs.txt"
-cp -L "/lib64/$LOADER" "$G/$LOADER"
+cp -L "$LOADER_AT/$LOADER" "$G/$LOADER"
 chmod 755 "$G"/*
 "$G/$LOADER" --version | head -n 1 > "$G/VERSION"
 echo "$(cat "$G/VERSION"), and: $(cut -d' ' -f1 "$W/libs.txt" | tr '\n' ' ')"

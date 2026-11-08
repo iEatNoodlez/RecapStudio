@@ -1,0 +1,21 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Recap Studio's icon: an open book, lines of text on the left page, the play button on the right.
+       This is the drawing for 64 px and up (icon.png, and the big frames of icon.ico). The small frames of
+       icon.ico are simpler cuts of it: three heavier lines at 48 and 32, two pages and the play at 24 and 16. -->
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a7aee"/>
+      <stop offset="1" stop-color="#304fc7"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="236" height="236" rx="49" fill="url(#t)"/>
+  <path d="M34 68 Q84 48 128 78 Q172 48 222 68 V194 Q172 176 128 206 Q84 176 34 194 Z" fill="#172577" opacity=".5" transform="translate(0,9)"/>
+  <path d="M42 66 Q86 54 128 80 V198 Q86 176 42 186 Z" fill="#ffffff"/>
+  <path d="M214 66 Q170 54 128 80 V198 Q170 176 214 186 Z" fill="#eef1fd"/>
+  <path d="M128 80 V198" stroke="#b7c2ee" stroke-width="3"/>
+  <rect x="58" y="96" width="54" height="8" rx="4" fill="#b6c3f3"/>
+  <rect x="58" y="114" width="46" height="8" rx="4" fill="#b6c3f3"/>
+  <rect x="58" y="132" width="54" height="8" rx="4" fill="#b6c3f3"/>
+  <rect x="58" y="150" width="36" height="8" rx="4" fill="#b6c3f3"/>
+  <path d="M148 100 L194 130 L148 160 Z" fill="#304fc7"/>
+</svg>

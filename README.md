@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/icon.png" width="96" height="96" alt="Recap Studio's icon: a strip of panels beside a play button">
+  <img src="docs/images/icon.png" width="96" height="96" alt="Recap Studio's icon: an open book, with lines of text on the left page and a play button on the right">
 </p>
 
 <h1 align="center">Recap Studio</h1>
