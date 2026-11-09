@@ -4,7 +4,6 @@ const ACTIVE = ["queued", "running", "paused"];  // a job in one of these holds 
 
 let current = null;      // loaded project
 let shown = PAGE;        // how many panel cards are rendered
-let selected = new Set();     // selected panels (for re-running script + voice)
 let selectedCh = new Set();   // selected chapters (scope for every step); empty = all
 let polling = null;
 let env = null;
@@ -132,23 +131,95 @@ const notify = (message, title = "Something went wrong") => ask(title, message, 
 
 const TRASH_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>';
 
+// Where a project is, in a line, and its colour: "ask" (its job stopped to ask), "on" (working), "done" (video made)
+function projectState(p) {
+  const j = p.job || {};
+  if (j.status === "paused" && j.pause_reason) return ["ask", "Stopped to ask"];
+  if (ACTIVE.includes(j.status)) return ["on", j.message || "Working"];
+  if (!p.chapters) return ["", "No chapters yet"];
+  if (p.video) {
+    // where it has gone up (the posting plugins record it), else that Publish has a title and thumbnail waiting
+    const then = (p.posted || []).length ? ` · posted to ${p.posted.join(" and ")}` : p.youtube ? " · title and thumbnail ready" : "";
+    return ["done", `Video made${p.seconds ? ` · ${lengthText(p.seconds)}` : ""}${then}`];
+  }
+  if (p.written === p.chapters) return ["", p.voiced === p.chapters ? "Voiced · no video yet" : `${p.voiced} of ${p.chapters} voiced`];
+  if (p.written) return ["", `${p.written} of ${p.chapters} written`];
+  if (p.found) return ["", `${p.found} of ${p.chapters} chapters read`];
+  return ["", `${plural(p.chapters, "chapter")} · ${p.pages} pages`];
+}
+
+let projectList = [];  // the library, as /api/projects gave it
+let libSort = null;    // how the cards are ordered: updated (last worked on) or name; remembered
+
 async function loadProjects() {
-  const list = await api("/api/projects");
+  projectList = await api("/api/projects");
   try { newCounts = await api("/api/sources/new"); } catch {}
-  const ul = $("#projects");
-  ul.replaceChildren(...list.map((p) => {
+  drawLibrary();
+  // the plugins' panels under the cards draw again with the projects (not on every keystroke of the search)
+  for (const panel of libraryPanels) { try { panel.render(panel.box); } catch (e) { console.error(e); } }
+}
+
+// The rail's list, and the library's cards (the stages as a bar: chapters, characters, script and voice, video,
+// publish): the ones the search finds, in the order picked. What needs you first above them.
+function drawLibrary() {
+  if (libSort == null) libSort = stored("lib-sort") || "updated";
+  const list = projectList;
+  const newTag = (p) => (newCounts[p.id] ? el("span", { class: "new-tag", title: "New chapters at its source" }, ` · ${newCounts[p.id]} new`) : null);
+  $("#projects").replaceChildren(...list.map((p) => {
+    const [cls, line] = projectState(p);
     const del = el("button", {
       class: "proj-del", title: `Delete ${p.name}`, "aria-label": `Delete project ${p.name}`,
       onclick: (e) => { e.stopPropagation(); deleteProject(p); },
     });
     del.innerHTML = TRASH_ICON;
     return el("li", { class: current && p.id === current.id ? "active" : "", onclick: () => openProject(p.id) },
-      el("div", { class: "proj-text" }, p.name,
-        el("small", {}, `${plural(p.chapters, "chapter")} · ${p.pages} pages · ${p.panels} panels`,
-          newCounts[p.id] ? el("span", { class: "new-tag", title: "New chapters at its source" }, ` · ${newCounts[p.id]} new`) : null)),
+      el("span", { class: `proj-dot ${cls}`.trim(), "aria-hidden": "true" }),
+      el("div", { class: "proj-text" }, p.name, el("small", {}, line, newTag(p))),
       del);
   }));
+  const words = $("#lib-find").value.trim().toLowerCase();
+  const shown = list.filter((p) => !words || p.name.toLowerCase().includes(words))
+    .sort((x, y) => (libSort === "name" ? x.name.localeCompare(y.name) : (y.updated || 0) - (x.updated || 0)));
+  $("#lib-sort").textContent = libSort === "name" ? "Sort: by name" : "Sort: last worked on";
+  $("#library-cards").replaceChildren(...shown.map((p) => {
+    const [cls, line] = projectState(p);
+    const done = [p.chapters > 0, p.characters > 0, p.chapters > 0 && p.voiced === p.chapters, p.video, p.youtube];
+    const at = done.indexOf(false);
+    const bar = el("div", { class: "stage-bar", "aria-hidden": "true" },
+      ...done.map((d, i) => el("span", { class: d ? "done" : i === at && (cls === "on" || cls === "ask") ? cls : "" })));
+    const cover = el("div", { class: `cover${p.cover ? " has-pic" : ""}` },
+      el("span", {}, !p.chapters ? "No pages yet" : p.youtube ? "The video's thumbnail" : "Cover from the first page"));
+    if (p.cover) cover.style.backgroundImage = `url("/files/${p.id}/${encodeURI(p.cover)}?t=${Math.round(p.updated || 0)}")`;
+    return el("button", { type: "button", class: "proj-card", onclick: () => openProject(p.id) }, cover,
+      el("div", { class: "card-body" },
+        el("div", { class: "card-title" }, el("b", {}, p.name), p.kind ? el("span", { class: "tag" }, p.kind) : null),
+        bar, el("div", { class: `card-line ${cls}`.trim() }, line, newTag(p))));
+  }), words ? null : el("button", { type: "button", class: "proj-card new-card", onclick: () => openNew("") },
+    el("b", {}, "＋ New project"), el("span", { class: "muted" }, "or drop a folder, .zip, .cbz or .recap here")));
+  $("#empty-pick").hidden = list.length > 0 && (!words || shown.length > 0);
+  $("#empty-pick").textContent = words && list.length ? "No recap is called that."
+    : "No projects yet. Make one, open a project file, or drop a folder, .zip or .cbz file here.";
+  // what needs you first: a recap that stopped to ask something
+  const asks = list.filter((p) => p.job && p.job.status === "paused" && p.job.pause_reason);
+  $("#library-attention").hidden = !asks.length;
+  $("#library-attention").replaceChildren(...asks.map((p) => el("div", { class: "attention-item ask" },
+    el("div", { class: "att-text" }, el("b", {}, `${p.name} stopped to ask`), el("span", {}, p.job.pause_reason)),
+    el("button", { type: "button", onclick: () => openProject(p.id) }, "Answer"))));
 }
+$("#lib-find").addEventListener("input", drawLibrary);
+$("#lib-sort").addEventListener("click", () => { libSort = libSort === "name" ? "updated" : "name"; store("lib-sort", libSort); drawLibrary(); });
+
+// the brand at the top of the rail, and the Library link under it while a project is open: back to the library
+function goLibrary() {
+  if (!current) return;
+  clearInterval(polling);
+  current = null;
+  localStorage.removeItem("last");
+  render();
+  loadProjects();
+}
+$("#brand").addEventListener("click", (e) => { e.preventDefault(); goLibrary(); });
+$("#rail-back").addEventListener("click", (e) => { e.preventDefault(); goLibrary(); });
 
 async function deleteProject(p) {
   const ok = await ask(`Delete "${p.name}"?`,
@@ -171,7 +242,6 @@ async function deleteProject(p) {
 async function openProject(id) {
   if (!current || current.id !== id) {
     shown = PAGE;
-    selected.clear();
     selectedCh = new Set(JSON.parse(localStorage.getItem(`sel:${id}`) || "[]"));
   }
   current = await fetchProject(id, { fresh: true });
@@ -207,12 +277,29 @@ function choiceList(name, options, value, onpick) {
       el("div", {}, el("b", {}, title), about ? el("div", { class: "muted" }, about) : ""))));
 }
 
+// A pill per choice (New project's rows of round options), its description as the tooltip
+function pillRow(name, options, value, onpick, small = false) {
+  return el("div", { class: `np-pills${small ? " small" : ""}`, role: "radiogroup" }, ...options.map(([id, title, about]) =>
+    el("label", { class: id === value ? "on" : "", title: about || null },
+      el("input", { type: "radio", name, value: id, checked: id === value, onchange: () => onpick(id) }), title)));
+}
+
+// How long an hour of the video takes on this computer (/api/video-speed), and that it all can change later
+function speedLine(s) {
+  const line = el("span", { class: "np-line" }, "Any of this can change later in the project.");
+  const q = new URLSearchParams({ resolution: s.resolution, fps: s.fps, video_style: s.video_style, video_encoder: globals.video_encoder });
+  api(`/api/video-speed?${q}`).then((r) => {
+    line.textContent = `An hour of this video takes ${aboutTime(r.seconds_per_hour)} to make on this computer. Any of this can change later in the project.`;
+  }).catch(() => {});
+  return line;
+}
+
 // New project, named (from the sidebar's box, or a plugin's RecapStudio.newProject), with the kind of comic and the
 // series a plugin found it as, if it knows them
 async function openNew(name, { kind = "", series = null } = {}) {
   try { newSettings = await api("/api/projects/new-settings"); } catch (err) { return notify(err.message); }
   newName = name;
-  newPage = 0;
+  newFocus = true;
   const k = KINDS.find((x) => x[0] === kind);
   if (k) Object.assign(newSettings, k[3]);
   emitPlugins("new-project-open", { name: newName, series });
@@ -243,152 +330,133 @@ const newState = () => ({
 const pluginPages = [];
 const newPages = () => [...NEW_PAGES, ...pluginPages.map((p) => p.id)];
 
-function renderNew() {
-  const pages = newPages(), page = pages[newPage], s = newSettings;
+let newFocus = false;  // (the name box takes the focus when the dialog opens)
+
+// One section's contents (the dialog's own pages, and a plugin's). The dialog's own are laid out as the mockup:
+// the series, what it is, the characters in a sentence, the video as rows of choices and one row of checks.
+function newPageBody(page, body) {
+  const s = newSettings;
   const extra = pluginPages.find((p) => p.id === page);
-  $("#new-title").textContent = extra ? extra.title
-    : { comic: "New project", characters: "Characters", video: "How its video looks", content: "YouTube" }[page];
-  $("#new-stepno").textContent = `Step ${newPage + 1} of ${pages.length}`;
-  $("#new-back").hidden = newPage === 0;
-  $("#new-next").textContent = newPage === pages.length - 1 ? "Create project" : "Next";
-  const body = el("div", { class: "setup-page" });
   if (extra) {
     try { extra.render({ body, state: newState() }); } catch (e) { console.error(e); body.append(el("span", { class: "error" }, e.message)); }
   }
+  const check = (key, text, attrs = {}) => el("label", { class: "check", ...attrs },
+    el("input", { type: "checkbox", checked: !!s[key], onchange: (e) => { s[key] = e.target.checked; renderNew(); } }), ` ${text}`);
+  const field = (label, key, options, number = false) => {
+    const sel = el("select", { onchange: () => { s[key] = number ? Number(sel.value) : sel.value; renderNew(); } },
+      ...options.map(([v, t]) => el("option", { value: v }, t)));
+    sel.value = String(s[key] ?? options[0][0]);
+    return el("label", {}, label, sel);
+  };
+  const add = (...kids) => body.append(...kids.filter((k) => k != null));  // (append would write "null")
   if (page === "comic") {
-    const name = el("input", { value: newName, placeholder: "The series' name", oninput: (e) => { newName = e.target.value; },
+    const name = el("input", { value: newName, placeholder: "Its name", "aria-label": "The series' name",
+      oninput: (e) => { newName = e.target.value; },
       onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); $("#new-next").click(); } } });
+    const icon = el("span", { class: "np-search-icon", "aria-hidden": "true" });
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">' +
+      '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>';
     const lang = el("select", { onchange: (e) => { s.language = e.target.value; renderNew(); } },
-      ...Object.entries(LANGUAGES).map(([v, t]) => el("option", { value: v }, v === "en" ? t : `${t} (a raw, translated into English)`)));
+      ...Object.entries(LANGUAGES).map(([v, t]) => el("option", { value: v }, v === "en" ? t : `${t}, translated into English`)));
     lang.value = s.language || "en";
-    body.append(el("label", {}, "Name ", name), el("span", { class: "field-head" }, "What kind of comic is it?"),
-      choiceList("new-kind", KINDS, kindOf(s), (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }),
-      el("label", {}, "What language is its text in? ", lang),
-      isRaw(s) ? el("span", { class: "hint" }, `The text is read in ${LANGUAGES[s.language]} and your script writer translates it ` +
-        "into English, a chapter at a time, before writing the narration." + (["ko", "zh", "ja"].includes(s.language)
-          ? " The first time, Recap Studio downloads a text reader for Korean, Chinese and Japanese (about 35 MB)." : "")) : "");
-    setTimeout(() => name.focus(), 0);
+    add(el("div", { class: "np-search" }, icon, name),
+      el("h4", { class: "np-sub" }, "What it is"),
+      pillRow("new-kind", KINDS.map(([id, title, about]) => [id, id === "auto" ? "Not sure, tell from the pages" : title, about]), kindOf(s),
+        (id) => { Object.assign(s, KINDS.find((k) => k[0] === id)[3]); renderNew(); }),
+      el("div", { class: "np-row" }, el("label", {}, "Its text is in", lang),
+        isRaw(s) ? check("typeset", "Letter the English into the pictures", { title: `The ${LANGUAGES[s.language]} in speech bubbles ` +
+          "and captions is painted out and the translation lettered in its place; signs get a small English caption, and sound " +
+          "effects stay as drawn. Off, the pictures keep their own text and the narration tells the story." }) : null),
+      isRaw(s) ? el("span", { class: "np-line" }, `Read in ${LANGUAGES[s.language]} and translated into English a chapter at a time, ` +
+        "before the narration is written" + (["ko", "zh", "ja"].includes(s.language)
+          ? "; the first time, a text reader for Korean, Chinese and Japanese is downloaded (about 35 MB)." : ".")) : null);
+    if (newFocus) { newFocus = false; setTimeout(() => name.focus(), 0); }
   } else if (page === "characters") {
-    body.append(
-      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.find_characters,
-        onchange: (e) => { s.find_characters = e.target.checked; renderNew(); } }), " Find the characters automatically"),
-      el("span", { class: "hint" }, "After the text is read, Make the recap scans the chapters for the characters and your script " +
-        "writer suggests their names, so the narration can say who is who."),
-      scanReady() ? "" : el("span", { class: "hint warn" }, `This needs the character scan (about ${(env && env.charscan && env.charscan.download_mb) || 586} MB), ` +
-        "not downloaded yet: the Characters tab → Find characters… gets it. Until then Make the recap goes on without it."));
-    if (s.find_characters) {
-      body.append(el("span", { class: "field-head" }, "Which chapters to scan"),
-        choiceList("new-scan", [["first", "The first 5", "Quicker. The main cast usually shows up early."],
-          ["all", "All of them", "Finds everyone, side characters too. Takes longer."]], s.characters_chapters,
-        (v) => { s.characters_chapters = v; renderNew(); }),
-        el("span", { class: "field-head" }, "The suggested names"),
-        choiceList("new-review", [["review", "Let me check them", "Make the recap waits with the names filled in. Add or change them, and it writes the script."],
-          ["trust", "Trust them", "They're added as suggested and the script is written straight away. Look them over in the Characters tab afterwards."]],
-        s.characters_review, (v) => { s.characters_review = v; renderNew(); }));
-    }
+    const scope = el("select", { class: "np-inline", "aria-label": "Which chapters to scan",
+      onchange: (e) => { s.characters_chapters = e.target.value; renderNew(); } },
+      el("option", { value: "first" }, "in the first 5 chapters"), el("option", { value: "all" }, "in every chapter"));
+    scope.value = s.characters_chapters === "all" ? "all" : "first";
+    add(el("div", { class: "np-check-row" }, check("find_characters", "Find the characters"), s.find_characters ? scope : null,
+      el("span", {}, s.find_characters ? "and suggest their names, so the narration can say who is who" : "once the text is read, and suggest their names")),
+      s.find_characters ? el("div", { class: "np-indent" }, pillRow("new-review", [
+        ["review", "Let me check the names", "Make the recap waits with the names filled in; add or change them, and it writes the script."],
+        ["trust", "Trust them and go on", "Added as suggested and the script written straight away; look them over at Characters afterwards."]],
+      s.characters_review === "trust" ? "trust" : "review", (v) => { s.characters_review = v; renderNew(); }, true)) : null,
+      s.find_characters && !scanReady() ? el("span", { class: "np-line warn" }, `Needs the character scan (about ${(env && env.charscan && env.charscan.download_mb) || 586} MB), ` +
+        "not downloaded yet: the Characters stage gets it. Until then the recap goes on without it.") : null);
   } else if (page === "video") {
-    const line = el("p", { class: "muted" });
-    const speed = async () => {
-      const q = new URLSearchParams({ resolution: s.resolution, fps: s.fps, video_style: s.video_style, video_encoder: globals.video_encoder });
-      try { line.textContent = `An hour of this video takes ${aboutTime((await api(`/api/video-speed?${q}`)).seconds_per_hour)} to make on this computer.`; }
-      catch { line.textContent = ""; }
-    };
-    const select = (key, options) => {
-      const sel = el("select", { onchange: () => { s[key] = Number(sel.value); speed(); } },
-        ...options.map(([v, t]) => el("option", { value: v }, t)));
-      sel.value = String(s[key]);
-      return sel;
-    };
-    const webtoon = kindOf(s) === "webtoon";
-    body.append(el("span", { class: "field-head" }, "Format"),
-      choiceList("new-format", [["landscape", "Landscape", "16:9, for YouTube."], ["portrait", "Portrait", "9:16, for Shorts, TikTok and Reels."]],
-        s.orientation, (v) => { s.orientation = v; renderNew(); }),
-      el("span", { class: "field-head" }, "Style"),
-      choiceList("new-style", [
-        ["auto", "Automatic", webtoon ? "The strip scrolls past as it's narrated." : "Each scene pans and zooms; webtoon chapters scroll."],
-        ["motion", "Pan and zoom", "Every scene on its own, moving slowly toward its middle."],
-        ["stills", "Stills", "Every scene on its own, still. The quickest to make."]], s.video_style, (v) => { s.video_style = v; renderNew(); }),
-      el("label", {}, "Resolution ", select("resolution", [[1080, "1080p (full HD)"], [720, "720p"], [480, "480p"], [360, "360p"]])),
-      el("label", {}, "Frame rate ", select("fps", [[60, "60 fps"], [50, "50 fps"], [30, "30 fps"], [25, "25 fps"], [24, "24 fps"],
-        [20, "20 fps"], [15, "15 fps"], [12, "12 fps"], [10, "10 fps"], [5, "5 fps (stills)"]])),
-      line,
-      isRaw(s) ? el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.typeset,
-        onchange: (e) => { s.typeset = e.target.checked; } }), " Put the English in the pictures") : "",
-      isRaw(s) ? el("span", { class: "hint" }, `The ${LANGUAGES[s.language]} in speech bubbles and captions is painted out and the ` +
-        "translation lettered in its place; signs get a small English caption, and sound effects stay as drawn. " +
-        "Otherwise the pictures keep their original text and the narration tells the story.") : "",
-      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.background_music,
-        onchange: (e) => { s.background_music = e.target.checked; } }), " Background music under the narration"),
-      el("span", { class: "hint" }, "Your own tracks, added in the project's Video tab once it's made: they play in turn " +
-        "until the video ends, evened out in loudness. Use music you're allowed to put on YouTube."),
-      el("span", { class: "field-head" }, "Captions in the video"),
-      choiceList("new-captions", [
-        ["off", "None", "Just the subtitles file, to upload with the video."],
-        ["classic", "CapCut classic", "Bold capitals, three words at a time, the word being said in colour."],
-        ["box", "Highlight box", "A box in colour behind the word being said."],
-        ["minimal", "Minimal", "Whole phrases on a dark band. Suits long videos."]],
-        s.captions || "off", (v) => { s.captions = v; renderNew(); }),
-      (s.captions || "off") !== "off" ? el("div", { class: "caption-pick" },
-        el("img", { class: "caption-preview", alt: "How the captions look", src: captionsPreview(s) }),
-        el("label", {}, "Colour of the word being said ", (() => {
-          const sel = el("select", { onchange: () => { s.captions_color = sel.value; renderNew(); } },
-            ...[["yellow", "Yellow"], ["green", "Green"], ["red", "Red"], ["purple", "Purple"], ["white", "White (not picked out)"]]
-              .map(([v, t]) => el("option", { value: v }, t)));
-          sel.value = s.captions_color || "yellow";
-          return sel;
-        })())) : "",
-      el("span", { class: "field-head" }, "Shorts"),
-      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!Number(s.shorts),
-        onchange: (e) => { s.shorts = e.target.checked ? 60 : 0; renderNew(); } }), " Also cut the video into Shorts"),
-      Number(s.shorts) ? el("label", {}, "Each up to ", (() => {
-        const sel = el("select", { onchange: () => { s.shorts = Number(sel.value); } },
-          ...[[60, "1 minute"], [90, "90 seconds"], [180, "3 minutes"]].map(([v, t]) => el("option", { value: v }, t)));
-        sel.value = String(s.shorts);
-        return sel;
-      })()) : "",
-      el("span", { class: "hint" }, "Cut where a line ends, with \"Part 1\", \"Part 2\"… at the top" +
-        (s.orientation === "portrait" ? "." : ". Portrait suits Shorts, TikTok and Reels best.")));
-    speed();
-  } else if (page === "content") {
-    const kind = KINDS.find((k) => k[0] === kindOf(s))[1];
-    body.append(
-      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.suggest_title,
-        onchange: (e) => { s.suggest_title = e.target.checked; renderNew(); } }), " Suggest a title and thumbnail when the script is written"),
-      el("span", { class: "hint" }, "Your script writer picks a clickbait title (and a few others), one or two pictures for the thumbnail " +
-        "and its labels; Recap Studio draws it. Both are in the Video tab, to change or suggest again."),
-      s.suggest_title ? el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.redraw_thumbnail,
-        onchange: (e) => { s.redraw_thumbnail = e.target.checked; renderNew(); } }), " Then redraw the thumbnail with AI") : "",
-      s.suggest_title ? el("span", { class: s.redraw_thumbnail && redrawProblem() ? "hint warn" : "hint" },
-        "An image model repaints it as one glossy illustration, a few cents each time" +
-        (s.redraw_thumbnail && redrawProblem() ? `. Before it can, ${redrawProblem()}.` : ".")) : "",
-      el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!s.youtube_safe,
-        onchange: (e) => { s.youtube_safe = e.target.checked; } }), " YouTube-safe, for an age-restricted video"),
-      el("span", { class: "hint" }, "For adult comics going on YouTube: sex scenes are written the way an R-rated film shows them, " +
-        "and black boxes cover nudity in the video. Leave it off for everything else."),
-      el("span", { class: "hint warn" }, "It can make mistakes: read the script and look over the boxes before you upload."),
-      el("span", { class: "field-head" }, "Summary"),
-      el("ul", { class: "setup-summary" },
-        el("li", {}, `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "kind of comic told from the pages" : kind.toLowerCase()}` +
-          (isRaw(s) ? `, in ${LANGUAGES[s.language]}, translated into English${s.typeset ? " (also in the pictures)" : ""}` : "")),
-        el("li", {}, !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
-          (s.characters_review === "trust" ? "names added as suggested" : "names checked by you")),
-        el("li", {}, `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}` +
-          (s.background_music ? ", with background music" : "") +
-          ((s.captions || "off") !== "off" ? `, with ${CAPTION_NAMES[s.captions]} captions` : "") +
-          (Number(s.shorts) ? `, cut into Shorts of up to ${Number(s.shorts) >= 120 ? `${Number(s.shorts) / 60} minutes` : `${s.shorts} seconds`}` : "")),
-        el("li", {}, s.suggest_title ? `A title and thumbnail suggested after the script${s.redraw_thumbnail ? ", then redrawn with AI" : ""}`
-          : "No title or thumbnail suggested")),
-      el("p", { class: "muted" }, "Any of this can change later: the video and title in the project's Video tab, the kind of comic and the characters in its Project settings (advanced mode)."));
+    const on = (s.captions || "off") !== "off";
+    add(
+      el("div", { class: "np-row" },
+        field("Format", "orientation", [["landscape", "Landscape, for YouTube"], ["portrait", "Portrait, for Shorts and TikTok"]]),
+        field("Size", "resolution", [[1080, "1080p"], [720, "720p"], [480, "480p"], [360, "360p"]], true),
+        field("Style", "video_style", [["auto", "Automatic"], ["motion", "Pan and zoom"], ["stills", "Stills"]])),
+      el("div", { class: "np-row" },
+        field("Frame rate", "fps", [[60, "60 fps"], [50, "50 fps"], [30, "30 fps"], [25, "25 fps"], [24, "24 fps"], [20, "20 fps"],
+          [15, "15 fps"], [12, "12 fps"], [10, "10 fps"], [5, "5 fps (stills)"]], true),
+        field("Captions", "captions", [["off", "None"], ["classic", "CapCut classic"], ["box", "Highlight box"], ["minimal", "Minimal"]]),
+        on ? field("Colour of the word being said", "captions_color",
+          [["yellow", "Yellow"], ["green", "Green"], ["red", "Red"], ["purple", "Purple"], ["white", "White (not picked out)"]]) : null,
+        Number(s.shorts) ? field("Shorts of up to", "shorts", [[60, "1 minute"], [90, "90 seconds"], [180, "3 minutes"]], true) : null),
+      on ? el("img", { class: "caption-preview np-caption", alt: "How the captions look", src: captionsPreview(s) }) : null,
+      el("div", { class: "np-checks" },
+        check("background_music", "Background music", { title: "Your own tracks, added at the project's Video stage: they play in " +
+          "turn until the video ends, evened out in loudness. Use music you're allowed to put on YouTube." }),
+        el("label", { class: "check", title: "Cut where a line ends, with \"Part 1\", \"Part 2\"… at the top. Portrait suits Shorts, TikTok and Reels best." },
+          el("input", { type: "checkbox", checked: !!Number(s.shorts), onchange: (e) => { s.shorts = e.target.checked ? 60 : 0; renderNew(); } }),
+          " Also cut it into Shorts"),
+        check("suggest_title", "Suggest a title and thumbnail", { title: "Your script writer picks a clickbait title (and a few others), " +
+          "one or two pictures for the thumbnail and its labels; Recap Studio draws it. Both are at Publish, to change or suggest again." }),
+        s.suggest_title ? check("redraw_thumbnail", "Then redraw the thumbnail with AI",
+          { title: "An image model repaints it as one glossy illustration, a few cents each time." }) : null,
+        check("youtube_safe", "YouTube-safe", { title: "For adult comics going on YouTube: sex scenes are written the way an R-rated " +
+          "film shows them, and black boxes cover nudity in the video. It can make mistakes: read the script and look over the boxes " +
+          "before you upload. Leave it off for everything else." })));
+  } else if (page === "content") {  // (the lines under the video's checks: joins the video's section)
+    add(
+      s.suggest_title && s.redraw_thumbnail && redrawProblem() ? el("span", { class: "np-line warn" }, `Before the thumbnail can be redrawn, ${redrawProblem()}.`) : null,
+      speedLine(s));
   }
   emitPlugins("new-project-page", { page, body, state: newState() });
-  $("#new-body").replaceChildren(body);
 }
 
-$("#new-back").addEventListener("click", () => { newPage = Math.max(0, newPage - 1); renderNew(); });
-$("#new-next").addEventListener("click", async () => {
-  if (newPage < newPages().length - 1) { newPage++; return renderNew(); }
-  const btn = $("#new-next");
-  btn.disabled = true;
+// What the project will be, from its choices (beside the form)
+function newSummary() {
+  const s = newSettings, kind = KINDS.find((k) => k[0] === kindOf(s))[1];
+  return [
+    `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "the kind of comic told from the pages" : `a ${kind.toLowerCase()}`}` +
+      (isRaw(s) ? ` in ${LANGUAGES[s.language]}, translated into English${s.typeset ? " and lettered into the pictures" : ""}` : ""),
+    !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
+      (s.characters_review === "trust" ? "names added as suggested" : "names checked by you"),
+    `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}` +
+      (s.background_music ? ", with background music" : "") +
+      ((s.captions || "off") !== "off" ? `, with ${CAPTION_NAMES[s.captions]} captions` : "") +
+      (Number(s.shorts) ? `, cut into Shorts of up to ${Number(s.shorts) >= 120 ? `${Number(s.shorts) / 60} minutes` : `${s.shorts} seconds`}` : ""),
+    s.suggest_title ? `A title and thumbnail suggested after the script${s.redraw_thumbnail ? ", then redrawn with AI" : ""}` : "No title or thumbnail suggested",
+  ].map((x) => el("li", {}, x));
+}
+
+// The whole dialog on one page: its sections in order (the dialog's own, then the plugins'), the summary beside
+function renderNew() {
+  const titles = { comic: "The series", characters: "Characters", video: "The video", content: null };  // (content joins the video's)
+  const scroll = $("#new-body").scrollTop;
+  const sections = [];
+  for (const page of newPages()) {
+    const extra = pluginPages.find((p) => p.id === page);
+    const body = el("div", { class: "setup-page" });
+    newPageBody(page, body);
+    const title = extra ? extra.title : titles[page];
+    if (title == null && sections.length) { sections[sections.length - 1].append(body); continue; }
+    sections.push(el("section", { class: "np-section", "data-page": page }, el("h3", {}, title), body));
+  }
+  $("#new-body").replaceChildren(...sections);
+  $("#new-body").scrollTop = scroll;
+  $("#new-summary").replaceChildren(...newSummary());
+}
+
+async function createProject(run) {
+  const buttons = [$("#new-next"), $("#new-create-run")];
+  buttons.forEach((b) => { b.disabled = true; });
   try {
     const p = await api("/api/projects", { method: "POST", json: { name: newName.trim() || "Untitled", settings: newSettings } });
     await emitPlugins("project-created", { project: p });
@@ -396,9 +464,12 @@ $("#new-next").addEventListener("click", async () => {
     $("#new-name").value = "";
     await openProject(p.id);
     showTab("chapters");
+    if (run) $("#go").click();
   } catch (e) { notify(e.message); }
-  btn.disabled = false;
-});
+  buttons.forEach((b) => { b.disabled = false; });
+}
+$("#new-next").addEventListener("click", () => createProject(false));
+$("#new-create-run").addEventListener("click", () => createProject(true));
 
 $("#project-name").addEventListener("change", async (e) => {
   await api(`/api/projects/${current.id}`, { method: "PATCH", json: { name: e.target.value } });
@@ -538,14 +609,21 @@ async function loadEnv() {
   systemWording();
   const line = (ok, good, bad) => el("div", { class: ok ? "" : "bad" }, ok ? good : bad);
   const addon = env.gpu.addon || {};  // GPU support, the download
+  // Ollama's reachability matters only when it's the writer: with another writer, the writer's name instead
+  const ollama = globals && !["claude", "claude_code"].includes(globals.llm_provider) && !(env.writers && env.writers[globals.llm_provider]);
   $("#env").replaceChildren(
-    line(!env.ollama_error, `Ollama: ${env.ollama_models.length} model(s)`, "Ollama: not reachable"),
+    ollama ? line(!env.ollama_error, `Ollama: ${env.ollama_models.length} model(s)`, "Ollama: not reachable")
+      : el("div", {}, `Writer: ${globals ? writerLabel() : "…"}`),
     line(env.tts_ready, `Voice: ${env.voices.length} voices`, "Voice model missing (Settings → Run setup again)"),
     line(env.ffmpeg, "ffmpeg: found", "ffmpeg: missing"),
     line(env.gpu.available, `GPU: ${globals && !globals.use_gpu ? "available (turned off)" : "on"}`,
       addon.installed ? "GPU: restart to use GPU support" : env.gpu.card ? "GPU: text and voice on the CPU (CPU build)"
         : "GPU: not available (using CPU)"),
   );
+  // the rail's foot: who writes and who reads (the mockup's one line)
+  const voice = { edge: `Edge's ${globals && globals.edge_voice} voice`, elevenlabs: "an ElevenLabs voice" }[globals && globals.voice_provider]
+    || `the ${globals ? voiceName(globals.voice, true) : "…"} voice`;
+  $("#rail-line").textContent = globals ? `${writerLabel()} writes · ${voice}` : "";
   const used = [env.gpu.ocr && `text reading on ${env.gpu.ocr}`, env.gpu.voice && `voice on ${env.gpu.voice}`].filter(Boolean);
   $("#gpu-status").textContent = env.gpu.available
     ? `An NVIDIA GPU is available.${used.length ? ` Currently: ${used.join(", ")}.` : ""}`
@@ -575,7 +653,7 @@ function fillSelects() {
     sel.value = models.includes(s.ollama_model) ? s.ollama_model : "";
   }
   const voices = env.voices.length ? env.voices : [s.voice];
-  $("#voice-select").replaceChildren(...voices.map((v) => el("option", { value: v }, v)));
+  $("#voice-select").replaceChildren(...voices.map((v) => el("option", { value: v }, voiceName(v))));
   $("#voice-select").value = s.voice;
   $("#claude-model-select").replaceChildren(...env.claude.models.map((m) => el("option", { value: m.id }, m.name)));
   $("#claude-model-select").value = s.claude_model;
@@ -589,7 +667,7 @@ function fillSelects() {
 document.querySelectorAll(".open-global").forEach((b) => b.addEventListener("click", () => {
   renderGlobal();
   loadStorage();
-  $("#global-dialog").showModal();
+  $("#global-dialog").show();
 }));
 
 function setInputs(root, values) {
@@ -686,8 +764,17 @@ $("#music-file").addEventListener("change", async (e) => {
   $("#music-status").textContent = "";
 });
 
+// The window's look (Settings → Look): the system's light or dark, or one of them (html[data-theme], style.css).
+// Kept in localStorage too, so the page paints in it before the settings arrive (index.html's head applies it).
+function applyTheme(theme) {
+  const t = theme === "light" || theme === "dark" ? theme : "";
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  store("theme", t);
+}
+
 function renderGlobal() {
   if (!globals) return;
+  applyTheme(globals.theme);
   setInputs($("#global-dialog"), globals);
   const claudeOn = globals.llm_provider === "claude";
   const codeOn = globals.llm_provider === "claude_code";
@@ -696,11 +783,11 @@ function renderGlobal() {
   $("#global-dialog .claudecode-only").hidden = !codeOn;
   $("#global-dialog .cloud-only").hidden = !cloudOn;
   $("#global-dialog .ollama-opts").hidden = claudeOn || codeOn || cloudOn;
+  renderWriterCards();
   if (codeOn) renderClaudeCode();
   fillSelects();
   if (cloudOn) renderCloud();
   renderVoice();
-  renderAppLine();
   renderMagi();
   renderCharscanSettings();
   renderOcrSettings();
@@ -930,10 +1017,13 @@ $("#cjk-remove").addEventListener("click", async () => {
 
 // ---- Magi add-on (speaker detection): downloaded on request, never shipped with the app ----
 
-let magiPoll = null;
+let magiPoll = null, magiInstalled = false;
+const showPictures = () => document.body.classList.toggle("has-pics", magiInstalled || scanReady());
 async function renderMagi(st = null) {
   clearTimeout(magiPoll);
   try { st = st || await api("/api/addons/magi"); } catch { return; }
+  magiInstalled = !!st.installed;
+  showPictures();
   const busy = ["installing", "removing"].includes(st.state);
   $("#magi-off").hidden = st.installed || busy;
   $("#magi-busy").hidden = !busy;
@@ -989,7 +1079,7 @@ function renderSteps() {
   $("#step-translate").hidden = !current || !isRaw(current.settings);
   let n = 0;
   for (const b of document.querySelectorAll(".steps button[data-label]")) {
-    if (!b.hidden) b.textContent = `${++n} · ${b.dataset.label}`;
+    if (!b.hidden) b.querySelector("span").textContent = `${++n} · ${b.dataset.label}`;
   }
 }
 const openGroups = () => ((current.scan && current.scan.groups) || [])
@@ -1158,7 +1248,7 @@ function renderReview() {
   const suggested = shown.filter((g) => g.suggestion);
   $("#review-summary").textContent = `${plural(open.length - small.length, "character")} to review, ` +
     `from ${plural(scan.chapters.length, "chapter")} (${scan.seen || 0} appearances found).` +
-    (suggested.length ? ` Names suggested by ${suggested[0].suggestion.by}: check them before adding.` : "");
+    (suggested.length ? ` Names suggested${suggested[0].suggestion.by ? ` by ${suggested[0].suggestion.by}` : ""}: check them before adding.` : "");
   $("#review-small-label").textContent = `Show small groups (${small.length})`;
   $("#review-names").textContent = suggested.length ? "Suggest names again" : "Suggest names";
   $("#review-names").disabled = $("#review-rescan").disabled = !!(current.job && ACTIVE.includes(current.job.status));
@@ -1179,7 +1269,7 @@ function renderReview() {
 
 function reviewCard(g, groups) {
   const sug = g.suggestion;  // the writer's suggestion (Suggest names), if asked
-  const chips = g.traits.map((t) => ({ ...t, on: true }));
+  const chips = (g.traits || []).map((t) => ({ ...t, on: true }));
   const name = el("input", { placeholder: "Name (of the character, or of the look)" });
   const aliases = el("input", { class: "aliases", placeholder: "Other names, comma separated (spellings, nicknames, fake names)" });
   const gender = el("select", {}, ...[["", "Gender"], ["female", "Female"], ["male", "Male"]].map(([v, l]) => el("option", { value: v }, l)));
@@ -1188,9 +1278,16 @@ function reviewCard(g, groups) {
   const listed = sug && sug.character && current.characters.find((c) => c.id === sug.character);
   if (sug) {
     name.value = sug.name || (listed ? listed.name : "") || (bigger && bigger.suggestion ? bigger.suggestion.name : "");
-    aliases.value = sug.aliases;
+    aliases.value = sug.aliases || "";
   }
   const desc = el("textarea", { rows: 2, placeholder: "Short description (appearance, role)" });
+  // The story may not have given their name yet: they can be added under their role ("the Director"), which the
+  // narrator uses as the story does; when a later scan's suggestion names them, the card offers to rename them.
+  const roleOf = (words) => { const first = (words || "").split(",")[0].trim(); return first ? (/^(the|a|an) /i.test(first) ? first : `the ${first}`) : ""; };
+  const unnamedBox = el("input", { type: "checkbox" });
+  const unnamedRow = el("label", { class: "check unnamed-check", title: "The story hasn't said their name: add them under their role, and the narrator calls them that, as the story does. When a later chapter names them, the scan's suggestion offers to rename them." },
+    unnamedBox, "Name not known yet: add them under their role");
+  unnamedBox.addEventListener("change", () => { if (unnamedBox.checked && !name.value.trim()) name.value = roleOf(aliases.value); });
   let edited = false;
   const update = () => {
     if (!edited) desc.value = [sug && sug.description, describeTraits(chips.filter((c) => c.on))].filter(Boolean).join(" ");
@@ -1214,9 +1311,13 @@ function reviewCard(g, groups) {
   // merging keeps the bigger group and folds the smaller one into it, whichever card it's done from
   const mergeWith = (o) => (o.size > g.size ? reviewAct(g, "merge", { into: o.id }) : reviewAct(o, "merge", { into: g.id }));
   if (g.match && named.some((c) => c.id === g.match.character)) {
+    const m = named.find((c) => c.id === g.match.character);
+    const renames = !!(m.unnamed && sug && sug.name && !sug.extra);  // (the story has named them now)
     hints.push(el("button", { type: "button", class: "small",
-      onclick: () => reviewAct(g, "add", { character: g.match.character, look: g.match.look || null, description: desc.value }) },
-      `${g.match.sure ? "Looks like" : "Might be"} ${whoLabel(g.match.character, g.match.look)}: add to them`));
+      onclick: () => reviewAct(g, "add", { character: g.match.character, look: g.match.look || null, description: desc.value,
+        ...(renames ? { name: sug.name, rename: true } : {}) }) },
+      renames ? `${g.match.sure ? "Looks like" : "Might be"} ${m.name}, named ${sug.name} now: name them and add`
+        : `${g.match.sure ? "Looks like" : "Might be"} ${whoLabel(g.match.character, g.match.look)}: add to them`));
   }
   for (const s of g.similar || []) {
     const o = others.find((x) => x.id === s.group);
@@ -1224,9 +1325,13 @@ function reviewCard(g, groups) {
       `Same as group ${o.id.slice(1)}?`));
   }
   if (listed && !(g.match && g.match.character === listed.id)) {
-    hints.push(el("button", { type: "button", class: "small",
-      onclick: () => reviewAct(g, "add", { character: listed.id, description: desc.value, aliases: aliases.value }) },
-      `The writer says ${listed.name}: add to them`));
+    hints.push(listed.unnamed && sug.name && !sug.extra
+      ? el("button", { type: "button", class: "small",
+        onclick: () => reviewAct(g, "add", { character: listed.id, name: sug.name, rename: true, description: desc.value, aliases: aliases.value }) },
+        `The writer says ${listed.name} is ${sug.name}: name them and add`)
+      : el("button", { type: "button", class: "small",
+        onclick: () => reviewAct(g, "add", { character: listed.id, description: desc.value, aliases: aliases.value }) },
+        `The writer says ${listed.name}: add to them`));
   }
   if (bigger && bigger.status === "open" && !(g.similar || []).some((x) => x.group === bigger.id)) {
     hints.push(el("button", { type: "button", class: "ghost small", onclick: () => mergeWith(bigger) },
@@ -1235,22 +1340,32 @@ function reviewCard(g, groups) {
   if (sug && sug.extra) {
     hints.push(el("button", { type: "button", class: "ghost small", onclick: () => reviewAct(g, "ignore") }, "An extra: ignore"));
   }
-  reviewFields.set(g.id, () => ({ group: g.id, size: g.size, suggested: !!sug, extra: !!(sug && sug.extra),
-    name: name.value, gender: gender.value, aliases: aliases.value, description: desc.value }));
+  // the other names, less the role when that is the name now
+  const otherNames = (chosen) => aliases.value.split(",").map((a) => a.trim())
+    .filter((a) => a && roleOf(a).toLowerCase() !== chosen.trim().toLowerCase() && a.toLowerCase() !== chosen.trim().toLowerCase()).join(", ");
+  reviewFields.set(g.id, () => {
+    const chosen = name.value.trim() || (unnamedBox.checked ? roleOf(aliases.value) : "");
+    return { group: g.id, size: g.size, suggested: !!sug, extra: !!(sug && sug.extra), name: chosen, gender: gender.value,
+      aliases: unnamedBox.checked ? otherNames(chosen) : aliases.value, description: desc.value, unnamed: unnamedBox.checked };
+  });
   const add = el("button", { type: "button", class: "primary", onclick: () => {
-    if (!name.value.trim()) { name.placeholder = "Name it first"; name.focus(); return; }
-    reviewAct(g, "add", { name: name.value, gender: gender.value, description: desc.value, aliases: aliases.value });
+    if (!name.value.trim() && unnamedBox.checked) name.value = roleOf(aliases.value);
+    if (!name.value.trim()) { name.placeholder = unnamedBox.checked ? "Their role, e.g. the Director" : "Name it first"; name.focus(); return; }
+    reviewAct(g, "add", { name: name.value, gender: gender.value, description: desc.value,
+      aliases: unnamedBox.checked ? otherNames(name.value) : aliases.value, unnamed: unnamedBox.checked });
   } }, "Add as new character");
   return el("div", { class: "review-card" },
     el("div", { class: "snaps" }, ...g.snapshots.map((s) => el("img", { src: fileUrl(s.file), loading: "lazy", onclick: () => lightbox(fileUrl(s.file)) }))),
+    el("div", { class: "review-body" },
     el("div", { class: "review-meta" }, el("b", {}, `Group ${g.id.slice(1)}`),
       ` · ${plural(g.size, "appearance")} in ${plural(g.pieces, "panel")} · ${g.chapters.join(", ")}`, ...hints),
     sug ? el("div", { class: "suggested" }, `${sug.sure ? "Suggested" : "A guess"}: `,
       el("b", {}, sug.name || (listed && listed.name) || (sug.extra ? "an extra" : "no name found")),
       sug.extra && (sug.name || listed) ? " · an extra" : "", bigger ? ` · same as group ${bigger.id.slice(1)}` : "",
-      sug.aliases ? ` · also ${sug.aliases}` : "", el("span", { class: "muted" }, ` (${sug.by})`)) : null,
+      sug.aliases ? ` · also ${sug.aliases}` : "", sug.by ? el("span", { class: "muted" }, ` (${sug.by})`) : null) : null,
     chipRow,
     el("div", { class: "review-fields" }, name, gender, aliases, desc),
+    unnamedRow,
     el("div", { class: "review-actions" }, add,
       el("span", { class: "or" }, "or add to"), toExisting,
       el("button", { type: "button", onclick: () => toExisting.value && reviewAct(g, "add", { ...target(), description: desc.value, aliases: aliases.value }) }, "Add"),
@@ -1261,7 +1376,7 @@ function reviewCard(g, groups) {
         } }, "As another look"),
       el("span", { class: "or" }, "or merge with"), sameAs,
       el("button", { type: "button", onclick: () => sameAs.value && mergeWith(others.find((o) => o.id === sameAs.value)) }, "Merge"),
-      el("button", { type: "button", class: "ghost", onclick: () => reviewAct(g, "ignore") }, "Ignore")));
+      el("button", { type: "button", class: "ghost", onclick: () => reviewAct(g, "ignore") }, "Ignore"))));
 }
 
 async function reviewAct(g, action, body = {}) {
@@ -1314,25 +1429,12 @@ $("#cs-remove").addEventListener("click", async () => {
 });
 
 function writerLabel() {
-  const service = env.writers && env.writers[globals.llm_provider];
+  const service = env && env.writers && env.writers[globals.llm_provider];  // (env comes a few seconds after the page)
   if (globals.llm_provider === "claude_code") return `Claude Code (${globals.claude_code_model === "sonnet" ? "Sonnet" : "Opus"})`;
   return globals.llm_provider === "claude"
-    ? (env.claude.models.find((m) => m.id === globals.claude_model) || { name: globals.claude_model }).name
+    ? ((env && env.claude ? env.claude.models.find((m) => m.id === globals.claude_model) : null) || { name: globals.claude_model }).name
     : service ? `${service.name} (${globals[`${globals.llm_provider}_model`] || service.default_model || "no model chosen"})`
     : `local model${globals.ollama_model ? ` (${globals.ollama_model})` : ""}`;
-}
-
-function renderAppLine() {
-  if (!globals || !env) return;
-  const writer = writerLabel();
-  const btn = el("button", { type: "button", class: "link-btn", onclick: () => { renderGlobal(); $("#global-dialog").showModal(); } }, "change");
-  const voice = { edge: `Edge voice ${globals.edge_voice}`, elevenlabs: "ElevenLabs voice" }[globals.voice_provider] || `voice ${globals.voice}`;
-  if (!current) return $("#app-line").replaceChildren(`Script by ${writer} · ${voice} (`, btn, ")");
-  const s = current.settings;  // the video is the project's own (its Video tab)
-  const style = { motion: ", pan and zoom", stills: ", stills" }[s.video_style] || "";
-  const fmt = `${s.resolution || 1080}p ${s.orientation === "portrait" ? "portrait" : "landscape"} video${style}`;
-  const videoBtn = el("button", { type: "button", class: "link-btn", onclick: () => showTab("video") }, "change");
-  $("#app-line").replaceChildren(`Script by ${writer} · ${voice} (`, btn, `) · ${fmt} (`, videoBtn, ")");
 }
 
 function readInput(input) {
@@ -1352,12 +1454,46 @@ function bindProjectInput(input) {
     if (input.closest("#captions-box") || input.dataset.key === "orientation") renderCaptionsBox();
     if (input.closest("#video-settings")) {  // (the split rows, the line above the steps, the time left)
       renderSettings();
-      renderAppLine();
       loadEstimate();
     }
   });
 }
 document.querySelectorAll(".proj-settings [data-key]").forEach(bindProjectInput);
+
+// The writer as four cards (Settings → Script writer, as the mockup): Claude Code, Claude API, a cloud service (which
+// one in the box below) and Ollama; picking one sets the Writer dropdown behind them, which saves as any setting.
+const WRITER_CARDS = [
+  ["claude_code", "Claude Code", "Your Claude subscription, through the Claude Code app on this PC. Nothing per recap."],
+  ["claude", "Claude API", "Anthropic's API with your own key. A few cents a chapter."],
+  ["cloud", "A cloud service", "Gemini, OpenRouter, DeepSeek, Groq or Mistral, with a key."],
+  ["ollama", "Ollama, on this PC", "A local model. Free and private; the writing is plainer."],
+];
+const CLOUD_WRITERS = ["openrouter", "gemini", "deepseek", "groq", "mistral"];
+function renderWriterCards() {
+  const sel = document.querySelector('#global-dialog [data-key="llm_provider"]');
+  if (!sel || !globals) return;
+  const now = globals.llm_provider, kind = CLOUD_WRITERS.includes(now) ? "cloud" : now;
+  const status = {
+    claude_code: $("#cc-status").textContent, claude: $("#key-status").textContent, cloud: $("#cloud-key-status").textContent,
+    ollama: env ? (env.ollama_error ? "Not reachable" : `${plural((env.ollama_models || []).length, "model")} installed`) : "",
+  };
+  const pick = (id) => {
+    sel.value = id === "cloud" ? (CLOUD_WRITERS.includes(now) ? now : $("#cloud-service").value || "openrouter") : id;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  $("#writer-cards").replaceChildren(...WRITER_CARDS.map(([id, title, about]) => el("label", { class: `gs-card${id === kind ? " on" : ""}` },
+    el("b", {}, el("input", { type: "radio", name: "writer-card", value: id, checked: id === kind, onchange: () => pick(id) }), title),
+    el("span", {}, about), status[id] ? el("small", { class: id === kind ? "on" : "" }, status[id].trim()) : null)));
+  if (CLOUD_WRITERS.includes(now)) $("#cloud-service").value = now;
+}
+$("#cloud-service").addEventListener("change", (e) => {
+  const sel = document.querySelector('#global-dialog [data-key="llm_provider"]');
+  sel.value = e.target.value;
+  sel.dispatchEvent(new Event("change", { bubbles: true }));
+});
+// the cards' status lines follow the checks (Claude Code found, a key tested) as they answer
+const writerWatch = new MutationObserver(() => { if ($("#global-dialog").open) renderWriterCards(); });
+for (const id of ["cc-status", "key-status", "cloud-key-status"]) writerWatch.observe($(`#${id}`), { childList: true, characterData: true, subtree: true });
 
 document.querySelectorAll("#global-dialog [data-key]").forEach((input) => {
   input.addEventListener("change", async () => {
@@ -1504,7 +1640,6 @@ $("#cloud-model").addEventListener("change", async () => {
   if (current) Object.assign(current.settings, globals);
   $("#cloud-test-result").textContent = "";
   renderCloud();
-  renderAppLine();
 });
 
 // one tiny request: a model that's overloaded, has no allowance on this key or isn't available shows up now
@@ -1797,25 +1932,45 @@ async function saveCharacters() {
   if (!$("#p-preview-out").hidden) showPreview();
 }
 
+const GENDERS = [["", "Not said"], ["female", "Female"], ["male", "Male"]];
+
 function renderCharacters() {
   $("#chars").replaceChildren(...current.characters.map((c, i) => {
-    const input = (field, placeholder, cls = "") => {
-      const e = el("input", { placeholder, class: cls, value: c[field] || "" });
-      e.addEventListener("change", () => { c[field] = e.value; saveCharacters(); });
+    const field = (label, e, cls = "") => el("label", { class: `cfield ${cls}`.trim() }, label, e);
+    const input = (key, placeholder, cls = "") => {
+      const e = el("input", { placeholder, class: cls, value: c[key] || "" });
+      e.addEventListener("change", () => { c[key] = e.value; saveCharacters(); });
       return e;
     };
-    const desc = el("textarea", { rows: 2, class: "wide", placeholder: "Appearance and role, e.g. blonde office worker, the main character" });
+    const gender = el("select", {}, ...GENDERS.map(([v, t]) => el("option", { value: v }, t)));
+    if (c.gender && !GENDERS.some(([v]) => v === c.gender)) gender.append(el("option", { value: c.gender }, c.gender));  // (a word of its own, kept)
+    gender.value = c.gender || "";
+    gender.addEventListener("change", () => { c.gender = gender.value; saveCharacters(); });
+    const desc = el("textarea", { rows: 2, placeholder: "Looks and role, e.g. blonde office worker, the main character" });
     desc.value = c.description || "";
     desc.addEventListener("change", () => { c.description = desc.value; saveCharacters(); });
+    // a character the story hasn't named yet goes by their role; typing the name once it's given takes the mark off
+    // and keeps the role among the other names (the saving listener runs first, so c.name is the new value here)
+    const was = c.name;
+    const nameInput = input("name", c.unnamed ? "Their role, until the story names them" : "As the narrator should say it", "char-name");
+    if (c.unnamed) nameInput.addEventListener("change", () => {
+      const now = (c.name || "").trim();
+      if (!now || now.toLowerCase() === (was || "").trim().toLowerCase()) return;
+      const have = (c.aliases || "").split(",").map((a) => a.trim()).filter(Boolean);
+      if (was && !have.some((a) => a.toLowerCase() === was.trim().toLowerCase())) c.aliases = [...have, was.trim()].join(", ");
+      c.unnamed = false;
+      saveCharacters().then(renderCharacters);
+    });
     const card = el("div", { class: "char-card" },
-      input("name", "Name"),
-      input("gender", "Gender (optional)"),
+      field("Name", nameInput),
+      field("Gender", gender),
+      c.unnamed ? el("span", { class: "hint wide unnamed-note" }, "The story hasn't given their name: the narrator calls them this, as the story does. Type the name here once it's given; this role then goes under Other names.") : null,
       el("button", { class: "ghost danger remove", title: "Remove character", onclick: () => {
         current.characters.splice(i, 1);
         saveCharacters().then(renderCharacters);
       } }, "✕"),
-      input("aliases", "Also appears in text as (comma-separated, e.g. how OCR misreads the name)", "wide"),
-      desc,
+      field("Other names", input("aliases", "Nicknames, other spellings, how the text reader misreads it: comma-separated"), "wide"),
+      field("Description", desc, "wide"),
       c.source ? el("span", { class: "hint wide" }, `From ${c.source}`) : null,
       characterPictures(c),
       characterLooks(c));
@@ -1857,14 +2012,14 @@ function characterPictures(c, look = null) {
   const target = look || c;
   const file = el("input", { type: "file", accept: "image/*", multiple: true, hidden: true });
   file.addEventListener("change", () => { addPictures(c, [...file.files], look); file.value = ""; });
-  return el("div", { class: "char-pics wide adv" },
+  return el("div", { class: "char-pics wide magi-only" },
     ...(target.pictures || []).map((n) => el("span", { class: "pic" },
       el("img", { src: fileUrl(`characters/${n}`), alt: c.name, onclick: () => lightbox(fileUrl(`characters/${n}`)) }),
       el("button", { class: "ghost danger", title: "Remove this picture", onclick: () => {
         target.pictures = target.pictures.filter((x) => x !== n);
         saveCharacters().then(renderCharacters);
       } }, "✕"))),
-    el("button", { class: "ghost small", title: "Pictures help Magi (Settings → Speaker detection) tell who says what",
+    el("button", { class: "ghost small", title: "Pictures help Magi (Settings → Reading comics) and the character scan tell who is who",
       onclick: () => file.click() }, "+ Pictures…"),
     file);
 }
@@ -1897,8 +2052,7 @@ function whoLabel(cid, lid = null) {
 $("#add-char").addEventListener("click", () => {
   current.characters.push({ name: "", gender: "", aliases: "", description: "", looks: [] });
   renderCharacters();
-  const names = $("#chars").querySelectorAll(".char-card input");
-  names[names.length - 3]?.focus();
+  $("#chars .char-card:last-child .char-name")?.focus();
 });
 
 function renderPrompt(force = false) {
@@ -1923,7 +2077,7 @@ const skippedNote = (skipped) => (skipped || []).map((x) => `${x.file} is left o
 
 function showFileTypes(types) {
   fileTypes = types || [];
-  $("#drop-words").textContent = `or drop images, ${orList(fileKinds())} files anywhere here, or`;
+  $("#drop-words").textContent = `Drop images, folders, ${orList(fileKinds())} files anywhere here to add chapters, or`;
   $("#file-input").accept = ["image/*", ...fileKinds()].join(",");
 }
 
@@ -2086,9 +2240,11 @@ async function openSources(newOnly = false, find = null) {
   srcDlg.showModal();
   if (newOnly) return openNewChapters();
   showSourceStep("find");
+  srcDlg.classList.add("loading");  // (its dropdowns stay out of sight until there are sources to fill them)
   $("#src-status").textContent = "Looking for sources…";
   try { srcAll = (await api("/api/sources")).sources.filter((s) => s.chapters !== false); }  // (not series details only)
   catch (e) { $("#src-status").textContent = e.message; return; }
+  srcDlg.classList.remove("loading");
   $("#src-status").textContent = "";
   $("#src-none").hidden = srcAll.length > 0;
   $("#src-find").hidden = !srcAll.length;
@@ -2582,8 +2738,9 @@ function saveChapterSelection() {
   localStorage.setItem(`sel:${current.id}`, JSON.stringify([...selectedCh]));
 }
 
-const chosenIds = () => (isAdvanced() ? [...selectedCh].filter((id) => current.chapters.some((c) => c.id === id)) : []);
-const inScope = (chapterId) => !isAdvanced() || selectedCh.size === 0 || selectedCh.has(chapterId);
+// the ticked chapters: the main button and One step work on those (none ticked: all of them)
+const chosenIds = () => [...selectedCh].filter((id) => current.chapters.some((c) => c.id === id));
+const inScope = (chapterId) => selectedCh.size === 0 || selectedCh.has(chapterId);
 
 // Scenes: runs of enabled pieces where each piece after the first is "joined" (mirrors scenes.py).
 function sceneGroups(panels) {
@@ -2619,17 +2776,29 @@ function chapterStats() {
 
 function renderChapters() {
   const box = $("#chapters");
-  $("#chapters-box").hidden = current.chapters.length === 0;
-  $("#chapter-count").textContent = current.chapters.length ? `${current.chapters.length}` : "";
+  $("#chapters-box").classList.toggle("empty", current.chapters.length === 0);
+  $("#chapter-count").textContent = current.chapters.length ? `${current.chapters.length} · ${current.pages.length} pages` : "";
   const fresh = newCounts[current.id];
   $("#new-chapters").hidden = !current.source;
   $("#new-chapters").textContent = fresh ? `${plural(fresh, "new chapter")}…` : "Check for new chapters";
+  $("#new-chapters").classList.toggle("fresh", !!fresh);
   const busy = current.job && ACTIVE.includes(current.job.status);
   if (!editingIn(box)) {
     const stats = chapterStats();
-    box.replaceChildren(...current.chapters.map((c, i) => {
+    // the head's tick box ticks every chapter, or none
+    const allOn = current.chapters.length > 0 && current.chapters.every((c) => selectedCh.has(c.id));
+    const pickAll = el("input", { type: "checkbox", class: "ch-pick", title: "Tick every chapter, or none", checked: allOn,
+      onchange: (e) => {
+        selectedCh = e.target.checked ? new Set(current.chapters.map((c) => c.id)) : new Set();
+        saveChapterSelection(); shown = PAGE; render();
+      } });
+    pickAll.indeterminate = !allOn && current.chapters.some((c) => selectedCh.has(c.id));
+    const head = el("div", { class: "ch-row ch-head" }, pickAll, el("span", {}, "Chapter"),
+      el("span", { class: "ch-cell" }, "Pages"), el("span", { class: "ch-cell" }, "Scenes"), el("span", { class: "ch-cell" }, "Script"),
+      el("span", { class: "ch-cell" }, "Voice"), el("span", {}), el("span", {}), el("span", {}));
+    box.replaceChildren(head, ...current.chapters.map((c, i) => {
       const s = stats[c.id];
-      const stat = (label, n, of) => el("span", { class: of && n === of ? "done" : "" }, `${label} ${n}/${of}`);
+      const cell = (n, of, title = "") => el("span", { class: `ch-cell${of && n === of ? " done" : ""}`, title }, of != null ? `${n}/${of}` : String(n));
       const name = el("input", { class: "ch-name", value: c.name, title: c.source || c.source_url || "" });
       name.addEventListener("change", async () => {
         await api(`/api/projects/${current.id}/chapters/${c.id}`, { method: "PATCH", json: { name: name.value } });
@@ -2638,9 +2807,9 @@ function renderChapters() {
       });
       const status = chapterStatus(s);
       const flags = wordingFlags(c);
-      return el("div", { class: "ch-row" + (selectedCh.has(c.id) && isAdvanced() ? " sel" : "") },
+      return el("div", { class: "ch-row" + (selectedCh.has(c.id) ? " sel" : "") },
         el("input", {
-          type: "checkbox", class: "adv", checked: selectedCh.has(c.id), title: "Include in the next run",
+          type: "checkbox", class: "ch-pick", checked: selectedCh.has(c.id), title: "Tick chapters to work on just those: the main button and One step then run on them",
           onchange: (e) => {
             e.target.checked ? selectedCh.add(c.id) : selectedCh.delete(c.id);
             saveChapterSelection();
@@ -2649,24 +2818,49 @@ function renderChapters() {
           },
         }),
         name,
-        el("span", { class: `pill sim ${status.kind}`, title: c.narrator ? `Narrated by ${c.narrator}` : "" }, status.text),
-        flags.length ? el("button", { class: "pill warn", disabled: busy && !waitingForWording(), onclick: () => checkWording(c, flags),
-          title: `${plural(flags.length, "line")} may go further than YouTube-safe allows` }, "Check wording") : null,
-        el("span", { class: "ch-stats adv", title: c.narrator ? `Narrated by ${c.narrator}` : "" }, `${s.pages} pages · `,
-          s.panels ? el("span", {}, `${s.scenes} scenes · `, stat("text", s.text, s.panels), " · ",
-            stat("script", s.script, s.scenes), " · ", stat("voice", s.voice, s.lines),
-            c.narrator && c.narrator.startsWith("local model (fallback)") ? el("span", { class: "narrator" }, " · local fallback") : null)
-                   : "not detected yet"),
+        cell(s.pages),
+        s.panels ? cell(s.scenes) : el("span", { class: "ch-cell muted", title: "Detect panels finds the scenes" }, "—"),
+        s.panels ? cell(s.script, s.scenes, `${s.script} of ${s.scenes} scenes written` + (s.text < s.panels ? ` · text read in ${s.text} of ${s.panels} panels` : "")) : el("span", { class: "ch-cell muted" }, "—"),
+        s.panels ? cell(s.voice, s.lines, (c.narrator ? `Narrated by ${c.narrator}` : "") + (c.narrator && c.narrator.startsWith("local model (fallback)") ? " (local fallback)" : "")) : el("span", { class: "ch-cell muted" }, "—"),
+        el("span", { class: "ch-state" },
+          el("span", { class: `pill ${status.kind}`, title: c.narrator ? `Narrated by ${c.narrator}` : "" }, status.text),
+          flags.length ? el("button", { class: "pill warn", disabled: busy && !waitingForWording(), onclick: () => checkWording(c, flags),
+            title: `${plural(flags.length, "line")} may go further than YouTube-safe allows` }, "Check wording") : null),
         el("span", { class: "ch-actions" },
-          el("button", { class: "ghost adv" + (c.voiceover ? " on" : ""), title: c.voiceover
+          el("button", { class: "ghost" + (c.voiceover ? " on" : ""), title: c.voiceover
             ? `Your own voice-over: ${c.voiceover.name}` : "Use your own recorded voice-over for this chapter", disabled: busy,
           onclick: () => openVoiceover(c) }, "🎙"),
-          el("button", { class: "ghost adv", title: "Move up", disabled: i === 0 || busy, onclick: () => moveChapter(i, -1) }, "↑"),
-          el("button", { class: "ghost adv", title: "Move down", disabled: i === current.chapters.length - 1 || busy, onclick: () => moveChapter(i, 1) }, "↓"),
-          el("button", { class: "ghost danger", title: "Remove chapter", disabled: busy, onclick: () => deleteChapter(c) }, "✕")));
+          el("button", { class: "ghost", title: "Move up", disabled: i === 0 || busy, onclick: () => moveChapter(i, -1) }, "↑"),
+          el("button", { class: "ghost", title: "Move down", disabled: i === current.chapters.length - 1 || busy, onclick: () => moveChapter(i, 1) }, "↓"),
+          el("button", { class: "ghost danger", title: "Remove chapter", disabled: busy, onclick: () => deleteChapter(c) }, "✕")),
+        el("button", { type: "button", class: "link ch-open", title: "Its scenes, in the script", onclick: () => openChapterScript(c) }, "Open"));
     }));
   }
 }
+
+// A chapter's scenes, in the script (the Open link of its row)
+function openChapterScript(c) {
+  sceneChapter = c.id;
+  sceneSel = null;
+  showTab("script");
+  renderPanels();
+}
+
+// Where the chapters come from (the inspector's first section at Chapters): the series at its source, or your files
+function renderSourceBox() {
+  const s = current.source, n = current.chapters.length;
+  const line = $("#source-line");
+  if (s) {
+    line.replaceChildren(el("b", {}, s.title || "The series"), ` · ${srcName(s.key).replace(/^plugin:/, "")} · ${plural(n, "chapter")} here`,
+      el("div", {}, "Check for new chapters, above the list, looks for the ones the site has that the project doesn't."));
+    $("#source-change").textContent = "Change the series or the source";
+  } else {
+    line.replaceChildren(n ? `${plural(n, "chapter")} from your files.` : "No chapters yet.",
+      el("div", {}, "Get chapters from a site links the project to a series, which it can then check for new chapters."));
+    $("#source-change").textContent = "Get chapters from a site…";
+  }
+}
+$("#source-change").addEventListener("click", () => openSources());
 
 // A YouTube-safe chapter's lines that the wording check flagged and that still read the same (pipeline.wording_flags)
 function wordingFlags(c) {
@@ -2748,15 +2942,6 @@ async function deleteChapter(c) {
   openProject(current.id);
 }
 
-$("#ch-all").addEventListener("click", () => {
-  selectedCh = new Set(current.chapters.map((c) => c.id));
-  saveChapterSelection(); shown = PAGE; render();
-});
-$("#ch-none").addEventListener("click", () => {
-  selectedCh.clear();
-  saveChapterSelection(); shown = PAGE; render();
-});
-
 // ---- time estimates ------------------------------------------------------------
 // From the server: the work each step would do in the chapters in scope, times how fast this
 // computer has done that work before (measured speeds, refined after every finished step).
@@ -2774,7 +2959,7 @@ function aboutTime(s) {
 
 async function loadEstimate(force = false) {
   if (!current || !current.chapters.length) {
-    $("#estimate").textContent = "";
+    $("#go-note").title = "";
     if (current) $("#go-note").textContent = `Import a folder of chapters, or drop images, ${orList(fileKinds())} files on this page.`;
     return;
   }
@@ -2785,7 +2970,7 @@ async function loadEstimate(force = false) {
   try {
     const e = await api(`/api/projects/${current.id}/estimate?chapters=${encodeURIComponent(chosen.join(","))}`);
     if (estimateFor === key) { estimate = e; renderEstimate(); }
-  } catch { $("#estimate").textContent = ""; }
+  } catch { $("#go-note").title = ""; }
 }
 
 function renderEstimate() {
@@ -2794,22 +2979,24 @@ function renderEstimate() {
   const all = estimate.run_all;
   const parts = Object.entries(names).filter(([s]) => all[s] && all[s].seconds > 0)
     .map(([s, name]) => `${name} ${aboutTime(all[s].seconds).replace("about ", "")}`);
-  $("#estimate").textContent = parts.length
-    ? `All of it: ${aboutTime(all.total)} (${parts.join(" · ")}). Hover a step for its own estimate.`
-    : "Everything in these chapters is done. Render video makes the video again.";
+  $("#go-note").title = parts.length ? `All of it: ${aboutTime(all.total)} (${parts.join(" · ")})` : "";
   const todo = { panels: "find the panels", ocr: "read the text", characters: "find the characters", script: "write the script", title: "suggest a title", audio: "voice it", video: "render the video" };
   const left = Object.keys(todo).filter((s) => all[s] && all[s].seconds > 0);
   const what = left.map((s) => todo[s]);
+  // with chapters ticked, the note says so: that's what the main button and One step work on
+  const chosen = chosenIds();
+  const ticked = chosen.length && chosen.length < current.chapters.length ? ` for the ${plural(chosen.length, "ticked chapter")}` : "";
+  const about = aboutTime(all.total).replace(/^about/, "About");
   $("#go-note").textContent = left.some((s) => s !== "video")
-    ? `${aboutTime(all.total).replace(/^about/, "About")}: ${what.join(", ")}.`
-    : current.output ? "Everything is done. Making the video again picks up any changes." : `${aboutTime(all.total).replace(/^about/, "About")} to render the video.`;
+    ? `${about}${ticked}: ${what.join(", ")}.`
+    : current.output ? `Everything is done${ticked}. Making the video again picks up any changes.` : `${about} to render the video${ticked}.`;
   for (const b of document.querySelectorAll(".steps button[data-steps]")) {
-    const steps = b.dataset.steps.split(",");
-    if (steps.length > 1) { b.title = `About ${aboutTime(all.total).replace("about ", "")} for what's left`; continue; }
-    const left = estimate.missing[steps[0]], redo = estimate.redo[steps[0]];
-    if (!left) continue;
-    b.title = steps[0] === "video" ? `${aboutTime(redo.seconds)} to render`
-      : `${left.amount ? `${aboutTime(left.seconds)} for what's left (${plural(left.amount, left.unit)})` : "All done"}; ${aboutTime(redo.seconds)} to redo all`;
+    const step = b.dataset.steps;
+    const left = estimate.missing[step], redo = estimate.redo[step];
+    const text = !left ? "" : step === "video" ? `${aboutTime(redo.seconds)} to render`
+      : `${left.amount ? `${aboutTime(left.seconds)} for what's left (${plural(left.amount, left.unit)})` : "All done"} · ${aboutTime(redo.seconds)} to redo all`;
+    b.querySelector("small").textContent = text;
+    b.title = text;
   }
 }
 
@@ -2826,19 +3013,8 @@ function timeLeft(j) {
   return w * byProgress + (1 - w) * byEstimate;
 }
 
-function renderScope() {
-  loadEstimate();
-  const n = current.chapters.length;
-  if (!n) { $("#scope").textContent = ""; return; }
-  const chosen = current.chapters.filter((c) => selectedCh.has(c.id));
-  const tail = " The main button picks up where you left off.";
-  if (!chosen.length || chosen.length === n) {
-    $("#scope").textContent = `Steps run on all ${plural(n, "chapter")}. Tick chapters above to work on just those.` + tail;
-  } else {
-    const names = chosen.slice(0, 3).map((c) => c.name).join(", ") + (chosen.length > 3 ? ", …" : "");
-    $("#scope").textContent = `Steps run on ${plural(chosen.length, "selected chapter")}: ${names}.` + tail;
-  }
-}
+// what the ticked chapters mean is said in the main button's note (renderEstimate)
+function renderScope() { loadEstimate(); }
 
 // ---- jobs ------------------------------------------------------------------
 
@@ -2912,6 +3088,13 @@ $("#go").addEventListener("click", async () => {
   runSteps(["panels", "ocr", "translate", "characters", "script", "title", "audio", "video"], null, "missing");
 });
 
+const stepsMenu = $("#steps-menu");
+function setStepsMenu(open) {
+  stepsMenu.hidden = !open;
+  $("#go-steps").setAttribute("aria-expanded", open ? "true" : "false");
+}
+$("#go-steps").addEventListener("click", (e) => { e.stopPropagation(); setMenu(false); setStepsMenu(stepsMenu.hidden); });
+
 document.querySelectorAll(".steps button[data-steps]").forEach((b) =>
   b.addEventListener("click", async () => {
     if (!current.chapters.length) return notify("Import a folder or add pages first.", "No pages yet");
@@ -2922,7 +3105,6 @@ document.querySelectorAll(".steps button[data-steps]").forEach((b) =>
     runStep(steps[0]);
   }));
 
-$("#redo-selected").addEventListener("click", () => runSteps(["script", "audio"], [...selected]));
 $("#job-cancel").addEventListener("click", () => api(`/api/jobs/${current.job.id}/cancel`, { method: "POST" }));
 $("#job-pause").addEventListener("click", async () => {
   const j = current.job;
@@ -2976,9 +3158,8 @@ function renderJob() {
   box.hidden = !j || j.status === "done" && Date.now() / 1000 - j.created > 600;
   const running = !!j && ACTIVE.includes(j.status);
   // (Import folder and dropping files stay open: a job goes on with the chapters it started with)
-  document.querySelectorAll(".steps button, #go, #redo-selected, #clear-pages").forEach((b) => (b.disabled = running));
+  document.querySelectorAll(".steps button, #go, #go-steps, #clear-pages").forEach((b) => (b.disabled = running));
   $(".go-row").hidden = running;
-  if (!running) $("#redo-selected").disabled = selected.size === 0;
   if (!j) return;
   const left = timeLeft(j);
   const more = j.steps && j.step ? j.steps.length - j.steps.indexOf(j.step) - 1 : 0;
@@ -3167,27 +3348,33 @@ function sceneCard(g, n, firstInChapter) {
   const on = g.some((p) => p.enabled);
   // a scene used in the video with some of its pieces left out (the scan group's notice after the last lines, say)
   const left = on ? g.filter((p) => !p.enabled) : [];
-  const c = el("div", { class: "card" + (on ? "" : " off") });
-  const sel = el("input", {
-    type: "checkbox", class: "adv", title: "Select", checked: selected.has(head.id),
-    onchange: (e) => { e.target.checked ? selected.add(head.id) : selected.delete(head.id); renderJob(); },
-  });
+  const busy = !!(current.job && ACTIVE.includes(current.job.status));
+  const chapter = current.chapters.find((x) => x.id === head.chapter);
+  const named = current.characters.filter((c) => c.id && c.name.trim());
+  const c = el("div", { class: "card scene-open" + (on ? "" : " off") });
+  // the pieces, one under the other, "split here" between them; a black box count on a piece that has boxes
   const pieces = el("div", { class: "pieces" });
   g.forEach((p, i) => {
-    if (i > 0) pieces.append(el("button", { class: "split adv", title: "Make this piece start its own scene", onclick: () => setJoined(p.id, false) }, "✂ split here"));
+    if (i > 0) pieces.append(el("button", { class: "split", title: "Make this piece start its own scene", onclick: () => setJoined(p.id, false) }, "split here"));
     const src = fileUrl(`panels/${p.file}`);
     const img = el("img", { loading: "lazy", src, onclick: () => lightbox(src, p.id) });
-    if (!left.includes(p)) return pieces.append(youtube() ? boxed(img, pieceBoxes(p)) : img);
+    const boxes = youtube() ? pieceBoxes(p) : [];
+    const pic = boxes.length ? el("span", { class: "piece-boxed" }, boxed(img, boxes),
+      el("span", { class: "box-tag piece-badge", title: "Black boxes cover part of this piece in the video. Click it to change them." }, `■ ${boxCount(boxes.length)}`)) : img;
+    if (!left.includes(p)) return pieces.append(pic);
     pieces.append(el("div", { class: "piece-off", title: "Left out of the video (the rest of this scene is used)" }, img,
       el("span", { class: "piece-tag" }, p.credits ? "left out: credits" : "left out"),
       el("button", { type: "button", class: "piece-use small", title: "Use this piece in the video too",
         onclick: async () => { await editPanel(p.id, { enabled: true }); renderPanels(); await followCopies([p], true); renderPanels(); } },
       "Use it")));
   });
-  const narration = el("textarea", { rows: 3, placeholder: "Narration (empty = no voice for this scene)" });
-  narration.value = head.narration || "";
-  narration.addEventListener("change", async () => { await editPanel(head.id, { narration: narration.value }); });
-  const enabled = el("label", {}, el("input", {
+  if (g.length > 4) pieces.classList.add("tall");  // (a scene of many pieces scrolls inside its card)
+  pieces.append(el("span", { class: "muted pieces-note" }, "Click a piece to see it large" +
+    (youtube() ? ", or to draw a black box" : "") + (named.length ? `${youtube() ? " or" : ", or"} to cut out a character's picture.` : ".")));
+  // the head: the scene's number and place, its tags, In the video, Join, Rewrite
+  const title = el("h2", { class: "scene-title" }, `Scene ${n + 1}`,
+    el("span", { class: "muted" }, ` · page ${head.page + 1}${g.length > 1 ? ` · ${plural(g.length, "piece")}` : ""}`));
+  const enabled = el("label", { class: "check" }, el("input", {
     type: "checkbox", checked: on,
     onchange: async (e) => {
       // ticked back in, the scene's pieces left out as the scan group's pages stay out ("Use it" on one keeps it),
@@ -3199,35 +3386,143 @@ function sceneCard(g, n, firstInChapter) {
       renderPanels();
       if (changed.length && await followCopies(changed, want)) renderPanels();
     },
-  }), " Use in video");
+  }), " In the video");
   const isCredits = g.some((p) => p.credits) && !on;
-  const chapter = current.chapters.find((x) => x.id === head.chapter);
-  const flag = youtube() && chapter && (chapter.wording || []).find((w) => w.line === head.narration);
-  const meta = el("div", { class: "meta" },
-    el("span", {}, `#${n + 1} · page ${head.page + 1}${g.length > 1 ? ` · ${g.length} pieces` : ""}`), enabled,
-    isCredits ? el("span", { class: "credits", title: "Left out automatically: one of the scan group's pages at the start or end of the chapter. Tick Use in video to keep it." }, "left out: credits") : null,
-    youtube() && on && g.some((p) => pieceBoxes(p).length) ? el("span", { class: "box-tag", title: "Black boxes cover part of this scene in the video. Click a piece to change them." },
-      `■ ${boxCount(g.reduce((k, p) => k + pieceBoxes(p).length, 0))}`) : null,
+  const flag = sceneFlag(g);
+  const words = (head.narration || "").trim().split(/\s+/).filter(Boolean).length;
+  const headRow = el("div", { class: "scene-head" }, title,
+    isCredits ? el("span", { class: "credits", title: "Left out automatically: one of the scan group's pages at the start or end of the chapter. Tick In the video to keep it." }, "left out: credits") : null,
     flag ? el("span", { class: "word-tag", title: `The wording check flagged this line: ${flag.why}, "${flag.word}". ` +
-      "Edit it, or keep it with Check wording in the Chapters tab." }, "⚠ check wording") : null,
+      "Edit it, or keep it with Check wording." }, "⚠ check wording") : null,
     left.length ? el("span", { class: "credits", title: "Those pieces are dimmed: they're left out of the video, the rest of the scene is used" },
       `${left.length} of ${g.length} pieces left out`) : null,
-    head.audio ? el("audio", { controls: true, preload: "none", src: fileUrl(`audio/${head.audio}`, head.audio_rev) }) : null,
-    head.audio ? el("span", {}, `${head.duration.toFixed(1)}s`) : null,
+    enabled,
+    firstInChapter ? null : el("button", { class: "ghost", title: "Merge this scene into the one above (their narration is combined)",
+      onclick: () => setJoined(head.id, true) }, `Join with scene ${n}`),
+    el("button", { class: "ghost", disabled: busy, title: "Your script writer writes this scene's narration again, then it's voiced",
+      onclick: async () => {
+        if (await ask(`Rewrite scene ${n + 1}?`, "Its narration is written again by your script writer, then voiced. The rest of the chapter stays as it is.", { ok: "Rewrite" })) runSteps(["script", "audio"], [head.id]);
+      } }, "Rewrite this scene"));
+  // the narration, its counts and who wrote it; the voice
+  const narration = el("textarea", { rows: 5, placeholder: "Narration (empty = no voice for this scene)", "aria-label": "Narration" });
+  narration.value = head.narration || "";
+  narration.addEventListener("change", async () => { await editPanel(head.id, { narration: narration.value }); });
+  const by = chapter && chapter.narrator ? ` · Written by ${chapter.narrator.startsWith("local model (fallback)") ? "a local model (fallback)" : chapter.narrator}` : "";
+  const line = el("div", { class: "scene-line muted" }, words
+    ? `${plural(words, "word")} · about ${head.duration ? Math.round(head.duration) : Math.round(words / 2.6)} s spoken${by}`
+    : head.script_done ? `No narration${by}` : "Not written yet");
+  const voiceWho = { edge: `Edge's ${globals && globals.edge_voice} voice`, elevenlabs: "your ElevenLabs voice" }[globals && globals.voice_provider]
+    || `the ${globals ? voiceName(globals.voice, true) : "…"} voice`;
+  const voiceRow = el("div", { class: "scene-voice" },
+    head.audio ? playButton(fileUrl(`audio/${head.audio}`, head.audio_rev), head.duration) : null,
+    el("button", { class: head.audio ? "ghost" : "primary", disabled: !words || busy, title: "Voice this scene's narration",
+      onclick: () => runSteps(["audio"], [head.id]) }, head.audio ? "Make the voice again" : "▶ Make the voice for this scene"),
+    chapter ? el("button", { class: "ghost", title: "Use your own recording of the whole chapter instead", onclick: () => openVoiceover(chapter) }, "Record it yourself") : null,
     head.audio && head.audio_source === "recording" ? el("span", {
       class: head.voice_match < 0.6 ? "rec warn" : "rec",
       title: "From your recording: the share of this line's words the speech recognizer heard in it" },
     `🎙 ${Math.round((head.voice_match || 0) * 100)}%`) : null,
-    firstInChapter ? null : el("button", { class: "ghost join-up adv", title: "Merge this scene into the one above (their narration is combined)",
-      onclick: () => setJoined(head.id, true) }, "⤒ Join with scene above"));
+    el("span", { class: "muted" }, `${voiceWho}${globals && globals.speed && Number(globals.speed) !== 1 ? ` · ${globals.speed}×` : ""}`));
+  // what the pictures say: the text read from them, by speaker when Magi guessed who, with a raw comic's translation
   const text = g.map((p) => p.text).filter(Boolean).join("\n");
-  const ocr = text ? el("div", { class: "ocr adv", title: "Text found in this scene" }, text) : null;
   const guesses = g.flatMap((p) => p.speakers || []);
-  const who = guesses.length ? el("div", { class: "speakers adv", title: "Magi's guesses at who says each line (often wrong)" },
-    ...guesses.map((s) => el("div", {}, el("b", {}, `${s.who}: `), s.text))) : null;
   const tr = isRaw(current.settings) && g.some((p) => (p.bubbles || []).length) ? translationBox(g) : null;
-  c.append(sel, pieces, el("div", { class: "fields" }, meta, narration, tr, ocr, who));
+  const say = text || guesses.length || tr ? el("div", { class: "pictures-say" }, el("div", { class: "say-head" }, "The pictures say"),
+    guesses.length ? el("div", { class: "say-grid" }, ...guesses.flatMap((s) => [el("span", { class: "muted" }, s.who), el("span", {}, s.text)]))
+      : text ? el("div", { class: "say-text" }, text) : null,
+    tr,
+    el("div", { class: "muted say-note" }, guesses.length ? "Who says what, as Magi's speaker detection guesses it (often wrong)."
+      : isRaw(current.settings) ? `The ${LANGUAGES[current.settings.language]}, read by the text reader and translated by your script writer` +
+        `${current.settings.typeset ? "; the English is lettered into the pictures when the video is made" : ""}.`
+      : "Read from the pictures by the text reader. The narrator knows it.")) : null;
+  c.append(headRow, el("div", { class: "scene-body" }, pieces,
+    el("div", { class: "fields" }, el("span", { class: "field-head" }, "Narration"), narration, line, voiceRow, say)));
   return c;
+}
+
+// A chapter's narration as one text, to read through (This scene → The whole chapter)
+function readChapter(chapter, groups) {
+  const text = groups.map((g) => (g[0].narration || "").trim()).filter(Boolean).join("\n\n");
+  const close = overlay(el("div", { class: "lightbox read-box", onclick: (e) => { if (e.target.classList.contains("lightbox")) close(); } },
+    el("div", { class: "read-text" }, el("h3", {}, chapter.name), el("pre", {}, text || "Nothing written yet."),
+      el("button", { class: "ghost", onclick: () => close() }, "Close"))));
+}
+
+// The inspector at the Script stage: this scene (who is in it, its black boxes and wording, its chapter, details),
+// then the project's own script settings below
+function renderSceneInspector(open, groups, flagged, numberOf) {
+  const box = $("#scene-inspector");
+  box.hidden = tab !== "script";
+  if (!open) return box.replaceChildren();
+  const head = open[0], chapter = current.chapters.find((x) => x.id === head.chapter);
+  const text = head.narration || "";
+  const named = current.characters.filter((c) => c.id && c.name.trim());
+  const inIt = named.filter((c) => [c.name, ...String(c.aliases || "").split(",")].map((x) => x.trim()).filter(Boolean).some((nm) => text.includes(nm)));
+  const section = (title, ...kids) => el("section", { class: "si-section" }, el("h3", {}, title), ...kids);
+  const link = (label, onclick) => el("button", { type: "button", class: "link", onclick }, label);
+  const parts = [section("Who is in it",
+    el("div", { class: "si-chips" }, ...inIt.map((c) => el("span", { class: "chip" }, c.name)),
+      el("button", { type: "button", class: "chip dashed", title: "The project's characters", onclick: () => showTab("characters") },
+        named.length ? "+ someone" : "Name the characters")),
+    el("div", {}, inIt.length ? "Named in this scene's narration. The narrator uses these names." : "No named character in this scene's narration."))];
+  if (youtube()) {
+    const boxes = open.reduce((k, p) => k + pieceBoxes(p).length, 0);
+    parts.push(section("Black boxes", el("div", {}, `${boxes ? `${boxCount(boxes)} on this scene's pieces.` : "None on this scene."} YouTube-safe is on for this project.`),
+      link("See every box in the chapter", openBoxes)));
+    const flag = sceneFlag(open), i = groups.indexOf(open);
+    const next = flagged.find((g) => groups.indexOf(g) > i && g !== open) || flagged.find((g) => g !== open);
+    parts.push(section("Wording",
+      el("div", {}, flag ? `Flagged: ${flag.why}, "${flag.word}". Edit the line, or keep it with Check wording.`
+        : `Nothing flagged here.${next ? ` Scene ${numberOf(next)} has a word to check.` : ""}`),
+      flag && chapter ? link("Check wording", () => checkWording(chapter, wordingFlags(chapter)))
+        : next ? link(`Go to scene ${numberOf(next)}`, () => { sceneSel = next[0].id; renderPanels(); }) : null));
+  }
+  if (chapter) {
+    const mine = displayGroups(current.panels.filter((p) => p.chapter === chapter.id));
+    const written = mine.filter((g) => (g[0].narration || "").trim()).length;
+    const secs = mine.reduce((k, g) => k + (g[0].duration || (g[0].narration ? g[0].narration.trim().split(/\s+/).length / 2.6 : 0)), 0);
+    parts.push(section("The whole chapter",
+      el("div", {}, `${chapter.name}: ${plural(mine.length, "scene")} · ${written} written${secs ? ` · about ${Math.max(1, Math.round(secs / 60))} min of narration so far` : ""}`),
+      el("div", { class: "link-row" }, link("Read it as one text", () => readChapter(chapter, mine)),
+        link("Rewrite the chapter", async () => {
+          if (await ask(`Rewrite ${chapter.name}?`, "Every scene's narration is written again by your script writer, then voiced.", { ok: "Rewrite" })) {
+            runSteps(["script", "audio"], mine.map((g) => g[0].id));
+          }
+        }))));
+  }
+  const guesses = open.flatMap((p) => p.speakers || []);
+  parts.push(el("details", { class: "details-adv si-details" }, el("summary", {}, "Details"),
+    el("div", { class: "si-details-body muted" },
+      el("span", {}, `Text found: ${plural(open.reduce((k, p) => k + ((p.bubbles || []).length || (p.text ? 1 : 0)), 0), "box")}` +
+        `${isRaw(current.settings) ? `, ${LANGUAGES[current.settings.language]}` : ""}.`),
+      guesses.length ? el("span", {}, `Speaker guesses by Magi: ${[...new Set(guesses.map((s) => s.who))].join(", ")}.`) : null,
+      el("span", {}, `Pieces: ${open.map((p) => p.file.replace(/\.\w+$/, "")).join(", ")}.`))));
+  parts.push(el("h2", { class: "inspector-title si-project" }, "This project"));
+  box.replaceChildren(...parts);
+}
+
+// A line's voice, played from one small button (a full player on each of sixty scenes was a wall of "0:00 / 0:00"):
+// one line plays at a time, and the button playing shows ■ until it ends.
+let linePlaying = null;  // {audio, button}
+function playButton(src, seconds) {
+  const label = `▶ ${seconds.toFixed(1)}s`;
+  const b = el("button", { type: "button", class: "ghost small play", title: "Play this line's voice" }, label);
+  b.addEventListener("click", () => {
+    if (linePlaying && linePlaying.button === b) return linePlaying.audio.pause();
+    if (linePlaying) linePlaying.audio.pause();
+    const audio = new Audio(src);
+    linePlaying = { audio, button: b };
+    const done = () => {
+      if (linePlaying && linePlaying.audio === audio) linePlaying = null;
+      b.textContent = label;
+      b.classList.remove("on");
+    };
+    for (const ev of ["pause", "ended", "error"]) audio.addEventListener(ev, done);
+    b.textContent = `■ ${seconds.toFixed(1)}s`;
+    b.classList.add("on");
+    audio.play().catch((e) => { done(); notify(e.message); });
+  });
+  return b;
 }
 
 // ---- a raw comic's translation (translate.py): each text box's original, its kind and its English, to correct ----
@@ -3326,7 +3621,7 @@ function renderBoxes() {
   const chapters = new Set(pieces.map((p) => p.chapter)).size;
   $("#boxes-summary").textContent = pieces.length
     ? `${plural(pieces.length, "piece")} with boxes in ${plural(chapters, "chapter")}` + (selectedCh.size ? " (selected chapters)" : "")
-    : "No boxes yet" + (selectedCh.size ? " in the selected chapters" : "") + ". Find boxes now (the Video tab, in advanced mode) runs the box finder.";
+    : "No boxes yet" + (selectedCh.size ? " in the selected chapters" : "") + ". Find boxes now (the YouTube-safe panel at Script and voice) runs the box finder.";
   renderBoxesCount();
 }
 
@@ -3451,47 +3746,150 @@ function lightbox(src, panelId = null) {
   }
 }
 
+// The script as a filmstrip: every scene in a list on the left (a thumbnail, its first words, its state), the one
+// chosen open on the right as a card (sceneCard). A chapter can be listed alone; To check jumps to the next scene
+// the wording check flagged.
+let sceneSel = null;    // the head panel's id of the scene open
+let sceneChapter = "";  // the chapter listed alone ("" = all)
+
+const sceneFlag = (g) => {
+  const chapter = current.chapters.find((x) => x.id === g[0].chapter);
+  return youtube() && chapter && (chapter.wording || []).find((w) => w.line === g[0].narration);
+};
+
+function sceneItem(g, n, first) {
+  const head = g[0], on = g.some((p) => p.enabled), words = (head.narration || "").trim();
+  const flag = sceneFlag(g);
+  const [cls, state] = !on ? ["off", g.some((p) => p.credits) ? "left out: credits" : "not in the video"]
+    : head.audio ? ["voiced", `${(head.duration || 0).toFixed(1)}s`]
+    : words ? ["written", "no voice yet"] : ["todo", "not written"];
+  const item = el("button", { type: "button", class: `scene-item${head.id === sceneSel ? " on" : ""}${on ? "" : " off"}`,
+    "aria-current": head.id === sceneSel ? "true" : null, onclick: () => { sceneSel = head.id; renderPanels(); } },
+  el("img", { class: "scene-thumb", loading: "lazy", src: fileUrl(`panels/${head.file}`), alt: "" }),
+  el("span", { class: "scene-text" },
+    el("span", { class: `scene-no${flag ? " warn" : ""}` }, `${n + 1}${g.length > 1 ? ` · ${plural(g.length, "piece")}` : ""}${flag ? " · check wording" : ""}`),
+    el("span", { class: "scene-words" }, words || (head.script_done ? "No narration" : "Not written yet"))),
+  el("span", { class: `scene-state ${cls}` }, state));
+  return el("li", { class: first ? "first-in-chapter" : "" }, item);
+}
+
 function renderPanels() {
   const box = $("#panels");
   // keep a textarea the user is typing in
   if (box.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA") return;
   const names = Object.fromEntries(current.chapters.map((c) => [c.id, c.name]));
-  const groups = displayGroups(current.panels.filter((p) => inScope(p.chapter)));
-  const nodes = [];
+  const all = displayGroups(current.panels.filter((p) => inScope(p.chapter)));
+  // the chapter filter: shown with two chapters or more
+  const chapterIds = current.chapters.filter((c) => all.some((g) => g[0].chapter === c.id)).map((c) => c.id);
+  if (!chapterIds.includes(sceneChapter)) sceneChapter = "";
+  const sel = $("#scene-chapter");
+  sel.replaceChildren(el("option", { value: "" }, "All chapters"), ...chapterIds.map((id) => el("option", { value: id }, names[id] || "Chapter")));
+  sel.value = sceneChapter;
+  const words = $("#scene-find").value.trim().toLowerCase();
+  let groups = sceneChapter ? all.filter((g) => g[0].chapter === sceneChapter) : all;
+  if (words) groups = groups.filter((g) => (g[0].narration || "").toLowerCase().includes(words) || g.some((p) => (p.text || "").toLowerCase().includes(words)));
+  if (!groups.some((g) => g[0].id === sceneSel)) sceneSel = groups.length ? groups[0][0].id : null;
+  // the list, by chapter
+  const items = [], meta = new Map();
   let lastChapter = null, n = 0;
-  for (const g of groups.slice(0, shown)) {
+  for (const g of groups) {
     const first = g[0].chapter !== lastChapter;
     if (first) {
-      nodes.push(el("div", { class: "chapter-divider" }, names[g[0].chapter] || "Chapter"));
+      items.push(el("li", { class: "chapter-divider" }, names[g[0].chapter] || "Chapter"));
       lastChapter = g[0].chapter;
       n = 0;
     }
-    nodes.push(sceneCard(g, n++, first));
+    meta.set(g[0].id, { n, first });
+    items.push(sceneItem(g, n++, first));
   }
-  box.replaceChildren(...nodes);
-  $("#more").hidden = groups.length <= shown;
-  const on = groups.filter((g) => g.some((p) => p.enabled)).length;
-  const pieces = groups.reduce((k, g) => k + g.length, 0);
-  $("#panel-count").textContent = groups.length
-    ? `${on} of ${plural(groups.length, "scene")} used (${pieces} pieces)${chosenIds().length ? " in selected chapters" : ""}`
-    : current.chapters.length ? "— none yet: Make the recap finds them" : "— add chapters to start";
+  $("#scene-list").replaceChildren(...items, words && !groups.length ? el("li", { class: "muted scene-none" }, "No scene has those words.") : null);
+  const onItem = $("#scene-list .scene-item.on");
+  if (onItem) onItem.scrollIntoView({ block: "nearest" });
+  // the scene open
+  const open = groups.find((g) => g[0].id === sceneSel);
+  box.replaceChildren(...(open ? [sceneCard(open, meta.get(open[0].id).n, meta.get(open[0].id).first)]
+    : [el("div", { class: "empty-note" }, current.chapters.length ? "No scenes yet. Make the recap finds them." : "Add chapters to start.")]));
+  $("#more").hidden = true;
+  // the wording check's flags: the next one, from the scene open
+  const flagged = groups.filter((g) => sceneFlag(g));
+  $("#scene-check").hidden = !flagged.length;
+  $("#scene-check").textContent = `To check · ${flagged.length}`;
+  $("#scene-check").onclick = () => {
+    const i = groups.findIndex((g) => g[0].id === sceneSel);
+    const next = flagged.find((g) => groups.indexOf(g) > i) || flagged[0];
+    sceneSel = next[0].id;
+    renderPanels();
+  };
+  // the rail's head: the counts and the chapter chips (the chapter listed, or the open scene's, and All chapters)
+  const written = groups.filter((g) => (g[0].narration || "").trim()).length;
+  $("#script-back-name").textContent = current.name;
+  $("#script-counts").textContent = groups.length || words
+    ? `${sceneChapter ? names[sceneChapter] : "All chapters"} · ${plural(groups.length, "scene")} · ${written} written${flagged.length ? ` · ${flagged.length} to check` : ""}`
+    : current.chapters.length ? "No scenes yet: Make the recap finds them" : "Add chapters to start";
+  const chip = (label, on, id) => el("button", { type: "button", class: `chip${on ? " on" : ""}`, onclick: () => { sceneChapter = id; sceneSel = null; renderPanels(); } }, label);
+  const chapterOf = sceneChapter || (open ? open[0].chapter : "");
+  $("#scene-chips").replaceChildren(...(chapterIds.length > 1 ? [
+    chapterOf ? chip(names[chapterOf] || "Chapter", !!sceneChapter, chapterOf) : null,
+    chip("All chapters", !sceneChapter, ""),
+  ] : []));
+  renderSceneInspector(open, groups, flagged, (g) => (meta.get(g[0].id) || { n: 0 }).n + 1);
   renderCreditsCount();
   renderBoxesCount();
 }
+$("#scene-find").addEventListener("input", () => renderPanels());
+$("#script-back").addEventListener("click", (e) => { e.preventDefault(); showTab("chapters"); });
+$("#scene-chapter").addEventListener("change", (e) => { sceneChapter = e.target.value; sceneSel = null; renderPanels(); });
+// the arrow keys walk the list
+$("#scene-list").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  const items = [...document.querySelectorAll("#scene-list .scene-item")];
+  const i = items.indexOf(e.target.closest(".scene-item"));
+  if (i < 0) return;
+  const next = items[i + (e.key === "ArrowDown" ? 1 : -1)];
+  if (next) { e.preventDefault(); next.click(); document.querySelector("#scene-list .scene-item.on")?.focus(); }
+});
 $("#more").addEventListener("click", () => { shown += PAGE; renderPanels(); });
 
-// ---- layout: tabs, simple and advanced mode, the project menu, long help text ----
-// Simple mode shows what most projects need; Advanced mode (bottom of the sidebar) shows every step, setting and
-// tool: anything marked .adv. Chapter selection only counts in advanced mode (chosenIds).
+// Reviewing a script: scrolling on past the end of the open scene rolls on to the next one (and up past its top, to
+// the one before, at its end), so a chapter reads through without a click per scene. It takes a little more wheel
+// at the edge, so the edge itself doesn't jump, and a pause after each roll.
+(() => {
+  const main = $("#main");
+  let edgeAt = 0, pushed = 0, rolledAt = 0;
+  main.addEventListener("wheel", (e) => {
+    if (!document.body.classList.contains("script-mode") || !$("#panels .scene-open")) return;
+    const down = e.deltaY > 0;
+    const atEdge = down ? main.scrollTop + main.clientHeight >= main.scrollHeight - 2 : main.scrollTop <= 0;
+    const now = Date.now();
+    if (!atEdge || now - rolledAt < 600) { pushed = 0; return; }
+    if (now - edgeAt > 500) pushed = 0;  // (a fresh push)
+    edgeAt = now;
+    pushed += Math.abs(e.deltaY);
+    if (pushed < 240) return;
+    const items = [...document.querySelectorAll("#scene-list .scene-item")];
+    const i = items.indexOf(document.querySelector("#scene-list .scene-item.on"));
+    const next = i >= 0 ? items[i + (down ? 1 : -1)] : null;
+    pushed = 0;
+    if (!next) return;
+    rolledAt = now;
+    next.click();
+    // the new scene from its top (or its end, going up): placed now, and again once its pictures have their size
+    const place = () => { main.scrollTop = down ? 0 : main.scrollHeight; };
+    place();
+    requestAnimationFrame(place);
+    setTimeout(place, 80);
+  }, { passive: true });
+})();
 
-const ADV_TABS = ["prompt"];
-const isAdvanced = () => document.body.classList.contains("advanced");
+// ---- layout: tabs, the project menu, long help text ----
+
 const stored = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch { /* not remembered */ } };
 let tab = stored("tab") || "chapters";
 
+const STAGE_NAMES = { chapters: "Chapters", characters: "Characters", script: "Script and voice", video: "Video", youtube: "Publish" };
 function showTab(name) {
-  if (!isAdvanced() && ADV_TABS.includes(name)) name = "chapters";
+  if (!STAGE_NAMES[name]) name = "chapters";  // (a tab remembered from an older page: Project settings, Prompt)
   tab = name;
   store("tab", name);
   for (const b of document.querySelectorAll(".tabs [data-tab]")) {
@@ -3499,32 +3897,29 @@ function showTab(name) {
     b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
   }
   for (const page of document.querySelectorAll(".tab-page")) page.hidden = page.dataset.page !== name;
+  $("#inspector").dataset.stage = name;  // (the inspector shows this stage's settings)
+  $("#inspector-title").textContent = name === "script" ? "This scene" : STAGE_NAMES[name];
+  // the Script stage is the editor: the rail lists the scenes, the strip and the head step aside
+  const scripting = name === "script" && !!current;
+  document.body.classList.toggle("script-mode", scripting);
+  $("#script-rail").hidden = !scripting;
+  $("#scene-inspector").hidden = !scripting;
   // text boxes sized while their tab was hidden measured nothing: size them now
   requestAnimationFrame(() => document.querySelectorAll(`.tab-page[data-page="${name}"] textarea`).forEach(autosize));
 }
 document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 document.querySelectorAll(".tile[data-goto]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.goto)));
 
-function applyMode(on) {
-  document.body.classList.toggle("advanced", on);
-  $("#advanced-mode").checked = on;
-  store("advanced", on ? "1" : "");
-  showTab(tab);
-  if (current) { shown = PAGE; render(); }
-  if ($("#global-dialog").open) renderSettingsNav();
-}
-
 // Settings shows one section at a time, picked in the list on its left: the app's own sections, then Plugins (the
 // list of plugins, and each plugin's own section, RecapStudio.addSettings). Find a setting narrows the list to the
-// sections that have the words. Sections that are hidden, or need Advanced mode, aren't listed.
+// sections that have the words. Hidden sections aren't listed.
 let settingsSection = stored("settings-section") || "";
 const sectionName = (fs) => fs.dataset.nav || fs.querySelector("legend").textContent.trim();
 
 function renderSettingsNav() {
   const all = [...document.querySelectorAll("#gs-pages > fieldset")];
   const words = $("#gs-find").value.trim().toLowerCase();
-  const listed = all.filter((fs) => !fs.hidden && (isAdvanced() || !fs.classList.contains("adv"))
-    && (!words || fs.textContent.toLowerCase().includes(words)));
+  const listed = all.filter((fs) => !fs.hidden && (!words || fs.textContent.toLowerCase().includes(words)));
   if (!listed.some((fs) => sectionName(fs) === settingsSection)) settingsSection = listed.length ? sectionName(listed[0]) : "";
   for (const fs of all) fs.classList.toggle("gs-on", listed.includes(fs) && sectionName(fs) === settingsSection);
   const item = (fs) => el("button", { type: "button", class: sectionName(fs) === settingsSection ? "on" : "",
@@ -3533,13 +3928,10 @@ function renderSettingsNav() {
   const own = listed.filter((fs) => !fs.dataset.plugin && fs.id !== "plugins-box");
   const plugins = listed.filter((fs) => fs.id === "plugins-box").concat(listed.filter((fs) => fs.dataset.plugin)
     .sort((a, b) => sectionName(a).localeCompare(sectionName(b))));
-  const more = isAdvanced() ? [] : all.filter((fs) => !fs.hidden && fs.classList.contains("adv")).map(sectionName);
   $("#gs-nav").replaceChildren(...[
     own.length ? el("span", { class: "gs-group" }, "Recap Studio") : null, ...own.map(item),
     plugins.length ? el("span", { class: "gs-group" }, "Plugins") : null, ...plugins.map(item),
     listed.length ? null : el("span", { class: "muted gs-note" }, "No setting has those words."),
-    more.length && !words ? el("span", { class: "hint gs-note" },
-      `Advanced mode adds ${more.slice(0, -1).join(", ")}${more.length > 1 ? " and " : ""}${more[more.length - 1]}.`) : null,
   ].filter(Boolean));
 }
 
@@ -3555,13 +3947,12 @@ function openSettings(name) {
   renderGlobal();
   loadStorage();
   if (name) { $("#gs-find").value = ""; showSettings(name); }
-  $("#global-dialog").showModal();
+  $("#global-dialog").show();
 }
 
 $("#gs-find").addEventListener("input", () => { renderSettingsNav(); $("#gs-pages").scrollTop = 0; });
 $("#gs-find").addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });  // (not Close)
-$("#advanced-mode").addEventListener("change", (e) => applyMode(e.target.checked));
-applyMode(stored("advanced") === "1");
+showTab(tab);
 
 const projectMenu = $("#project-menu-list");
 function setMenu(open) {
@@ -3569,19 +3960,37 @@ function setMenu(open) {
   $("#project-menu").setAttribute("aria-expanded", open ? "true" : "false");
 }
 $("#project-menu").addEventListener("click", (e) => { e.stopPropagation(); setMenu(projectMenu.hidden); });
-document.addEventListener("click", () => setMenu(false));  // (a menu item's own click runs first)
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
+document.addEventListener("click", () => { setMenu(false); setStepsMenu(false); });  // (a menu item's own click runs first)
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { setMenu(false); setStepsMenu(false); } });
 
-// In simple mode a long help text shows its first two lines; hover it for the rest, or click it to open it.
+// A long help text shows its first two lines; hover it for the rest, or click it to open it.
 // Warnings always show in full.
+// A "More" after each one says so (a clamped text ends in "…", which says nothing about a click); "Less" once open.
 let hintsQueued = false;
+const moreOf = (h) => (h.nextElementSibling && h.nextElementSibling.classList.contains("hint-more") ? h.nextElementSibling : null);
+function toggleHint(h) {
+  h.classList.toggle("open");
+  const more = moreOf(h);
+  if (more) more.textContent = h.classList.contains("open") ? "Less" : "More";
+}
 function markLongHints() {
   hintsQueued = false;
+  // a dialog's Close must close whatever is in its boxes (the server checks what's saved, as it's saved): a plugin's
+  // dialog form gets novalidate like the app's own, so a browser's step or range check can't hold it open
+  for (const f of document.querySelectorAll("dialog form:not([novalidate])")) f.noValidate = true;
+  for (const b of document.querySelectorAll(".hint-more")) {  // (one left behind by a hint that went, or got short)
+    const h = b.previousElementSibling;
+    if (!h || !h.classList.contains("hint")) b.remove();
+  }
   for (const h of document.querySelectorAll(".hint")) {
     const long = h.textContent.trim().length > 150 && !h.classList.contains("warn") && !h.closest(".field-head");
     h.classList.toggle("long", long);
     if (long) h.title = h.textContent.trim(); else if (h.classList.contains("was-long")) h.removeAttribute("title");
     h.classList.toggle("was-long", long);
+    const more = moreOf(h);
+    if (long && !more) {
+      h.after(el("button", { type: "button", class: "link-btn hint-more", onclick: () => toggleHint(h) }, h.classList.contains("open") ? "Less" : "More"));
+    } else if (!long && more) more.remove();
   }
 }
 new MutationObserver(() => {
@@ -3590,7 +3999,7 @@ new MutationObserver(() => {
 markLongHints();
 document.addEventListener("click", (e) => {
   const h = e.target.closest(".hint.long");
-  if (h && !e.target.closest("a, button, input, select")) h.classList.toggle("open");
+  if (h && !e.target.closest("a, button, input, select")) toggleHint(h);
 });
 
 // ---- render ----------------------------------------------------------------
@@ -3598,15 +4007,19 @@ document.addEventListener("click", (e) => {
 function render() {
   $("#empty").hidden = !!current;
   $("#project").hidden = !current;
-  if (!current) return;
+  document.body.classList.toggle("in-project", !!current);  // (the rail: Library instead of New project)
+  showPictures();
+  if (!current) {
+    document.body.classList.remove("script-mode");
+    $("#script-rail").hidden = true;
+    return;
+  }
   if (document.activeElement !== $("#project-name")) $("#project-name").value = current.name;
-  $("#page-count").textContent = current.chapters.length
-    ? `${plural(current.chapters.length, "chapter")}, ${current.pages.length} pages`
-    : "";
+  $("#page-count").textContent = "";
   $("#clear-pages").hidden = current.chapters.length === 0;
   renderSettings();
+  renderSourceBox();
   renderOverview();
-  renderAppLine();
   renderPrompt();
   renderSteps();
   renderScanButton();
@@ -3628,18 +4041,36 @@ function renderOverview() {
   const voiced = all.filter((s) => s.scenes && s.script === s.scenes && s.voice === s.lines).length;
   const out = current.output;
   const seconds = out ? (out.parts || []).reduce((k, x) => k + (x.seconds || 0), 0) : 0;
-  const tile = (id, text, done) => {
-    $(id).textContent = text;
-    $(id).parentElement.classList.toggle("done", !!done);
+  // the pipeline's stages: each one's state, and which the job under way is at (or stopped to ask at)
+  const job = current.job && ACTIVE.includes(current.job.status) ? current.job : null;
+  const asking = !!(job && job.status === "paused" && job.pause_reason);
+  const busy = job ? STAGE_OF_STEP[job.step] || "" : "";
+  const stage = (id, text, done) => {
+    const b = document.querySelector(`.tabs.pipeline [data-tab="${id}"]`);
+    $(`#tile-${id === "youtube" ? "publish" : id}`).textContent = text;
+    b.classList.toggle("done", !!done && busy !== id);
+    b.classList.toggle("busy", busy === id && !asking);
+    b.classList.toggle("ask", busy === id && asking);
   };
-  tile("#tile-chapters", n ? `${plural(n, "chapter")} · ${current.pages.length} pages` : "None yet", n > 0);
+  const named = current.characters.filter((c) => c.name).length;
   const toCheck = current.chapters.filter((c) => wordingFlags(c).length).length;
-  tile("#tile-script", !found ? "Not started" : `${written} of ${n} written` + (toCheck ? ` · ${toCheck} to check` : ""),
-    n && written === n && !toCheck);
-  tile("#tile-voice", !written ? "Not started" : `${voiced} of ${n} voiced`, n && voiced === n);
-  tile("#tile-video", out ? (seconds ? `Made · ${lengthText(seconds)}` : "Made") : "Not made yet", !!out);
+  stage("chapters", n ? `${plural(n, "chapter")} · ${current.pages.length} pages${found && found < n ? ` · ${found} read` : ""}` : "None yet", n > 0);
+  stage("characters", named ? `${named} named` : current.settings.find_characters ? "Found before the script" : "None yet", named > 0);
+  stage("script", !found ? "Not started" : `${written} of ${n} written · ${voiced} of ${n} voiced` + (toCheck ? ` · ${toCheck} to check` : ""),
+    n && written === n && voiced === n && !toCheck);
+  stage("video", out ? (seconds ? `Made · ${lengthText(seconds)}` : "Made") : "Not made yet", !!out);
+  stage("youtube", current.youtube ? "Title and thumbnail ready" : current.settings.suggest_title ? "Title after the script" : "Nothing suggested", !!current.youtube);
   $("#go").textContent = !n ? "Add chapters" : !found ? "Make the recap" : voiced === n && out ? "Make the video again" : "Continue the recap";
+  const s = current.settings, kind = kindOf(s);
+  $("#project-chips").replaceChildren(...[
+    kind !== "auto" ? KINDS.find((k) => k[0] === kind)[1].toLowerCase() : null,
+    isRaw(s) ? `${LANGUAGES[s.language] || s.language}, translated` : null,
+    s.youtube_safe ? "YouTube-safe" : null,
+  ].filter(Boolean).map((t) => el("span", { class: "tag" }, t)));
 }
+// the stage each of the pipeline's steps belongs to (renderOverview)
+const STAGE_OF_STEP = { download: "chapters", panels: "chapters", ocr: "chapters", translate: "chapters", characters: "characters",
+  script: "script", audio: "script", title: "youtube", video: "video" };
 
 // The rendered video, or its parts (Settings → Video → Split into parts), with each one's subtitles
 // and YouTube chapter list; and the last export for video editors.
@@ -3664,6 +4095,7 @@ function renderOutput() {
   $("#output-shorts").hidden = !shorts.length;
   if (!out) {
     $("#player").removeAttribute("src");
+    $("#player").removeAttribute("poster");
     $("#output-parts").replaceChildren();
     return;
   }
@@ -3673,6 +4105,10 @@ function renderOutput() {
   const part = parts[shownPart];
   const src = `/files/${current.id}/${encodeURI(shownShort >= 0 ? shorts[shownShort] : part.video)}?t=${out.time}`;
   if (!$("#player").src.endsWith(src)) $("#player").src = src;
+  // the thumbnail as the player's poster (the video's first frame is often black), not for a Short (portrait)
+  const yt = current.youtube;
+  if (yt && yt.file && shownShort < 0) $("#player").poster = fileUrl(yt.file, Math.round(yt.created || 0));
+  else $("#player").removeAttribute("poster");
   $("#srt-link").href = fileUrl(encodeURI(part.srt), out.time);
   $("#video-download").hidden = !(env && env.server);
   $("#video-download").href = src;
@@ -3865,7 +4301,7 @@ $("#find-credits").addEventListener("click", async () => {
 });
 
 // What was found as the scan group's pages, in one dialog: each kind once (a picture and its copies in other
-// chapters, credits.kinds), to keep or leave out all of them at once; in advanced mode also every piece,
+// chapters, credits.kinds), to keep or leave out all of them at once; with its switch also every piece,
 // chapter by chapter, to put back what shouldn't be (or leave out again one you put back).
 function creditPieces(withKept) {
   return current.panels.filter((p) => p.credits && inScope(p.chapter) && (withKept || !p.enabled));
@@ -3878,7 +4314,7 @@ function renderCreditsCount() {
   const all = creditPieces(true), off = all.filter((p) => !p.enabled).length;
   const open = all.filter(uncheckedCredit).length;
   $("#credits-count").hidden = !all.length;
-  $("#credits-count").textContent = `Left out: ${plural(off, "piece")}${open ? ` (${open} to check)` : ""}…`;
+  $("#credits-count").textContent = `${plural(off, "piece")} left out${open ? `, ${open} to check` : ""}…`;
 }
 
 let creditKinds = [];
@@ -3940,7 +4376,7 @@ async function openCredits() {
 }
 
 function showCreditsView() {
-  const every = $("#credits-every").checked && isAdvanced();
+  const every = $("#credits-every").checked;
   $("#credits-kinds").hidden = every;
   $("#credits-list").hidden = $("#credits-kept-box").hidden = !every;
   if (every) renderCredits();
@@ -4099,6 +4535,14 @@ const WRITERS = [
 ];
 const VOICE_LANGS = { a: "American English", b: "British English", e: "Spanish", f: "French", h: "Hindi", i: "Italian",
   j: "Japanese", p: "Brazilian Portuguese", z: "Mandarin" };
+
+// A Kokoro voice's name from its code: "af_heart" is Heart (American English, female); short: just Heart
+function voiceName(code, short = false) {
+  const m = /^([a-z])([fm])_(.+)$/.exec(code || "");
+  if (!m || !VOICE_LANGS[m[1]]) return code || "";
+  const name = m[3].replace(/_/g, " ").replace(/\b\p{L}/gu, (ch) => ch.toUpperCase());
+  return short ? name : `${name} (${VOICE_LANGS[m[1]]}, ${m[2] === "m" ? "male" : "female"})`;
+}
 let setupPage = 0, setupPoll = null, setupKeyNote = null;
 let setupGpuPoll = null;  // (apart from setupPoll: the voice can download at the same time)
 const setupWants = { ocr: true, bubbles: true, scan: false, magi: false, magiLicense: false };
@@ -4112,7 +4556,6 @@ function openSetup(page = 0) {
 async function saveGlobal(changes) {
   globals = await api("/api/settings", { method: "PUT", json: changes });
   if (current) Object.assign(current.settings, globals);
-  renderAppLine();
 }
 
 function setupLine(ok, text, ...more) {
@@ -4335,8 +4778,7 @@ function setupVoice(body) {
     body.append(el("p", {}, "The voice model isn't downloaded yet. Go back to the first step to download it; you can carry on with setup meanwhile."));
     return;
   }
-  const name = (v) => `${v}${VOICE_LANGS[v[0]] ? ` (${VOICE_LANGS[v[0]]}, ${v[1] === "m" ? "male" : "female"})` : ""}`;
-  const sel = el("select", {}, ...env.voices.map((v) => el("option", { value: v }, name(v))));
+  const sel = el("select", {}, ...env.voices.map((v) => el("option", { value: v }, voiceName(v))));
   sel.value = globals.voice;
   sel.addEventListener("change", () => saveGlobal({ voice: sel.value }));
   const speed = el("input", { type: "number", step: "0.05", min: "0.5", max: "2" });
@@ -4520,7 +4962,7 @@ $("#show-folder").addEventListener("click", () => {
   api(`/api/projects/${current.id}/show-folder`, { method: "POST" }).catch((e) => notify(e.message));
 });
 
-// ---- updates from GitHub (updates.py): a button in the sidebar when a newer release is out, Settings → Updates ----
+// ---- updates from GitHub (updates.py): a button in the sidebar when a newer release is out, Settings → Updates and this PC ----
 let appUpdate = null, updatePoll = null;
 const updating = () => appUpdate && ["downloading", "installing"].includes(appUpdate.state);
 
@@ -4605,6 +5047,19 @@ $("#update-notes").addEventListener("click", () => api("/api/update/page", { met
 
 const pluginHooks = {};      // event: [functions] (RecapStudio.on)
 const pluginSettings = [];   // [{box, render}] (RecapStudio.addSettings), drawn with the rest of Settings
+const libraryPanels = [];    // [{box, render}] (RecapStudio.addLibraryPanel), drawn again with the library's projects
+
+// Publish → Where it goes: the posting plugins' buttons, or, with none, how to set one up
+function renderPublishWhere() {
+  $("#publish-none").hidden = $("#publish-plugins").children.length > 0;
+}
+$("#publish-setup").addEventListener("click", () => openSettings("Manage plugins"));
+
+// a status chip: the words at the right of a rail button or a library panel's title (tone: "", "ok", "warn", "on")
+const chipOf = (chip) => (text, tone = "") => {
+  chip.textContent = text || "";
+  chip.className = `side-chip${tone ? ` ${tone}` : ""}`;
+};
 
 async function emitPlugins(event, data) {
   for (const fn of pluginHooks[event] || []) {
@@ -4629,18 +5084,47 @@ window.RecapStudio = {
   current: () => current,
   reload: () => (current ? openProject(current.id) : loadProjects()),
   on(event, fn) { (pluginHooks[event] ||= []).push(fn); },
+  // where addButton can put a button (a plugin checks for "publish" before asking for it: an older app has no such place)
+  places: ["characters", "chapters", "video", "publish", "sidebar"],
   // a button in the Characters tab ("characters"), beside Get chapters from a site ("chapters"), with the finished
-  // video's buttons in the Video tab ("video"), or in the sidebar under Open project file ("sidebar", for what's
-  // about every project)
-  addButton(where, label, onclick, { title = "" } = {}) {
-    const b = el("button", { type: "button", class: where === "sidebar" ? "ghost small open-file" : where === "video" ? "" : "ghost",
-      title, onclick }, label);
-    if (where === "chapters") $("#get-chapters").after(b);
-    else if (where === "sidebar") $("#open-file").after(b);
-    else if (where === "video") $("#output .output-actions").append(b);
-    else $(".char-buttons").append(b);
+  // video's buttons in the Video tab ("video"), with the posting services at Publish ("publish": Post to YouTube,
+  // Post to TikTok), or in the rail's Automation section ("sidebar", for what's about every project: its words, and
+  // a status chip at its right, `status` now and setStatus(text, tone) later)
+  addButton(where, label, onclick, { title = "", status = "" } = {}) {
+    const b = el("button", { type: "button", class: where === "sidebar" || where === "video" ? "" : "ghost", title, onclick });
+    if (where === "sidebar") {
+      const chip = el("span", { class: "side-chip" });
+      b.append(el("span", { class: "side-text" }, label), chip);
+      b.setStatus = chipOf(chip);
+      b.setStatus(status);
+      $("#sidebar-plugins").append(b);
+      $("#sidebar-plugins-box").hidden = false;
+    } else {
+      b.append(label);
+      if (where === "chapters") $("#get-chapters").after(b);
+      else if (where === "video") $("#output-plugins").append(b);
+      else if (where === "publish") { $("#publish-plugins").append(b); renderPublishWhere(); }
+      else $(".char-buttons").append(b);
+    }
     return b;
   },
+  // a panel of its own on the home page, under the projects (for what's about every project: a plan, a queue):
+  // render(box) draws into it now and each time the library's projects are loaded again, and the plugin can draw
+  // into box whenever its own state changes; the panel's chip is `status` now and setStatus(text, tone) later
+  addLibraryPanel(title, render, { status = "" } = {}) {
+    const chip = el("span", { class: "side-chip" });
+    const box = el("div", { class: "lib-panel-body" });
+    $("#library-panels").append(el("section", { class: "lib-panel", "aria-label": title },
+      el("div", { class: "lib-panel-head" }, el("b", {}, title), chip), box));
+    $("#library-panels").hidden = false;
+    libraryPanels.push({ box, render });
+    const setStatus = chipOf(chip);
+    setStatus(status);
+    try { render(box); } catch (e) { console.error(e); }
+    return { box, setStatus };
+  },
+  // Settings, open at a section: the app's own by name ("Sources"), or a plugin's own (its addSettings title)
+  openSettings: (name) => openSettings(name),
   // a page of its own in the New project dialog, after the dialog's own (the last page has Create project):
   // render({body, state}) draws it into body; the plugin keeps the choices and applies them on "project-created"
   addNewProjectPage({ id, title, render }) {
@@ -4684,11 +5168,15 @@ window.RecapStudio = {
     if (!current) return;
     return openSources(false, { titles: [].concat(titles).map(String), auto: !!auto });
   },
-  // the sidebar's box for a new project: its placeholder and its button's word (what's typed opens New project)
-  setNewProjectBox({ placeholder, button, title } = {}) {
+  // the sidebar's box for a new project: its placeholder, its button's word and the label above it (what's typed
+  // opens New project)
+  setNewProjectBox({ placeholder, button, title, label } = {}) {
+    // (the rail has one New project button now; a plugin's words for the box, its button and its label are kept but
+    // not shown: the search happens in the dialog)
     if (placeholder) $("#new-name").placeholder = placeholder;
-    if (title) $("#new-name").title = title;
-    if (button) $("#new-project button[type=submit]").textContent = button;
+    if (title) $("#new-project button[type=submit]").title = title;
+    if (label) $("#new-project-label").textContent = label;
+    void button;
   },
   // a section of its own in Settings (listed under Plugins); render(box) runs each time Settings is drawn
   addSettings(title, render) {
@@ -4791,7 +5279,9 @@ $("#plg-restart-go").addEventListener("click", async () => {
 
 (async () => {
   globals = await api("/api/settings");
+  applyTheme(globals.theme);
   await loadPluginScripts();
+  renderPublishWhere();  // (the posting plugins have added their buttons, or there are none)
   await loadProjects();
   const last = localStorage.getItem("last");
   if (last) { try { await openProject(last); } catch { localStorage.removeItem("last"); } }
@@ -4801,3 +5291,16 @@ $("#plg-restart-go").addEventListener("click", async () => {
   if (!globals.setup_done) openSetup();
   loadUpdate();
 })();
+
+// In the app's own window, the keyboard's Back key would go back to the "Starting Recap Studio…" page and stay there.
+// The app's page is the only one to be on, so going back lands here again. (A browser tab keeps its history.)
+function stayOnThisPage() {
+  history.pushState(null, "", location.href);
+  window.addEventListener("popstate", () => history.pushState(null, "", location.href));
+}
+if (window.pywebview) stayOnThisPage(); else window.addEventListener("pywebviewready", stayOnThisPage, { once: true });
+
+// Settings is a page beside the rail (the dialog opened without a backdrop), so Escape has to close it itself
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#global-dialog").open && !document.querySelector("dialog:modal")) $("#global-dialog").close();
+});

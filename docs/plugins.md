@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Autopilot**, **Site check**, **When a video is done**, **Post to YouTube**, **Branding**, **Advanced Cutting**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
+Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Autopilot**, **Site check**, **When a video is done**, **Post to YouTube**, **Post to TikTok**, **Branding**, **Advanced Cutting**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
 
 ## Installing
 
@@ -121,7 +121,7 @@ A new project starts from the last project's choice, as it does for the kind of 
 
 ## Autopilot
 
-Sit back. On the days and at the time you choose, Autopilot reads a chart of your own sources (Popular, Trending, Hot: whatever lists they offer), takes the series still coming out, gets their newest chapters into projects and makes the recaps, one series after another. With Post to YouTube connected, the videos it makes go up by themselves. **Autopilot…** is in the sidebar, under Open project file, and Settings → Autopilot opens the same cockpit. It gets nothing by itself: the charts, the series and the chapters come through the sources you added (Settings → Sources), as Get chapters does.
+Sit back. On the days and at the time you choose, Autopilot reads a chart of your own sources (Popular, Trending, Hot: whatever lists they offer), takes the series still coming out, gets their newest chapters into projects and makes the recaps, one series after another. With Post to YouTube connected, the videos it makes go up by themselves. **Autopilot…** is in the rail's Automation section (its chip: the next flight's day and time, or where a flight is); the home page's Autopilot panel and Settings → Autopilot say the same (the next flight, the last one) with Dry run, Fly now and the way into the cockpit. It gets nothing by itself: the charts, the series and the chapters come through the sources you added (Settings → Sources), as Get chapters does.
 
 1. **Settings** (the cockpit's Settings view):
    - **On**, and **when**: the days and the time. Recap Studio has to be open then (a server is always open); a time missed while it was closed is made up for when it next opens. Off, it still runs when you say **Run now**.
@@ -160,11 +160,11 @@ What happens each time a project's video is made (by Make the recap or Render vi
 - **Tell your phone:** through [ntfy](https://ntfy.sh), a free app for Android and iPhone: install it, subscribe to the topic Settings makes up, and this PC posts to it. Anyone who knows a topic's name can read it, so keep the made-up one (or run your own ntfy server and give its address). And/or a webhook: Discord's and Slack's get a message; any other gets the details as JSON (the project's and files' names, never this PC's paths). **Send a test** checks it.
 - **Also tell me** when a recap stops to ask you something (names to check, the scan group's pages, a problem with your script writer or voice), once each time, and when a recap fails.
 
-The copying and the command run on their own, one video after another, so the next job doesn't wait for them. A project can be left out in its Project settings. **Copy, run and tell now** with the finished video's buttons (the Video tab) does it for that video straight away.
+The copying and the command run on their own, one video after another, so the next job doesn't wait for them. A project can be left out in its settings panel (Plugins, shown on every stage). **Copy, run and tell now** with the finished video's buttons (the Video tab) does it for that video straight away.
 
 ## Branding
 
-Your channel's logo in a corner of every video, and an intro and an outro before and after each part. Set once in **Settings → Branding**; each project chooses in its Project settings: the logo, intro and outro (the default), the logo only, the intro and outro only, or none.
+Your channel's logo in a corner of every video, and an intro and an outro before and after each part. Set once in **Settings → Branding**; each project chooses in its settings panel (Plugins): the logo, intro and outro (the default), the logo only, the intro and outro only, or none.
 
 - **The logo:** a picture (a PNG with a see-through background looks best), in a corner, small, medium or large, and how opaque. It's drawn into each chapter as it's rendered, so the Shorts have it too, and changing it renders the chapters again.
 - **The intro and outro:** a clip of up to 2 minutes with its sound (`.mp4`, `.mov`, `.webm` and the like), or a picture shown for a few seconds. Each is fitted to the project's video (black bars where the shapes differ, as a 4:3 clip in a 16:9 video) and added to each part once the parts are joined. The recap's own picture isn't encoded again: the intro is made with the same encoder and the three are joined as they are (checked at each join; encoded again only if a join doesn't play cleanly, and the job says so). The subtitles and the YouTube chapter list move along with the intro (the first chapter still starts at 0:00, as YouTube wants).
@@ -181,7 +181,7 @@ Cuts a finished video into pieces, each starting where a chapter starts, with it
   - **By chapters:** so many chapters in each piece.
   - **By length:** each piece up to so many hours.
 - **A chapter too big for a piece** (by size or by length) is cut inside it, and the next piece says "continued" (`Solo Leveling - Part 4 (Ch.012 continued to Ch.015).mp4`).
-- **When:** the Video tab → **Cut the video…** (choose how, then **Cut**), or each time a project's video is made, when its Project settings say so ("Cut its video into pieces when it's made"). Both use the choices in Settings → Advanced Cutting; the dialog changes them there.
+- **When:** the Video tab → **Cut the video…** (choose how, then **Cut**), or each time a project's video is made, when its settings panel says so ("Cut its video into pieces when it's made"). Both use the choices in Settings → Advanced Cutting; the dialog changes them there.
 - **Where the pieces go:** the project's output folder, in `Pieces`, or a folder of yours, in a folder named after the project if you like (a NAS, say: each piece is copied under a passing name and renamed once it's complete). A folder of yours has to be there already: one on a drive or share that isn't connected is refused, rather than made again on the computer's own disk. They're named as the app names its parts: `Solo Leveling - Part 2 (Ch.040 to Ch.074).mp4`, with `.srt` and ` - YouTube chapters.txt` beside it. A cut made again replaces the pieces the one before made in that folder. A cut that's stopped keeps what it had made.
 - **On a server** ([Recap Studio Server](https://github.com/iEatNoodlez/RecapStudio-Cloud)): the folder is one on the server (a mounted share, say), which the user the server runs as (`recap-studio`, with its install script) must be allowed to write in. Cut the video… lists the last cut's pieces with links to save each one, its subtitles and its chapter list on the device you're on.
 - **With the app's own parts** (Settings → Video → Split into parts), each part is cut, and the pieces are numbered on across them.
@@ -206,7 +206,7 @@ Posts a project's video to your YouTube channel, and its Shorts if you like: whe
 
 **Choosing, per project**
 - **In New project:** a last step, **Posting to YouTube**: don't post it, or post it as soon as Make the recap (or Render video) finishes it; who sees it; and its Shorts.
-- **Later:** the Video tab → **Post to YouTube…** shows what the project posts and where each stands: not posted yet, posted (with its link), made again since it was posted, or the day a Short goes up. You can change the title (the suggested one by default), the description, who sees it, a time to make it public (Private only), the Shorts, and whether it posts by itself. **Post now** posts what isn't posted yet. **Also post again what was made again** re-posts a video rendered since.
+- **Later:** Publish → Where it goes → **Post to YouTube…** shows what the project posts and where each stands: not posted yet, posted (with its link), made again since it was posted, or the day a Short goes up. Beside that, the title (the suggested one by default) and the description; who sees it, a time to make it public (Private only), the Shorts, the subtitles and playlist, and whether it posts by itself. **Post now** posts what isn't posted yet. **Also post again what was made again** re-posts a video rendered since.
 
 **What's posted**
 - **Each part of the video**, with its title ("(Part 2)" when there are parts), a description from the template in Settings with the part's YouTube chapter list (`{chapters}`), the project's thumbnail, the category and tags from Settings, and not made for kids.
@@ -225,11 +225,50 @@ Posts a project's video to your YouTube channel, and its Shorts if you like: whe
 - **The age restriction** can't be set through YouTube's API (its field can be read, not set): set it in YouTube Studio.
 - **How far it's been tried:** on a real channel, the setup in the wiki, connecting, and posting a video with its custom thumbnail. Subtitles, playlists, Shorts, the quota and errors were tested against a stand-in for Google's services on this PC.
 
+## Post to TikTok
+
+Posts a project's video to your TikTok account: when the video is made, or when you say. A video in several pieces goes up as a numbered series.
+
+**Setting it up, once** (Settings → Post to TikTok). TikTok lets a program post only through a TikTok app of your own. It's free, and made on [TikTok for Developers](https://developers.tiktok.com):
+1. **Manage apps → Connect an app**, with **Desktop** as its platform (TikTok asks for your website's address).
+2. Add **Login Kit**, with this redirect URI: `http://127.0.0.1:*/callback/` (the `*` lets the sign-in come back on any port).
+3. Add the **Content Posting API**, and switch on **Direct Post**.
+4. Copy the app's **client key** and **client secret** into Settings → Post to TikTok. They're kept only on this PC, in `data\plugin-data\post-to-tiktok\client.json`. To try it before TikTok reviews the app, use a **Sandbox** (on your app's page), with your own TikTok account as one of its target users.
+5. **Connect your account.** TikTok's sign-in page opens in your browser. Recap Studio never sees your password: TikTok sends the answer to a one-time address on this PC, and the sign-in is kept in `token.json` beside it. TikTok hands out a new lasting sign-in each time it's renewed, and the newest is kept. **Disconnect** takes the access back. On a server, as with Post to YouTube: after you allow it, copy the address starting with `http://127.0.0.1` that doesn't open into Settings, and **Finish connecting**.
+
+**TikTok's rules, not the app's** (from TikTok's documentation, November 2026):
+- **Only you see it until TikTok audits your app.** An app TikTok hasn't audited posts everything as private ("Only you"), only to a **private account** (in TikTok: Settings and privacy → Privacy → Private account), and for up to 5 accounts a day. The audit is TikTok's own review of the app, asked for on TikTok for Developers. Until you tick **My app has passed TikTok's audit for posting** in Settings, every post is Only you, whatever a project says. To make one public later, make the account public, then set that post to Everyone in TikTok.
+- **Public only when TikTok says so.** Once your app is audited, you choose who sees the posts: Everyone, your followers, friends, or only you (just the ones TikTok offers your account at the time). There's no default: nothing is posted until you've chosen. A post you asked to be public is only shown as public once TikTok gives its public address, after its own checks (usually within a minute, sometimes hours). Until then the app says "not public yet".
+- **Up to 10 minutes.** TikTok takes videos of up to 10 minutes this way, and from many accounts only 3 or 5. The plugin asks TikTok each time, and a video longer than your account may post is refused before anything is sent, saying so. A whole recap is usually longer: post its Shorts, or cut it with Advanced Cutting by length (0.15 hours is 9 minutes).
+- **About 15 posts a day** for each account, counted across every app that posts to it, and 6 a minute. The plugin waits 30 seconds between posts, and when TikTok says "too many requests" it waits and asks again. When the day's posts are used up, posting stops with a note, and the rest go up later (it tries again 3 hours after).
+- **What TikTok asks to be shown before you post:** "By posting, you agree to TikTok's Music Usage Confirmation" (and its Branded Content Policy, for branded content). Comments, duets and stitches are off until you tick them, and greyed out when your account doesn't allow them.
+
+**Choosing, per project**
+- **Post it to TikTok when its video is made:** in the project's settings panel (Plugins), or the tick in Post to TikTok…. It posts as soon as Make the recap (or Render video) finishes. For Advanced Cutting's pieces, it waits until they're cut (up to 12 hours).
+- **Post to TikTok…** (Publish → Where it goes) asks TikTok what your account can post now, then shows: the account it posts to; what it posts (the whole video or its parts, its Shorts, Advanced Cutting's pieces) and where each one stands (not posted yet, posted and who sees it, sent and still processing, made again since it was posted); the first video, to look at; the caption (the title: Post to YouTube's for the project, else the suggested YouTube title; a description; the series' hashtag); who sees it, with comments, duets and stitches; and whether it posts by itself. **Post now** posts what isn't posted yet. **Also post what was made again** re-posts a video rendered since.
+
+**What it posts.** You pick one of these, in Settings (for every project) or in Post to TikTok… (for one):
+- **The whole video**, or **its parts** when the app splits it (Settings → Video → Split into parts).
+- **Its Shorts**, the ones the app cuts into the output folder's `shorts` folder.
+- **Advanced Cutting's pieces**, from its last cut of the video (in the folder its Settings name).
+
+**Linked parts.** Several videos go up as a series, in order, one after another: "Solo Leveling (Part 2 of 5)", with "Every part: #SoloLevelingRecap" at the end of each caption. TikTok's API can't add comments, playlists or links, so "linked" means that hashtag: tapping it on any part shows the others. It also shows other people's videos with the same hashtag, so make it your own if you like (it starts as the series' name and "Recap"). Your profile shows the newest first, so Part 1 is at the bottom of the series. TikTok's own playlists can gather the parts too, in the TikTok app, for accounts that have them.
+
+**The caption:** the title (with "(Part 2 of 5)" in a series), the description if there is one (yours, else Post to YouTube's for the project, without its chapter list), the series' hashtag, and the hashtags from Settings, cut to TikTok's 2,200 characters (the description first). You can change any of it before posting. Settings can also label every post as **AI-generated** (TikTok's own label) and set a **content disclosure** (your own brand, or branded content for someone else).
+
+**Nothing is posted twice.** Each video is kept in `posted.json` by its file's name and size, with TikTok's number for the post, as soon as TikTok has been told it's coming. A video TikTok was still processing when the job ended (or the app closed) is looked up the next time, not sent again. A video made again is only posted again when you ask.
+
+**How it posts:** posting is a job of its own, "Posting to TikTok", with progress, Pause and Cancel. Videos go up in 10 MB pieces, and a piece that fails is sent again. TikTok can take a few minutes to process a video before it shows on your profile. Settings → Post to TikTok lists what it has posted, and what it couldn't, with why.
+
+**Good to know**
+- **How far it's been tried:** only against a stand-in for TikTok on this PC, made from TikTok's documentation: connecting, posting in pieces, a series, the limits and the errors. Not yet on a real TikTok account.
+- **Its files** are in `data\plugin-data\post-to-tiktok\`: your app's key and secret, the sign-in, the settings, each project's choices, and what's been posted.
+
 ## Recaps in Spanish
 
 A project's recap narrated in Spanish, Latin American or from Spain, whatever language the comic is in.
 
-- **Choosing it:** New project → **Language of the recap** (under the comic's own language), or later Project settings → Plugins. New projects start from the last project's choice, as they do for the kind of comic.
+- **Choosing it:** New project → **Language of the recap** (under the comic's own language), or later the settings panel's Plugins section. New projects start from the last project's choice, as they do for the kind of comic.
 - **What changes, for that project only:**
   - **The narration:** the script writer is told to write every line in Spanish, natural and spoken, keeping the characters' names as the character list spells them.
   - **The voice:** Kokoro speaks with its Spanish voice (Dora, or Alex for a male English voice); Microsoft Edge's with the region's (Dalia or Jorge for Latin America, Elvira or Álvaro for Spain); ElevenLabs keeps your voice and uses its multilingual model. Settings → Recaps in Spanish can fix the voice as female or male. Your app-wide voice doesn't change, for other projects.
@@ -316,6 +355,7 @@ This part is for people adding to Recap Studio's plugin list. A plugin that adds
 | `plugin.file_type(ext, name, chapters, pages)` | A kind of file chapters are imported from (`".epub"`), wherever the app imports them: Import folder, files dropped on a project, and so the Watched folder. `chapters(path)` gives `[{"name", "pages"}]`, one entry for each chapter in the file (a single entry with `"name": None` is named after the file), `pages` being strings of its own (its pictures' names in it, say). Raising `ValueError` leaves the file out, with its message as the reason shown. `pages(path, pages)` yields `(name, bytes)`, each page's picture, in order. Pictures, `.zip`, `.cbz` and a type another plugin reads can't be taken. |
 | `plugin.data_dir` | `data\plugin-data\<id>`, for its own files. |
 | `plugin.id`, `plugin.name`, `plugin.version`, `plugin.folder` | |
+| `store.update(pid, lambda p: p.setdefault("posted", {}).update({"YouTube": when}))` | A plugin that posts a project's video says so in the project's `posted` (the service's name, and when), and the library's line reads "Video made · posted to YouTube and TikTok". Post to YouTube and Post to TikTok do this. |
 
 Anything else a plugin needs, it imports from the app (`from recap import store, importer`). Those can change between versions, so the list's plugins are tested with each release.
 
@@ -327,15 +367,35 @@ Anything else a plugin needs, it imports from the app (`from recap import store,
 | `searchSources(keys, query, got, {signal})` | One search in several sources (their `key`s from `/api/sources`), `got` called with each one's answer as soon as it comes: `{key, items, more}`, or `{key, error}` (a site that wants its check is offered to Site check, as `api` does). It's one request for them all; it's done when every source has answered, and an `AbortController`'s `signal` stops it. Recap Studio 0.2.6 or later. |
 | `current()`, `reload()` | The open project, and opening it again after the plugin changed it. |
 | `on(event, function)` | `new-project-open` (`{name, series}`: `series` is the one `newProject` was given, or `null`), `new-project-page` (`{page, body, state}`: add to `body`; `state.name`, `state.kind`, `state.setName()`, `state.setKind()`, `state.redraw()`), `project-created` (`{project}`, awaited before the project opens), `project-opened` (`{project}`), `site-check` (`{host, url, source, refused, message}`: a site answered a source with its check for a person instead of its page, from a call the page made or a Getting chapters job; Recap Studio 0.2.4 or later). |
-| `addButton(where, label, onclick)` | A button in the Characters tab (`"characters"`), beside Get chapters from a site (`"chapters"`), with the finished video's buttons in the Video tab (`"video"`), or in the sidebar under Open project file (`"sidebar"`, for what's about every project). |
-| `addNewProjectPage({id, title, render})` | A page of its own at the end of the New project dialog (so its Create project button moves there). `render({body, state})` draws it; the plugin keeps the choices and applies them on `project-created`. |
+| `addButton(where, label, onclick, {title, status})` | A button in the Characters tab (`"characters"`), beside Get chapters from a site (`"chapters"`), with the finished video's buttons in the Video tab (`"video"`), with the posting services at Publish (`"publish"`: Post to YouTube and Post to TikTok go there; Recap Studio 0.4.3 or later, so check `RecapStudio.places.includes("publish")` first and fall back to `"video"`), or in the rail's Automation section (`"sidebar"`, for what's about every project). A rail button has a status chip at its right: `status` to start with, and the button's `setStatus(text, tone)` later (`tone`: `""`, `"ok"`, `"warn"` or `"on"`; Recap Studio 0.4.3 or later, so check `button.setStatus` first). |
+| `addNewProjectPage({id, title, render})` | A section of its own at the end of the New project page (the dialog shows every section at once, with what you get and Create the project beside them). `render({body, state})` draws it; the plugin keeps the choices and applies them on `project-created`. |
 | `pickFolder(start)` | A folder from the window's folder picker (typed, in a browser). |
 | `newProject({name, kind, series})` | New project, as the sidebar's box opens it: named, set to a kind of comic (`"manga"`, `"webtoon"`, `"comic"`), and for a series a site lists (`{url, title, cover, summary, kind, year}`; Find the series picks it when one of your sources is for that site). Recap Studio 0.2.2 or later. |
 | `getChapters({titles, auto})` | Get chapters from a site, for the open project, searching all the member's sources that can for a series: by its first titles in turn (up to three) until a search finds something. A series called exactly the title searched (else another of `titles`), in one source only, opens to choose its chapters; with `auto`, they're all got without asking. Recap Studio 0.2.3 or later. |
-| `setNewProjectBox({placeholder, button, title})` | The words of the sidebar's box for a new project and its button (what's typed there still opens New project). |
+| `setNewProjectBox({placeholder, button, title, label})` | Kept for older plugins: the rail has one New project button now, and `title` is its tooltip; `placeholder`, `button` and `label` are taken but not shown (a plugin that searches draws its search in the New project dialog, `new-project-page`). |
 | `addSettings(title, render)` | A section of its own in Settings; `render(box)` runs each time Settings is drawn. |
-| `addProjectSetting({key, label, options, hint})` | A choice in Project settings (a Plugins section) for a setting registered with `plugin.project_setting`: `options` is `[[value, text]]`. Saved as soon as it changes, like the rest. |
-| `addLanguage(code, name)` | A comic language registered with `plugin.language`, offered in New project and Project settings. |
+| `addLibraryPanel(title, render, {status})` | A panel of its own on the home page, in a row under the projects (for what's about every project: Autopilot's next flight, the Overnight queue's list). `render(box)` draws into it now and each time the library's projects are loaded again, and the plugin can draw into `box` whenever its own state changes. It returns `{box, setStatus}`; `setStatus(text, tone)` is the chip at the title's right. Recap Studio 0.4.3 or later (check `RecapStudio.addLibraryPanel` first). |
+| `openSettings(name)` | Settings, open at a section: one of the app's own by its name (`"Sources"`) or a plugin's (its `addSettings` title). Recap Studio 0.4.3 or later. |
+| `addProjectSetting({key, label, options, hint})` | A choice in the project's settings panel (a Plugins section, shown on every stage) for a setting registered with `plugin.project_setting`: `options` is `[[value, text]]`. Saved as soon as it changes, like the rest. |
+| `addLanguage(code, name)` | A comic language registered with `plugin.language`, offered in New project and the Chapters stage's panel. |
+
+**The kit** (Recap Studio 0.5.0 or later): the classes a page script builds its sections and windows from, so they look like the app's own (style.css, "the plugins' kit"). A plugin's Settings section (`addSettings`) is laid out as a column with the app's own gaps; put its parts in cards, one under another, with the section's one-line explanation as a `.hint` above them. The list's plugins are all built this way.
+
+| | |
+|---|---|
+| `section.pk-card`, an `h3` first | A card: its title, with a `.side-chip` in the title (`ok`, `on`, `warn`, or none) for where it stands. `.pk-cards` lays several side by side as the room allows (the intro and the outro); `.pk-cols` holding two `.pk-col` is two columns of stacked cards, for a window. |
+| `.pk-status` | A line with a dot (`.pk-dot`, with `ok`, `on`, `warn` or `bad`) and its words: connected or not, what it's doing. |
+| `label.pk-field` | A small label over its control; `.pk-fields` puts several on a row (Category, Tags). |
+| `label.pk-line` | The words with the control beside them: a time, a select, a number (`.pk-num`). |
+| `.pk-row` | An input that takes the room, with buttons beside it (a folder and Choose…). `.pk-ticks`: checks on a row. `.pk-actions`: a row of buttons. |
+| `.pk-grid` | Words at the left and a control at the right, lined up down the card (a number and its unit in a `.pk-amount`); `.pk-grid.fill` for short words and a control that takes the room. |
+| `.pk-pills` of `label.pk-pill` | Choices as toggles (a radio or checkbox inside; `.on` when picked, `.off` when not allowed, `.quiet` hides the box and lets the colour say it). In New project, use the dialog's own `.np-pills` instead. |
+| `.pk-list` of `.pk-item` | A list in a box: each item's words in a `.pk-main` (a `.pk-n` number, a `b` name), its state at the right in a `.pk-state` (`ok`, `on`, `warn`, `bad`), a `.pk-note` under it, buttons in a `.pk-tools`; `.dim` for one not picked. `.pk-empty` for the words when there's nothing to list. |
+| `.pk-log` | Lines of when (`.pk-at`), who (`b`) and what. |
+| `.pk-steps` | Numbered steps to follow at a service, with `code` for what to copy. `.pk-mono` for a path. `.pk-preview` for a picture on a checkerboard. |
+| `.src-modes.pk-views` | A window's views (Flight, Settings) as the app's segmented control: buttons, `.on` for the one shown. `.details-adv` folds a part away under its `summary`. |
+
+A window is a `dialog.wide-dialog` holding a `form.import-form` (`novalidate`, so Close always closes) with a `.setup-head`, a `.setup-body` and the buttons in an `.import-actions` (Close first, `formnovalidate`, then a `.grow` span, then the plugin's own).
 
 **Where plugins load from**
 - The app's own `plugins\` folder: Full Suite's.

@@ -20,7 +20,7 @@ Settings → **Script writer** picks who writes the narration (with an online wr
 
 ## Prompt and characters
 
-The **Prompt** tab (advanced mode) and the **Characters** tab control how the script is written, per project:
+**The narrator** (its persona, rules and style, in the panel beside the Script and voice stage) and the **Characters** stage control how the script is written, per project:
 
 - **Persona**: who the narrator is and how they sound.
 - **Rules**: hard requirements, numbered in the prompt (third person, past tense, paraphrase instead of quoting, trust the art for actions and the text for feelings when they disagree, numbers as words so the voice reads them well, and so on). Edit, remove or add your own.
@@ -41,7 +41,7 @@ To delete a project, hover it in the sidebar and click the trash icon (or use **
 
 Read text finds each line of text with RapidOCR, then groups the lines into speech bubbles and captions and reads them in order: top to bottom, and left to right for bubbles side by side. Each bubble becomes one line of the panel's text. (Earlier versions merged lines row by row across the whole panel, which wove the sentences of neighbouring bubbles together.) Text that is nearly all capitals is made all capitals, and inside words 5 and 0 are read as S and O ("YE5" → "YES"); numbers and words like "1ST" are left alone.
 
-RapidOCR's built-in recognition model reads Chinese and English, and on English comic lettering it runs words together and mixes up letters ("APAIROFSLIPPERS", "SEYOLNG"). **Settings → Text reading** offers its English model, a 9 MB download into `data\addons\ocr_en` (Apache 2.0, pinned and checksum-checked, not part of the app). On a test chapter it cut run-together words from 46 to 12 and misread words from 30 to 2, at the same speed. Once downloaded it's used for Read text unless switched off. Text already read stays as it is: run Read text with **Redo** on the chapters you want read again.
+RapidOCR's built-in recognition model reads Chinese and English, and on English comic lettering it runs words together and mixes up letters ("APAIROFSLIPPERS", "SEYOLNG"). **Settings → Reading comics** offers its English model, a 9 MB download into `data\addons\ocr_en` (Apache 2.0, pinned and checksum-checked, not part of the app). On a test chapter it cut run-together words from 46 to 12 and misread words from 30 to 2, at the same speed. Once downloaded it's used for Read text unless switched off. Text already read stays as it is: run Read text with **Redo** on the chapters you want read again.
 
 Both take every line as upright. RapidOCR's check for upside-down lines turned real ones over and read them backwards: "NO" as "ON", "HOW" as "MOH", "THIS IS" as "TI SIHS". On 1,500 panels of real webtoons and the Black Jack sample it changed or lost 3 to 6% of the lines, and of those it got right only a handful (a phone screen drawn upside down), so it's off. Run Read text with **Redo** to read older chapters again without it.
 

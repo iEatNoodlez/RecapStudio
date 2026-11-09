@@ -6,175 +6,345 @@
 <title>Recap Studio</title>
 <link rel="icon" href="icon.ico">
 <link rel="stylesheet" href="style.css">
+<!-- the theme chosen in Settings → Look, before the first paint; app.js applies the saved setting once it loads -->
+<script>try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* no storage: the system's */ }</script>
 </head>
 <body>
+<!-- The rail: the brand, a new project, the library, the plugins' tools (Automation), and the app's own things at the
+     foot. The main area is the library (no project open) or a project: its stage column and the inspector beside it. -->
 <aside id="sidebar">
-  <div class="brand">Recap Studio</div>
-  <form id="new-project">
-    <input id="new-name" placeholder="New project name" autocomplete="off">
-    <button type="submit">Create</button>
+  <a class="brand" href="#library" id="brand" title="Your recaps">
+    <svg class="brand-mark" width="28" height="28" viewBox="0 0 256 256" aria-hidden="true"><rect x="10" y="10" width="236" height="236" rx="49" fill="#3d63dd"></rect><path d="M42 66 Q86 54 128 80 V198 Q86 176 42 186 Z" fill="#ffffff"></path><path d="M214 66 Q170 54 128 80 V198 Q170 176 214 186 Z" fill="#eef1fd"></path><rect x="58" y="96" width="54" height="8" rx="4" fill="#b6c3f3"></rect><rect x="58" y="114" width="46" height="8" rx="4" fill="#b6c3f3"></rect><rect x="58" y="132" width="54" height="8" rx="4" fill="#b6c3f3"></rect><path d="M148 100 L194 130 L148 160 Z" fill="#304fc7"></path></svg>
+    <span>Recap Studio</span>
+  </a>
+  <a id="rail-back" class="rail-back" href="#library" title="Your recaps">‹ Library</a>
+  <!-- at the Script stage the rail is the scene list (renderPanels): back to the project, the counts, a search, the
+       chapter chips and To check, then every scene -->
+  <div id="script-rail" class="script-rail" hidden>
+    <a id="script-back" class="rail-back script-back" href="#project" title="Back to the project">‹ <span id="script-back-name">Project</span></a>
+    <div class="script-rail-head">
+      <div class="script-title">Script</div>
+      <div id="script-counts" class="muted"></div>
+      <label class="lib-find scene-find"><span class="np-search-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></span><input id="scene-find" type="search" placeholder="Find in the script" aria-label="Find in the script" autocomplete="off"></label>
+    </div>
+    <div class="scene-chips">
+      <div id="scene-chips" class="scene-chips-row"></div>
+      <select id="scene-chapter" aria-label="Chapter" hidden></select>
+      <button id="scene-check" class="chip warn" hidden title="The next scene whose wording the check flagged">To check</button>
+    </div>
+    <ol id="scene-list" class="scene-list" aria-label="Scenes"></ol>
+  </div>
+  <form id="new-project" aria-label="New project">
+    <span class="side-label" id="new-project-label">New project</span>
+    <div class="new-project-row">
+      <input id="new-name" placeholder="Its name" autocomplete="off">
+      <button type="submit" class="new-project-btn">＋ New project</button>
+    </div>
   </form>
-  <button id="open-file" class="ghost small open-file" title="Open a project saved with Save as file (.recap)">Open project file…</button>
-  <ul id="projects"></ul>
+  <div class="side-section">
+    <span class="side-label">Library</span>
+    <ul id="projects"></ul>
+    <button id="open-file" class="side-item open-file" title="Open a project saved with Save as file (.recap)">Open project file…</button>
+  </div>
+  <div class="side-section" id="sidebar-plugins-box" hidden>
+    <span class="side-label">Automation</span>
+    <div id="sidebar-plugins" class="side-plugins"></div>
+  </div>
   <div class="side-foot">
     <button id="update-btn" class="update-btn" hidden></button>
-    <button id="open-global" class="ghost global-btn open-global">⚙ Settings</button>
-    <label class="mode-switch" title="Advanced mode shows every step, setting and tool"><input type="checkbox" id="advanced-mode"> Advanced mode</label>
-    <div id="env" class="adv"></div>
+    <button id="open-global" class="side-item open-global">⚙ Settings</button>
     <div id="app-label" class="app-label"></div>
+    <div id="rail-line"></div>
   </div>
 </aside>
 
 <main id="main">
-  <div id="empty" class="empty">Create or pick a project to start.</div>
+  <!-- the library: every project as a card, what needs you first -->
+  <div id="empty" class="library">
+    <header class="library-head">
+      <h1>Your recaps</h1>
+      <label class="lib-find"><span class="np-search-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></span><input id="lib-find" type="search" placeholder="Find a project" aria-label="Find a project" autocomplete="off"></label>
+      <button type="button" id="lib-sort" class="ghost" title="How the recaps are ordered">Sort: last worked on</button>
+    </header>
+    <div id="library-attention" class="attention" hidden></div>
+    <div id="library-cards" class="library-cards"></div>
+    <!-- the plugins' panels (RecapStudio.addLibraryPanel): Autopilot's next flight, the Overnight queue's list -->
+    <div id="library-panels" class="library-panels" hidden></div>
+    <p class="muted library-none" id="empty-pick" hidden>No projects yet. Make one, open a project file, or drop a folder, .zip or .cbz file here.</p>
+  </div>
 
   <section id="project" hidden>
-    <header class="project-head">
-      <input id="project-name" class="title-input" aria-label="Project name">
-      <div class="menu-wrap">
-        <button id="project-menu" class="ghost icon-btn" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" title="More">⋯</button>
-        <div id="project-menu-list" class="menu" role="menu" hidden>
-          <button role="menuitem" id="show-folder" title="Open this project's folder in File Explorer">Show in folder</button>
-          <button role="menuitem" id="save-file" title="Save the whole project as one file (.recap), to keep or open on another computer">Save as file…</button>
-          <button role="menuitem" id="clear-pages" class="danger">Remove all chapters</button>
-          <button role="menuitem" id="delete-project" class="danger">Delete project</button>
-        </div>
-      </div>
-    </header>
-
-    <div class="tiles">
-      <button type="button" class="tile" data-goto="chapters"><b>Chapters</b><span id="tile-chapters"></span></button>
-      <button type="button" class="tile" data-goto="script"><b>Script</b><span id="tile-script"></span></button>
-      <button type="button" class="tile" data-goto="script"><b>Voice</b><span id="tile-voice"></span></button>
-      <button type="button" class="tile" data-goto="video"><b>Video</b><span id="tile-video"></span></button>
-    </div>
-
-    <div class="go-row">
-      <button id="go" class="primary">Make the recap</button>
-      <span id="go-note" class="muted"></span>
-    </div>
-
-    <div class="adv-bar adv">
-      <div id="scope" class="scope muted"></div>
-      <div id="estimate" class="scope muted"></div>
-      <div id="app-line" class="scope muted"></div>
-      <nav class="steps">
-        <!-- numbered by renderSteps(); Characters shows only when the character scan models are installed -->
-        <button data-steps="panels" data-label="Detect panels">1 · Detect panels</button>
-        <button data-steps="ocr" data-label="Read text">2 · Read text</button>
-        <button id="step-translate" data-steps="translate" data-label="Translate" hidden title="Your script writer translates the text read into English (a comic in Korean, Chinese or Japanese)">Translate</button>
-        <button id="step-characters" data-label="Characters" hidden title="Find the characters with Scan for characters, then name them (Make the recap does this before the script)">Characters</button>
-        <button data-steps="script" data-label="Write script">3 · Write script</button>
-        <button data-steps="audio" data-label="Voice">4 · Voice</button>
-        <button data-steps="video" data-label="Render video">5 · Render video</button>
-        <button id="editors-open" class="ghost" title="Save the recap as a timeline (.otioz) to finish in DaVinci Resolve, Premiere Pro or another video editor">Export for editors…</button>
-      </nav>
-    </div>
-
-    <div id="job" class="job" hidden>
-      <div class="job-row"><span id="job-msg"></span><button id="job-wording" class="primary small" hidden>Check wording</button><button id="job-credits" class="primary small" hidden>Check the scan group's pages</button><button id="job-characters" class="primary small" hidden>Review characters</button><button id="job-pause" class="ghost small">Pause</button><button id="job-cancel" class="ghost small">Cancel</button></div>
-      <div class="bar"><div id="job-bar"></div></div>
-      <div id="job-error" class="error"></div>
-    </div>
-
-    <nav class="tabs" role="tablist">
-      <button type="button" role="tab" data-tab="chapters">Chapters</button>
-      <button type="button" role="tab" data-tab="script">Script</button>
-      <button type="button" role="tab" data-tab="characters">Characters</button>
-      <button type="button" role="tab" data-tab="video">Video</button>
-      <button type="button" role="tab" data-tab="youtube">YouTube</button>
-      <button type="button" role="tab" data-tab="prompt" class="adv">Prompt</button>
-      <button type="button" role="tab" data-tab="project">Project settings</button>
-    </nav>
-
-    <section class="tab-page" data-page="chapters">
-      <div id="dropzone" class="dropzone">
-        <button id="import-folder">Import folder…</button>
-        <button id="get-chapters" class="ghost">Get chapters from a site…</button>
-        <span class="muted" id="drop-words">or drop images, .zip or .cbz files anywhere here, or</span>
-        <label class="link">browse<input id="file-input" type="file" multiple accept="image/*,.zip,.cbz" hidden></label>
-        <span id="page-count" class="muted"></span>
-      </div>
-      <section id="chapters-box" class="chapters-box" hidden>
-        <div class="chapters-head">
-          <h2>Chapters <span id="chapter-count" class="muted"></span></h2>
-          <button id="new-chapters" class="ghost small" hidden title="Look for chapters of this series the project doesn't have yet, at the site it came from">Check for new chapters</button>
-          <div class="chapters-tools adv">
-            <button id="ch-all" class="ghost small">Select all</button>
-            <button id="ch-none" class="ghost small">Select none</button>
+    <div class="stage-col">
+      <header class="project-head">
+        <input id="project-name" class="title-input" aria-label="Project name">
+        <span id="project-chips" class="chips-row"></span>
+        <div class="menu-wrap">
+          <button id="project-menu" class="ghost icon-btn" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" title="More">⋯</button>
+          <div id="project-menu-list" class="menu" role="menu" hidden>
+            <button role="menuitem" id="show-folder" title="Open this project's folder in File Explorer">Show in folder</button>
+            <button role="menuitem" id="save-file" title="Save the whole project as one file (.recap), to keep or open on another computer">Save as file…</button>
+            <button role="menuitem" id="clear-pages" class="danger">Remove all chapters</button>
+            <button role="menuitem" id="delete-project" class="danger">Delete project</button>
           </div>
         </div>
-        <div id="chapters" class="chapters"></div>
-      </section>
-    </section>
+      </header>
 
-    <section class="tab-page" data-page="script">
-      <div class="panels-head">
-        <h2>Scenes <span id="panel-count" class="muted"></span></h2>
-        <div class="panels-tools adv">
-          <button id="credits-count" class="ghost small credits-open" hidden title="Every piece left out as the scan group's pages (credits, ads, notices), in one place"></button>
-          <button id="redo-selected" class="ghost small" disabled>Re-run script + voice for selected</button>
+      <!-- the pipeline: the recap's stages, each saying how far it is; the one open is the page below -->
+      <nav class="tabs pipeline" role="tablist" aria-label="The recap's stages">
+        <button type="button" role="tab" data-tab="chapters"><span class="stage-mark" aria-hidden="true"></span><b>Chapters</b><span class="stage-state" id="tile-chapters"></span></button>
+        <button type="button" role="tab" data-tab="characters"><span class="stage-mark" aria-hidden="true"></span><b>Characters</b><span class="stage-state" id="tile-characters"></span></button>
+        <button type="button" role="tab" data-tab="script"><span class="stage-mark" aria-hidden="true"></span><b>Script and voice</b><span class="stage-state" id="tile-script"></span></button>
+        <button type="button" role="tab" data-tab="video"><span class="stage-mark" aria-hidden="true"></span><b>Video</b><span class="stage-state" id="tile-video"></span></button>
+        <button type="button" role="tab" data-tab="youtube"><span class="stage-mark" aria-hidden="true"></span><b>Publish</b><span class="stage-state" id="tile-publish"></span></button>
+      </nav>
+
+      <div class="go-row">
+        <button id="go" class="primary">Make the recap</button>
+        <span id="go-note" class="muted"></span>
+        <!-- one step on its own, on the ticked chapters or all of them: numbered by renderSteps() (Translate for a comic in
+             Korean, Chinese or Japanese, Characters when the character scan models are installed), each one's estimate
+             filled by renderEstimate() -->
+        <div class="menu-wrap go-steps-wrap">
+          <button type="button" id="go-steps" class="ghost" aria-haspopup="menu" aria-expanded="false" title="Run one step on its own">One step ▾</button>
+          <nav id="steps-menu" class="menu steps" role="menu" aria-label="One step at a time" hidden>
+            <button role="menuitem" data-steps="panels" data-label="Detect panels"><span></span><small></small></button>
+            <button role="menuitem" data-steps="ocr" data-label="Read text"><span></span><small></small></button>
+            <button role="menuitem" id="step-translate" data-steps="translate" data-label="Translate" hidden title="Your script writer translates the text read into English (a comic in Korean, Chinese or Japanese)"><span></span><small></small></button>
+            <button role="menuitem" id="step-characters" data-label="Characters" hidden title="Find the characters with Scan for characters, then name them (Make the recap does this before the script)"><span></span><small></small></button>
+            <button role="menuitem" data-steps="script" data-label="Write script"><span></span><small></small></button>
+            <button role="menuitem" data-steps="audio" data-label="Voice"><span></span><small></small></button>
+            <button role="menuitem" data-steps="video" data-label="Render video"><span></span><small></small></button>
+          </nav>
         </div>
       </div>
-      <div id="panels" class="panels"></div>
-      <button id="more" class="ghost" hidden>Show more</button>
-    </section>
 
-    <section class="tab-page" data-page="characters" id="characters-page">
-      <div class="page-head">
-        <span class="hint">Names the narrator should use, with a short description of each so it can tell who is who.<span class="adv"> Pictures are for Magi's speaker detection (Settings): 2–5 clear shots of each character, ideally alone. Add them from files, or click any panel and drag around the character.</span></span>
-        <div class="char-buttons">
-          <button id="scan-open" title="Find the characters in your chapters automatically">Find characters…</button>
-          <button id="scan-review" hidden>Review scan</button>
-          <button id="add-char" class="ghost">+ Add character</button>
-        </div>
-      </div>
-      <div id="chars" class="chars"></div>
-    </section>
-
-    <section class="tab-page" data-page="video">
-      <div id="video-empty" class="empty-note">No video yet. <b>Make the recap</b> renders it once the voice is done.</div>
-      <section id="output" class="output" hidden>
-        <video id="player" controls></video>
-        <div id="output-parts" class="output-parts"></div>
-        <div id="output-shorts" class="output-parts" hidden></div>
-        <div class="output-actions">
-          <button id="open-folder">Open output folder</button>
-          <a id="video-download" class="link" download hidden>Download the video</a>
-          <a id="srt-link" class="link" target="_blank">Subtitles (.srt)</a>
-          <a id="chapters-link" class="link" target="_blank" title="Paste into the video's description: YouTube turns it into chapters">YouTube chapters (.txt)</a>
-        </div>
-        <div id="editors-out" class="editors-out" hidden></div>
-        <div id="package-out" class="editors-out" hidden></div>
+      <section class="tab-page" data-page="chapters">
+        <!-- the chapters in one card: its tools in the head, the table, the drop line at its foot -->
+        <section id="chapters-box" class="chapters-box">
+          <div class="chapters-head">
+            <h2>Chapters <span id="chapter-count" class="muted"></span></h2>
+            <div class="chapters-actions">
+              <button id="get-chapters" class="ghost">Get chapters from a site…</button>
+              <button id="import-folder" class="ghost">Import a folder…</button>
+              <button id="new-chapters" class="ghost" hidden title="Look for chapters of this series the project doesn't have yet, at the site it came from">Check for new chapters</button>
+            </div>
+          </div>
+          <div id="chapters" class="chapters"></div>
+          <div id="dropzone" class="dropzone chapters-foot">
+            <span class="muted" id="drop-words">Drop images, folders, .zip or .cbz files anywhere here to add chapters, or</span>
+            <label class="link">browse<input id="file-input" type="file" multiple accept="image/*,.zip,.cbz" hidden></label>
+            <span id="page-count" class="muted"></span>
+          </div>
+        </section>
       </section>
-      <div class="settings proj-settings">
-        <fieldset id="video-settings">
+
+      <section class="tab-page" data-page="characters" id="characters-page">
+        <div class="page-head">
+          <span class="hint">Names the narrator should use, with a short description of each so it can tell who is who.<span class="magi-only"> Pictures help Magi's speaker detection and the character scan tell who is who: 2–5 clear shots of each character, ideally alone. Add them from files, or click any panel and drag around the character.</span></span>
+          <div class="char-buttons">
+            <button id="scan-open" title="Find the characters in your chapters automatically">Find characters…</button>
+            <button id="scan-review" hidden>Review scan</button>
+            <button id="add-char" class="ghost">+ Add character</button>
+          </div>
+        </div>
+        <div id="chars" class="chars"></div>
+      </section>
+
+      <!-- the script: the scenes are listed in the rail (script-rail), the one chosen is open here (renderPanels) -->
+      <section class="tab-page script-page" data-page="script">
+        <div id="panels" class="panels scene-editor"></div>
+        <button id="more" class="ghost" hidden>Show more</button>
+      </section>
+
+      <section class="tab-page" data-page="video">
+        <div id="video-empty" class="empty-note">No video yet. <b>Make the recap</b> renders it once the voice is done.</div>
+        <section id="output" class="output" hidden>
+          <video id="player" controls preload="metadata"></video>
+          <div id="output-parts" class="output-parts"></div>
+          <div id="output-shorts" class="output-parts" hidden></div>
+          <!-- the app's own buttons, then the plugins' (RecapStudio.addButton("video")) after a divider; the files below -->
+          <div class="output-actions">
+            <button id="open-folder">Open the output folder</button>
+            <button id="editors-open" class="ghost" title="Save the recap as a timeline (.otioz) to finish in DaVinci Resolve, Premiere Pro or another video editor">Export for video editors…</button>
+            <span id="output-plugins" class="output-plugins"></span>
+          </div>
+          <div class="output-files">
+            <a id="video-download" class="link" download hidden>Download the video</a>
+            <a id="srt-link" class="link" target="_blank">Subtitles (.srt)</a>
+            <a id="chapters-link" class="link" target="_blank" title="Paste into the video's description: YouTube turns it into chapters">YouTube chapters (.txt)</a>
+          </div>
+          <div id="editors-out" class="editors-out" hidden></div>
+          <div id="package-out" class="editors-out" hidden></div>
+        </section>
+      </section>
+
+      <!-- the YouTube title and thumbnail (youtube.py) -->
+      <section class="tab-page yt-page" data-page="youtube">
+        <!-- where it goes, first: the posting services' buttons (RecapStudio.addButton("publish")), or how to set one up -->
+        <section class="publish-where" aria-label="Where it goes">
+          <h2>Where it goes</h2>
+          <div id="publish-plugins" class="publish-plugins"></div>
+          <div id="publish-none" class="muted" hidden>No posting service is set up yet. Post to YouTube and Post to TikTok are plugins: add one, connect your account, and its button comes here.
+            <button type="button" class="link" id="publish-setup">Open Settings → Manage plugins</button></div>
+        </section>
+        <div id="yt-empty" class="empty-note">No title or thumbnail yet. <b>Suggest a title and thumbnail</b> has your script writer read the story and pick them; Make the recap does it after the script when it's ticked in the panel beside.</div>
+        <div id="yt-out" class="yt-out" hidden>
+          <div class="yt-top">
+            <div class="yt-pic-col">
+              <a id="yt-thumb-link" target="_blank" title="Open the thumbnail"><img id="yt-thumb" alt="Thumbnail"></a>
+              <figure id="yt-ai" class="yt-ai" hidden>
+                <a id="yt-ai-link" target="_blank" title="Open the AI version"><img id="yt-ai-img" alt="Redrawn with AI"></a>
+                <figcaption id="yt-ai-by" class="hint"></figcaption>
+              </figure>
+            </div>
+            <div class="yt-side">
+              <label><span>Title <span id="yt-count" class="muted"></span></span>
+                <span class="yt-row"><input id="yt-title" maxlength="100"><button type="button" id="yt-copy" class="ghost small">Copy</button></span></label>
+              <div class="yt-alts-box"><span class="field-head">Other titles <span class="hint">Click one to use it.</span></span>
+                <div id="yt-alts" class="yt-alts"></div></div>
+              <label><span>Hook words <span class="hint">across the bottom, when no label finds its character</span></span>
+                <span class="yt-row"><input id="yt-text" maxlength="60"><button type="button" id="yt-redraw" class="ghost small">Redraw</button></span></label>
+              <span id="yt-by" class="hint"></span>
+            </div>
+          </div>
+          <div class="yt-below">
+            <span class="field-head">On the thumbnail <span class="hint">Change the words, then Redraw. Empty takes one off.</span></span>
+            <div id="yt-marks" class="yt-marks"></div>
+            <span class="field-head">Pictures <span class="hint">Click one to use it or take it out: two at most, side by side.</span></span>
+            <div id="yt-pics" class="yt-pics"></div>
+          </div>
+        </div>
+        <div class="yt-actions"><button type="button" id="yt-suggest" class="ghost">Suggest a title and thumbnail</button>
+          <button type="button" id="yt-ai-go" class="ghost" hidden>Redraw with AI</button>
+          <span id="yt-ai-status" class="hint"></span></div>
+      </section>
+
+      <!-- the job under way: at the foot of the stage column, with Pause and Cancel -->
+      <div id="job" class="job" hidden>
+        <div class="job-row"><span id="job-msg"></span><button id="job-wording" class="primary small" hidden>Check wording</button><button id="job-credits" class="primary small" hidden>Check the scan group's pages</button><button id="job-characters" class="primary small" hidden>Review characters</button><button id="job-pause" class="ghost small">Pause</button><button id="job-cancel" class="ghost small">Cancel</button></div>
+        <div class="bar"><div id="job-bar"></div></div>
+        <div id="job-error" class="error"></div>
+      </div>
+    </div>
+
+    <!-- the inspector: this project's settings, those of the stage that's open (data-stage), plus the plugins' -->
+    <aside id="inspector" class="inspector" data-stage="chapters" aria-label="This stage's settings">
+      <h2 class="inspector-title" id="inspector-title">Chapters</h2>
+      <div id="scene-inspector" class="scene-inspector" hidden></div>
+      <div class="settings proj-settings inspector-sections" id="settings">
+        <fieldset data-stage="chapters" id="source-box">
+          <legend>Where they come from</legend>
+          <div id="source-line" class="muted"></div>
+          <div class="link-row"><button type="button" class="link" id="source-change">Change the series or the source</button></div>
+        </fieldset>
+        <fieldset data-stage="chapters">
+          <legend>How the pages are read</legend>
+          <label>Kind of comic
+            <select data-key="layout"><option value="auto">Told from the pages</option><option value="webtoon">Webtoon (long vertical strip)</option><option value="pages">Manga or comic pages</option></select></label>
+          <label>Reading direction
+            <select data-key="reading_direction"><option value="ltr">Left to right (comics, webtoons)</option><option value="rtl">Right to left (manga)</option></select></label>
+          <label>Its text
+            <select data-key="language"><option value="en">English</option><option value="ko">Korean, translated into English</option><option value="zh">Chinese, translated into English</option><option value="ja">Japanese, translated into English</option></select></label>
+          <span class="hint">A comic in Korean, Chinese or Japanese is read in that language, then your script writer translates it into English (the Translate step) before the script is written. Changing it applies when the text is read again.</span>
+          <details class="details-adv">
+            <summary>More settings</summary>
+          <label>Smallest panel (fraction of page width)
+            <input data-key="min_panel_frac" type="number" step="0.01" min="0.01" max="0.9"></label>
+          </details>
+          <label>A webtoon's video
+            <select data-key="webtoon_video"><option value="scroll">Scrolls down the chapter</option><option value="scenes">Scene by scene</option></select></label>
+          <span class="hint">When the video's style is Automatic. Scrolling, the narration follows the strip down.</span>
+        </fieldset>
+        <fieldset data-stage="chapters">
+          <legend>The scan group's pages</legend>
+          <label class="check"><input data-key="leave_out_credits" type="checkbox"> Leave them out at the start and end of chapters</label>
+          <span class="hint">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages: found after Detect panels, and again after Read text, because they repeat across chapters or their text says so. They're unticked in the scene list (tick one to keep it) and cut out of the video.</span>
+          <label>Before the script
+            <select data-key="credits_review"><option value="review">Let me check them</option><option value="trust">Leave them out as found</option></select></label>
+          <span class="hint">Checking shows one of each kind, and Make the recap waits for you; left out as found, it doesn't wait.</span>
+          <div><button type="button" id="find-credits" class="ghost small">Find them now</button>
+            <button type="button" id="credits-count" class="ghost small credits-open" title="Every piece left out as the scan group's pages (credits, ads, notices), in one place">Check what was left out…</button></div>
+        </fieldset>
+
+        <fieldset data-stage="characters">
+          <legend>Finding them</legend>
+          <label class="check"><input data-key="find_characters" type="checkbox"> Find the characters before the script (Make the recap)</label>
+          <label>Scan
+            <select data-key="characters_chapters"><option value="first">The first 5 chapters it writes</option><option value="all">Every chapter it writes</option></select></label>
+          <label>Suggested names
+            <select data-key="characters_review"><option value="review">Let me check them</option><option value="trust">Trust them</option></select></label>
+          <span class="hint">The first 5 chapters is quicker: the main cast shows up early; every chapter finds everyone, and takes longer. Checking the names makes Make the recap wait for you; trusted ones are added as suggested.</span>
+          <span class="hint">In a project that hasn't been scanned yet and has no named characters, Make the recap scans for the characters after reading the text, and your script writer suggests their names. Needs the character scan (Find characters…).</span>
+        </fieldset>
+
+        <fieldset data-stage="script">
+          <legend>YouTube-safe</legend>
+          <label class="check"><input data-key="youtube_safe" type="checkbox"> YouTube-safe, for an age-restricted video</label>
+          <span class="hint">Sex scenes are written the way an R-rated film shows them: kissing, undressing and that they had sex, said plainly, but no explicit acts, body detail or orgasms. Forced scenes are named once and told through what they leave behind. Black boxes cover nudity in the video. They come from the box finder (Settings → Video), from the script writer as it writes, and from you: click a piece and drag over what to cover. Changing this doesn't rewrite a script already written; redo the chapters to get the milder wording.</span>
+          <span class="hint warn">This can make mistakes: boxes on things that don't need covering, a spot left uncovered, or wording that goes too far. Double-check all of it before you upload: watch the whole video and read the script.</span>
+          <div><button type="button" id="find-boxes" class="ghost small">Find boxes now</button>
+            <button type="button" class="ghost small boxes-open">See the boxes…</button>
+            <span id="boxes-count" class="muted"></span></div>
+        </fieldset>
+        <fieldset data-stage="script" class="prompt-box" id="prompt">
+          <legend>The narrator</legend>
+          <details class="details-adv">
+            <summary>Its persona, rules and style</summary>
+          <div class="prompt-col">
+            <label class="field"><span class="field-head">Persona <span class="hint">Who the narrator is and how they sound.</span></span>
+              <textarea id="p-persona" rows="4"></textarea></label>
+            <div class="field">
+              <span class="field-head">Rules <span class="hint">Hard requirements, numbered in the prompt.</span></span>
+              <div id="p-rules" class="list-edit"></div>
+              <button id="p-add-rule" class="ghost small">+ Add rule</button>
+            </div>
+            <div class="field">
+              <span class="field-head">Style <span class="hint">How the narration should read.</span></span>
+              <div id="p-styles" class="list-edit"></div>
+              <button id="p-add-style" class="ghost small">+ Add style point</button>
+            </div>
+            <label class="field"><span class="field-head">Note for the next run <span class="hint">Anything specific to this batch of chapters. Clear it when you're done.</span></span>
+              <textarea id="p-note" rows="2" placeholder="Seyoung has just moved into the company house; her coworker's name is Jun."></textarea></label>
+            <div class="prompt-actions">
+              <button id="p-reset" class="ghost">Reset persona, rules and style</button>
+              <button id="p-preview" class="ghost">Preview prompt</button>
+            </div>
+          </div>
+          <pre id="p-preview-out" class="preview" hidden></pre>
+          </details>
+        </fieldset>
+
+        <fieldset data-stage="video" id="video-settings">
           <legend>Video settings</legend>
           <span class="hint">For this project. They apply the next time the video is made.</span>
           <label>Format <select data-key="orientation"><option value="landscape">Landscape (YouTube)</option><option value="portrait">Portrait (Shorts, TikTok, Reels)</option></select></label>
           <label>Resolution
             <select data-key="resolution" data-type="number"><option value="1080">1080p (1920×1080)</option><option value="720">720p (1280×720)</option><option value="480">480p (854×480)</option><option value="360">360p (640×360)</option></select></label>
           <label>Style
-            <select data-key="video_style"><option value="auto">Automatic (scroll webtoons)</option><option value="motion">Pan and zoom, scene by scene</option><option value="stills">Stills, scene by scene</option></select></label>
-          <label class="adv">Frame rate
-            <select data-key="fps" data-type="number"><option value="60">60 fps</option><option value="50">50 fps</option><option value="30">30 fps</option><option value="25">25 fps</option><option value="24">24 fps</option><option value="20">20 fps</option><option value="15">15 fps</option><option value="12">12 fps</option><option value="10">10 fps</option><option value="5">5 fps (stills)</option></select></label>
-          <label class="adv">Pan and zoom toward
-            <select data-key="motion_focus" id="focus-select"><option value="center">The middle of the scene</option><option value="subject">The scene's main subject (needs the subject finder, Settings → Video)</option></select></label>
+            <select data-key="video_style"><option value="auto">Automatic</option><option value="motion">Pan and zoom</option><option value="stills">Stills</option></select></label>
           <label id="typeset-row" class="check" hidden><input data-key="typeset" type="checkbox"> Put the English in the pictures (a translated comic)</label>
           <span id="typeset-hint" class="hint" hidden>The original text in speech bubbles and captions is painted out and the English lettered in its place, sized to fit the bubble; signs get a small English caption over them, and sound effects stay as drawn. Check the translation in the Script tab first: what's in the pictures is what it says there.</span>
-          <label class="check adv"><input data-key="remove_text" type="checkbox"> Remove the text from the pictures (speech bubbles and captions)</label>
-          <span class="hint adv">The text is found by the same reader as Read text and painted over where it sits on a plain background, as in speech bubbles and caption boxes. Text drawn over the artwork (sound effects, signs) and bubbles with busy surroundings are left. The first video made this way reads every picture again (about as long as Read text); the cleaned pictures are then kept in the project's textless folder and reused.</span>
-          <label class="adv">Minimum seconds per scene <input data-key="min_panel_seconds" type="number" step="0.1" min="0.5"></label>
-          <label class="adv">Pause after narration (s) <input data-key="pad_seconds" type="number" step="0.05" min="0"></label>
-          <label class="adv">Crossfade (s) <input data-key="transition_seconds" type="number" step="0.05" min="0" max="2"></label>
-          <label class="adv">Split into parts
-            <select data-key="video_split"><option value="none">One video</option><option value="chapters">A new video every few chapters</option><option value="hours">Videos of at most a few hours</option></select></label>
-          <label id="split-chapters-row" class="adv">Chapters per video <input data-key="video_split_chapters" type="number" min="1" max="1000"></label>
-          <label id="split-hours-row" class="adv">Hours per video, at most <input data-key="video_split_hours" type="number" step="0.5" min="0.5" max="48"></label>
-          <span class="hint adv">Each part gets its own subtitles and YouTube chapter list. YouTube takes up to 12 hours per video. Chapters already rendered are reused, so changing how the video is split, or re-rendering after editing a chapter, only makes what changed.</span>
+          <details class="details-adv">
+            <summary>More settings</summary>
+          <label>Frame rate
+            <select data-key="fps" data-type="number"><option value="60">60 fps</option><option value="50">50 fps</option><option value="30">30 fps</option><option value="25">25 fps</option><option value="24">24 fps</option><option value="20">20 fps</option><option value="15">15 fps</option><option value="12">12 fps</option><option value="10">10 fps</option><option value="5">5 fps (stills)</option></select></label>
+          <label>Pan and zoom toward
+            <select data-key="motion_focus" id="focus-select"><option value="center">The middle of the scene</option><option value="subject">The scene's main subject</option></select></label>
+          <span class="hint">The main subject needs the subject finder (Settings → Video).</span>
+          <label class="check"><input data-key="remove_text" type="checkbox"> Remove the text from the pictures (speech bubbles and captions)</label>
+          <span class="hint">The text is found by the same reader as Read text and painted over where it sits on a plain background, as in speech bubbles and caption boxes. Text drawn over the artwork (sound effects, signs) and bubbles with busy surroundings are left. The first video made this way reads every picture again (about as long as Read text); the cleaned pictures are then kept in the project's textless folder and reused.</span>
+          <label>Minimum seconds per scene <input data-key="min_panel_seconds" type="number" step="0.1" min="0.5"></label>
+          <label>Pause after narration (s) <input data-key="pad_seconds" type="number" step="0.05" min="0"></label>
+          <label>Crossfade (s) <input data-key="transition_seconds" type="number" step="0.05" min="0" max="2"></label>
+          <label>Split into parts
+            <select data-key="video_split"><option value="none">One video</option><option value="chapters">Every few chapters</option><option value="hours">Every few hours</option></select></label>
+          <label id="split-chapters-row">Chapters per video <input data-key="video_split_chapters" type="number" min="1" max="1000"></label>
+          <label id="split-hours-row">Hours per video, at most <input data-key="video_split_hours" type="number" step="0.5" min="0.5" max="48"></label>
+          <span class="hint">Each part gets its own subtitles and YouTube chapter list. YouTube takes up to 12 hours per video. Chapters already rendered are reused, so changing how the video is split, or re-rendering after editing a chapter, only makes what changed.</span>
+          </details>
           <span class="hint">Automatic scrolls webtoon chapters and pans and zooms other comics. Smaller sizes render much faster: 720p has under half the pixels of 1080p, 360p about a ninth.</span>
         </fieldset>
-        <fieldset id="music-box">
+        <fieldset data-stage="video" id="music-box">
           <legend>Background music</legend>
           <label class="check"><input data-key="background_music" type="checkbox"> Play music under the narration</label>
           <label>Volume <span class="music-volume"><input id="music-volume" data-key="music_volume" data-type="number" type="range" min="0.05" max="1" step="0.05"><span id="music-volume-out" class="muted"></span></span></label>
@@ -185,10 +355,11 @@
             <span id="music-status" class="hint"></span></div>
           <span class="hint">Your own tracks play in this order, then again from the first until the video ends, each evened out in loudness and fading into the next. Use music you're allowed to put on YouTube, such as tracks from the YouTube Audio Library, or the video may be claimed. It's added when the chapters are joined, so changing it only joins the video again, without drawing anything. The narration file (.wav) and Export for editors leave it out.</span>
         </fieldset>
-        <fieldset id="captions-box">
+        <fieldset data-stage="video" id="captions-box">
           <legend>Captions and Shorts</legend>
           <label>Captions in the video
-            <select data-key="captions"><option value="off">None (the subtitles file only)</option><option value="classic">CapCut classic: bold capitals, the word being said in colour</option><option value="box">Highlight box: a box in colour behind the word being said</option><option value="minimal">Minimal: whole phrases on a dark band</option></select></label>
+            <select data-key="captions"><option value="off">None</option><option value="classic">CapCut classic</option><option value="box">Highlight box</option><option value="minimal">Minimal</option></select></label>
+          <span class="hint">None: just the subtitles file. CapCut classic: bold capitals, the word being said in colour. Highlight box: a box in colour behind the word being said. Minimal: whole phrases on a dark band.</span>
           <label id="captions-color-row">Colour of the word being said
             <select data-key="captions_color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="red">Red</option><option value="purple">Purple</option><option value="white">White (not picked out)</option></select></label>
           <label id="captions-font-row">Letters
@@ -196,133 +367,26 @@
           <span id="captions-font-hint" class="hint" hidden></span>
           <img id="captions-preview" class="caption-preview" alt="How the captions look" hidden>
           <span class="hint">The narration is drawn into the picture a few words at a time, the way CapCut's captions look, with the word being said picked out. Its timing comes from each line's sound, or from the speech recognizer when it's installed (Settings → Voice, for your own recordings), which is exact. The whole video is drawn again the next time it's made.</span>
-          <label>Shorts
-            <select data-key="shorts" data-type="number"><option value="0">None</option><option value="60">Cut the video into Shorts of up to 1 minute</option><option value="90">Cut the video into Shorts of up to 90 seconds</option><option value="180">Cut the video into Shorts of up to 3 minutes</option></select></label>
+          <label>Cut into Shorts
+            <select data-key="shorts" data-type="number"><option value="0">No</option><option value="60">Up to 1 minute each</option><option value="90">Up to 90 seconds each</option><option value="180">Up to 3 minutes each</option></select></label>
           <label id="shorts-label-row" class="check"><input data-key="shorts_label" type="checkbox"> "Part 1", "Part 2"… at the top of each</label>
           <span class="hint">Once the video is made, it's cut into parts that end in a pause between two lines, in the output folder's shorts folder: an 11-minute recap makes 13 one-minute Shorts. Portrait suits Shorts, TikTok and Reels best. YouTube takes Shorts of up to 3 minutes; TikTok and Reels longer.</span>
         </fieldset>
-      </div>
-    </section>
 
-    <!-- the YouTube title and thumbnail (youtube.py), at the full width, and what the project does for YouTube -->
-    <section class="tab-page yt-page proj-settings" data-page="youtube">
-      <div id="yt-empty" class="empty-note">No title or thumbnail yet. <b>Suggest a title and thumbnail</b> has your script writer read the story and pick them; Make the recap does it after the script when it's ticked below.</div>
-      <div id="yt-out" class="yt-out" hidden>
-        <div class="yt-top">
-          <div class="yt-pic-col">
-            <a id="yt-thumb-link" target="_blank" title="Open the thumbnail"><img id="yt-thumb" alt="Thumbnail"></a>
-            <figure id="yt-ai" class="yt-ai" hidden>
-              <a id="yt-ai-link" target="_blank" title="Open the AI version"><img id="yt-ai-img" alt="Redrawn with AI"></a>
-              <figcaption id="yt-ai-by" class="hint"></figcaption>
-            </figure>
-          </div>
-          <div class="yt-side">
-            <label><span>Title <span id="yt-count" class="muted"></span></span>
-              <span class="yt-row"><input id="yt-title" maxlength="100"><button type="button" id="yt-copy" class="ghost small">Copy</button></span></label>
-            <div class="yt-alts-box"><span class="field-head">Other titles <span class="hint">Click one to use it.</span></span>
-              <div id="yt-alts" class="yt-alts"></div></div>
-            <label><span>Hook words <span class="hint">across the bottom, when no label finds its character</span></span>
-              <span class="yt-row"><input id="yt-text" maxlength="60"><button type="button" id="yt-redraw" class="ghost small">Redraw</button></span></label>
-            <span id="yt-by" class="hint"></span>
-          </div>
-        </div>
-        <div class="yt-below">
-          <span class="field-head">On the thumbnail <span class="hint">Change the words, then Redraw. Empty takes one off.</span></span>
-          <div id="yt-marks" class="yt-marks"></div>
-          <span class="field-head">Pictures <span class="hint">Click one to use it or take it out: two at most, side by side.</span></span>
-          <div id="yt-pics" class="yt-pics"></div>
-        </div>
-      </div>
-      <div class="yt-actions"><button type="button" id="yt-suggest" class="ghost">Suggest a title and thumbnail</button>
-        <button type="button" id="yt-ai-go" class="ghost" hidden>Redraw with AI</button>
-        <span id="yt-ai-status" class="hint"></span></div>
-      <div class="settings">
-        <fieldset>
+        <fieldset data-stage="youtube">
           <legend>Title and thumbnail</legend>
           <label class="check"><input data-key="suggest_title" type="checkbox"> Suggest a title and thumbnail when the script is written</label>
           <span class="hint">Your script writer reads the story and picks a clickbait title, a few others, one or two pictures for the thumbnail and what goes on them: yellow labels with arrows on the characters, a "?!" and a short speech bubble. The thumbnail is drawn at 1280×720 into the output folder.</span>
           <label class="check"><input data-key="redraw_thumbnail" type="checkbox"> Then redraw it with AI</label>
           <span class="hint">An image model repaints the thumbnail as one glossy illustration with the same characters and words, saved beside it as thumbnail_ai.jpg. It needs a service and its key in Settings → Thumbnail redraw, and costs a few cents each time.<span id="yt-ai-setup" class="warn"></span></span>
         </fieldset>
-        <fieldset>
-          <legend>YouTube-safe</legend>
-          <label class="check"><input data-key="youtube_safe" type="checkbox"> YouTube-safe, for an age-restricted video</label>
-          <span class="hint">Sex scenes are written the way an R-rated film shows them: kissing, undressing and that they had sex, said plainly, but no explicit acts, body detail or orgasms. Forced scenes are named once and told through what they leave behind. Black boxes cover nudity in the video. They come from the box finder (Settings → Video), from the script writer as it writes, and from you: click a piece and drag over what to cover. Changing this doesn't rewrite a script already written; redo the chapters to get the milder wording.</span>
-          <span class="hint warn">This can make mistakes: boxes on things that don't need covering, a spot left uncovered, or wording that goes too far. Double-check all of it before you upload: watch the whole video and read the script.</span>
-          <div><button type="button" id="find-boxes" class="ghost small adv">Find boxes now</button>
-            <button type="button" class="ghost small boxes-open">See the boxes…</button>
-            <span id="boxes-count" class="muted"></span></div>
-        </fieldset>
       </div>
-    </section>
-
-    <section class="tab-page prompt-box" data-page="prompt" id="prompt">
-      <div class="prompt-col">
-        <label class="field"><span class="field-head">Persona <span class="hint">Who the narrator is and how they sound.</span></span>
-          <textarea id="p-persona" rows="4"></textarea></label>
-        <div class="field">
-          <span class="field-head">Rules <span class="hint">Hard requirements, numbered in the prompt.</span></span>
-          <div id="p-rules" class="list-edit"></div>
-          <button id="p-add-rule" class="ghost small">+ Add rule</button>
-        </div>
-        <div class="field">
-          <span class="field-head">Style <span class="hint">How the narration should read.</span></span>
-          <div id="p-styles" class="list-edit"></div>
-          <button id="p-add-style" class="ghost small">+ Add style point</button>
-        </div>
-        <label class="field"><span class="field-head">Note for the next run <span class="hint">Anything specific to this batch of chapters. Clear it when you're done.</span></span>
-          <textarea id="p-note" rows="2" placeholder="Seyoung has just moved into the company house; her coworker's name is Jun."></textarea></label>
-        <div class="prompt-actions">
-          <button id="p-reset" class="ghost">Reset persona, rules and style</button>
-          <button id="p-preview" class="ghost">Preview prompt</button>
-        </div>
-      </div>
-      <pre id="p-preview-out" class="preview" hidden></pre>
-    </section>
-
-    <section class="tab-page settings proj-settings" data-page="project" id="settings">
-      <p class="hint settings-note">These settings belong to this project. The script writer and voice are set for all projects in <button type="button" class="link-btn open-global">Settings</button>.</p>
-      <fieldset>
-        <legend>Panels</legend>
-        <label>Layout
-          <select data-key="layout"><option value="auto">Auto-detect</option><option value="webtoon">Webtoon (long vertical strip)</option><option value="pages">Comic / manga pages</option></select></label>
-        <label>Reading direction
-          <select data-key="reading_direction"><option value="ltr">Left to right / webtoon</option><option value="rtl">Right to left (manga)</option></select></label>
-        <label>Language of its text
-          <select data-key="language"><option value="en">English</option><option value="ko">Korean (translated into English)</option><option value="zh">Chinese (translated into English)</option><option value="ja">Japanese (translated into English)</option></select></label>
-        <span class="hint">A comic in Korean, Chinese or Japanese is read in that language, then your script writer translates it into English (the Translate step) before the script is written. Changing it applies when the text is read again.</span>
-        <label class="adv">Smallest panel (fraction of page width)
-          <input data-key="min_panel_frac" type="number" step="0.01" min="0.01" max="0.9"></label>
-        <label>A webtoon's video
-          <select data-key="webtoon_video"><option value="scroll">Scroll down the whole chapter</option><option value="scenes">Show scenes one at a time</option></select></label>
-        <span class="hint">When the Video tab's Style is Automatic. Scrolling, the narration follows the strip down.</span>
-      </fieldset>
-      <fieldset>
-        <legend>Characters</legend>
-        <label class="check"><input data-key="find_characters" type="checkbox"> Find the characters before the script (Make the recap)</label>
-        <label>Scan
-          <select data-key="characters_chapters"><option value="first">The first 5 chapters it writes</option><option value="all">Every chapter it writes</option></select></label>
-        <label>Suggested names
-          <select data-key="characters_review"><option value="review">Let me check them</option><option value="trust">Trust them</option></select></label>
-        <span class="hint">The first 5 chapters is quicker: the main cast shows up early; every chapter finds everyone, and takes longer. Checking the names makes Make the recap wait for you; trusted ones are added as suggested.</span>
-        <span class="hint">In a project that hasn't been scanned yet and has no named characters, Make the recap scans for the characters after reading the text, and your script writer suggests their names. Needs the character scan (the Characters tab).</span>
-      </fieldset>
-      <fieldset>
-        <legend>The scan group's pages</legend>
-        <label class="check"><input data-key="leave_out_credits" type="checkbox"> Leave out the scan group's pages at the start and end of chapters</label>
-        <span class="hint">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages: found after Detect panels, and again after Read text, because they repeat across chapters or their text says so. They're unticked in the scene list (tick one to keep it) and cut out of the video.</span>
-        <label>Before the script
-          <select data-key="credits_review"><option value="review">Let me check them</option><option value="trust">Leave them out as found</option></select></label>
-        <span class="hint">Checking shows one of each kind, and Make the recap waits for you; left out as found, it doesn't wait.</span>
-        <div><button type="button" id="find-credits" class="ghost small">Find them now</button>
-          <button type="button" class="ghost small credits-open">Check what was left out…</button></div>
-      </fieldset>
-    </section>
+      <p class="hint settings-note">These belong to this project. The writer and voice for every project are in <button type="button" class="link-btn open-global">Settings</button>.</p>
+    </aside>
   </section>
 </main>
-
 <dialog id="global-dialog">
-  <form method="dialog" class="global-form">
+  <form method="dialog" novalidate class="global-form">
     <div class="global-head">
       <h2>Settings <span class="hint">These apply to every project.</span></h2>
       <input id="gs-find" type="search" placeholder="Find a setting" aria-label="Find a setting" autocomplete="off">
@@ -337,7 +401,9 @@
     <div class="settings gs-pages" id="gs-pages">
       <fieldset>
         <legend>Script writer</legend>
-        <label>Writer
+        <span class="hint">Who writes the narration, suggests titles and names the characters. One for every project.</span>
+        <div id="writer-cards" class="gs-cards" role="radiogroup" aria-label="Writer"></div>
+        <label class="writer-select-row">Writer
           <select data-key="llm_provider"><option value="ollama">Local model (Ollama)</option><option value="claude">Claude (Anthropic API, whole chapter at once)</option><option value="claude_code">Claude Code (your Claude plan, an agent per chapter)</option><option value="openrouter">OpenRouter (many companies' models, one key)</option><option value="gemini">Google Gemini</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="mistral">Mistral</option></select></label>
         <div class="claude-only">
           <label>Claude model <select data-key="claude_model" id="claude-model-select"></select></label>
@@ -356,8 +422,11 @@
             </div>
             <span class="hint">Stored only on this PC (data\claude_key.txt). Billed to your Anthropic account, separate from a Claude subscription.</span>
           </div>
-          <label class="adv">If Claude declines a chapter, write it with
-            <select data-key="ollama_model" class="ollama-model-select"></select></label>
+          <details class="details-adv">
+            <summary>Details</summary>
+            <label>If Claude declines a chapter, write it with
+              <select data-key="ollama_model" class="ollama-model-select"></select></label>
+          </details>
         </div>
         <div class="claudecode-only">
           <span class="hint">Uses your Claude subscription through Claude Code, not API credit. For each chapter the app starts a fresh Claude Code agent that reads every picture, a few chapters at a time, and saves its answers as it would Claude's. The agents follow the brief in the recap-studio-narration skill (a series' own saved brief when it has one). Suggest names uses Claude Code too.</span>
@@ -371,17 +440,19 @@
             <span class="hint">Logging in opens a window and your browser once: sign in with your Claude account. Claude Code keeps the login on this PC.</span>
           </div>
           <label>Model <select data-key="claude_code_model"><option value="opus">Opus (the best writer)</option><option value="sonnet">Sonnet (faster, uses less of your plan)</option></select></label>
-          <label class="adv">Chapters at once <input data-key="claude_code_workers" type="number" min="1" max="8"></label>
-          <span class="hint adv">A first narration still finishes chapters in order: each agent drafts from the pictures, then gets the story so far once the chapter before it is saved.</span>
+          <label>Chapters at once <input data-key="claude_code_workers" type="number" min="1" max="8"></label>
+          <span class="hint">A first narration still finishes chapters in order: each agent drafts from the pictures, then gets the story so far once the chapter before it is saved.</span>
         </div>
         <div class="cloud-only">
+          <label>Service
+            <select id="cloud-service"><option value="openrouter">OpenRouter (many companies' models, one key)</option><option value="gemini">Google Gemini</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="mistral">Mistral</option></select></label>
           <span id="cloud-about" class="hint"></span>
           <label>Model
             <input id="cloud-model" list="cloud-model-list" spellcheck="false" autocomplete="off" placeholder="Type or pick a model">
             <datalist id="cloud-model-list"></datalist></label>
           <span id="cloud-model-note" class="hint"></span>
-          <div class="key-row adv"><button id="cloud-test-model" type="button" class="ghost small">Test this model</button></div>
-          <span id="cloud-test-result" class="hint adv"></span>
+          <div class="key-row"><button id="cloud-test-model" type="button" class="ghost small">Test this model</button></div>
+          <span id="cloud-test-result" class="hint"></span>
           <div class="key-box">
             <span class="field-head">API key</span>
             <div id="cloud-key-status" class="muted"></div>
@@ -396,15 +467,21 @@
             </div>
             <span class="hint" id="cloud-key-hint"></span>
           </div>
-          <label class="adv">If the service can't write a chapter, write it with
-            <select data-key="ollama_model" class="ollama-model-select"></select></label>
+          <details class="details-adv">
+            <summary>Details</summary>
+            <label>If the service can't write a chapter, write it with
+              <select data-key="ollama_model" class="ollama-model-select"></select></label>
+          </details>
         </div>
         <div class="ollama-opts">
-          <label class="adv">Ollama address <input data-key="ollama_url"></label>
           <label>Local model <select data-key="ollama_model" class="ollama-model-select"></select></label>
-          <label class="check adv"><input data-key="use_vision" type="checkbox"> Show panel images to the model (vision models)</label>
-          <label class="adv">Scenes per request <input data-key="panels_per_batch" type="number" min="1" max="20"></label>
-          <label class="adv">Temperature <input data-key="temperature" type="number" step="0.1" min="0" max="2"></label>
+          <details class="details-adv">
+            <summary>Details</summary>
+            <label>Ollama address <input data-key="ollama_url"></label>
+            <label class="check"><input data-key="use_vision" type="checkbox"> Show panel images to the model (vision models)</label>
+            <label>Scenes per request <input data-key="panels_per_batch" type="number" min="1" max="20"></label>
+            <label>Temperature <input data-key="temperature" type="number" step="0.1" min="0" max="2"></label>
+          </details>
         </div>
       </fieldset>
       <fieldset id="voice-box">
@@ -420,7 +497,7 @@
         </div>
         <div class="voice-eleven">
           <label>Voice <select data-key="elevenlabs_voice" id="eleven-voice-select"></select></label>
-          <label class="adv">Model <select data-key="elevenlabs_model" id="eleven-model-select"></select></label>
+          <label>Model <select data-key="elevenlabs_model" id="eleven-model-select"></select></label>
           <div class="key-box">
             <span class="field-head">API key</span>
             <div id="eleven-key-status" class="muted"></div>
@@ -444,8 +521,37 @@
         <legend>Video</legend>
         <span class="hint">Each project has its own format, size and style, chosen when it's made and changed in its Video tab.</span>
         <label>Encoder
-          <select data-key="video_encoder"><option value="auto">Automatic (the GPU's encoder when available: NVIDIA, AMD or Intel)</option><option value="cpu">CPU only</option></select></label>
-        <div id="focus-box" class="focus-box adv">
+          <select data-key="video_encoder"><option value="auto">Automatic</option><option value="cpu">CPU only</option></select></label>
+        <span class="hint">Automatic uses the graphics card's encoder when there is one (NVIDIA, AMD or Intel), else the CPU's.</span>
+        <details class="details-adv">
+          <summary>Performance</summary>
+        <label class="check"><input data-key="use_gpu" type="checkbox"> Use the NVIDIA GPU for text reading and voice</label>
+        <label>Work on this many panels / lines at once
+          <select data-key="parallel_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+        <span class="hint" id="gpu-status"></span>
+        <div id="gpu-box" class="focus-box" hidden>
+          <span class="field-head">GPU support (text reading and the voice on the NVIDIA GPU)</span>
+          <span class="hint" id="gpu-about"></span>
+          <span class="hint warn" id="gpu-driver" hidden></span>
+          <div id="gpu-off" class="magi-part"><button type="button" id="gpu-download">Download GPU support</button></div>
+          <div id="gpu-busy" class="magi-part" hidden>
+            <span id="gpu-stage"></span>
+            <div class="bar"><div id="gpu-bar"></div></div>
+            <button type="button" id="gpu-cancel" class="ghost small">Cancel download</button>
+          </div>
+          <div id="gpu-on" class="magi-part" hidden>
+            <span class="hint" id="gpu-note"></span>
+            <button type="button" id="gpu-remove" class="ghost small danger">Remove GPU support</button>
+          </div>
+          <div id="gpu-error" class="error"></div>
+        </div>
+        <label>Draw video frames in this many processes
+          <select data-key="video_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+        <span class="hint" id="video-status"></span>
+        </details>
+        <details class="details-adv">
+          <summary>The subject finder and the box finder</summary>
+        <div id="focus-box" class="focus-box">
           <span class="field-head">Subject finder (pan and zoom toward the subject)</span>
           <span class="hint">A project can pan and zoom toward each scene's main subject (its Video tab) instead of its middle. The main subject (usually the character) is found by U2-Net-p, a small open model (Apache 2.0): a 4.6 MB download into data\addons\focus, not part of the app. Each scene is looked at once (about 0.03 s on an NVIDIA GPU, 0.2 s on the CPU).</span>
           <div id="focus-off" class="magi-part"><button type="button" id="focus-download">Download the subject finder (4.6 MB)</button></div>
@@ -457,7 +563,7 @@
           <div id="focus-on" class="magi-part" hidden><button type="button" id="focus-remove" class="ghost small danger">Remove the subject finder</button></div>
           <div id="focus-error" class="error"></div>
         </div>
-        <div id="boxes-box" class="focus-box adv">
+        <div id="boxes-box" class="focus-box">
           <span class="field-head">Black boxes (YouTube-safe projects)</span>
           <span class="hint">The box finder covers exposed nipples and genitals. It's anime_censor_detection, an open model trained on drawn art (MIT, by deepghs): a 44.6 MB download into data\addons\boxes, not part of the app. Turn on YouTube-safe in a project's Video tab; rendering then looks at each piece used once (about 0.05 s on an NVIDIA GPU, 0.3 s on the CPU) before drawing the boxes.</span>
           <span class="hint warn">It makes mistakes: boxes on clothed bodies, faces or logos, and now and then a spot it misses. Look over every box before you upload.</span>
@@ -470,6 +576,7 @@
           <div id="boxes-on" class="magi-part" hidden><button type="button" id="boxes-remove" class="ghost small danger">Remove the box finder</button></div>
           <div id="boxes-error" class="error"></div>
         </div>
+        </details>
       </fieldset>
       <fieldset id="redraw-box">
         <legend>Thumbnail redraw</legend>
@@ -495,47 +602,86 @@
         </div>
         <span class="hint">Redraw with AI (a project's YouTube tab) sends the drawn thumbnail and its pictures to an image model, which repaints them as one glossy illustration like the big recap channels' thumbnails. A few cents a picture, billed by the service. Image models may decline racier scenes; the drawn thumbnail always stays.</span>
       </fieldset>
-      <fieldset class="adv">
-        <legend>Performance</legend>
-        <label class="check"><input data-key="use_gpu" type="checkbox"> Use the NVIDIA GPU for text reading and voice</label>
-        <label>Work on this many panels / lines at once
-          <select data-key="parallel_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
-        <span class="hint" id="gpu-status"></span>
-        <div id="gpu-box" class="focus-box" hidden>
-          <span class="field-head">GPU support (text reading and the voice on the NVIDIA GPU)</span>
-          <span class="hint" id="gpu-about"></span>
-          <span class="hint warn" id="gpu-driver" hidden></span>
-          <div id="gpu-off" class="magi-part"><button type="button" id="gpu-download">Download GPU support</button></div>
-          <div id="gpu-busy" class="magi-part" hidden>
-            <span id="gpu-stage"></span>
-            <div class="bar"><div id="gpu-bar"></div></div>
-            <button type="button" id="gpu-cancel" class="ghost small">Cancel download</button>
+      <fieldset id="reading-box">
+        <legend>Reading comics</legend>
+        <span class="hint">The models that read the pages. Each is an optional download into the add-ons folder, not part of the app.</span>
+        <div class="gs-part" id="ocr-box">
+          <span class="field-head">English lettering</span>
+          <span class="hint">RapidOCR's English model reads English comic lettering far more accurately than the built-in one (on a test chapter: run-together words 46 → 12, misread words 30 → 2). A 9 MB download into data\addons\ocr_en (Apache 2.0), not part of the app.</span>
+          <div id="ocr-off" class="magi-part">
+            <button type="button" id="ocr-download">Download the English model (9 MB)</button>
           </div>
-          <div id="gpu-on" class="magi-part" hidden>
-            <span class="hint" id="gpu-note"></span>
-            <button type="button" id="gpu-remove" class="ghost small danger">Remove GPU support</button>
+          <div id="ocr-busy" class="magi-part" hidden>
+            <span id="ocr-stage"></span>
+            <div class="bar"><div id="ocr-bar"></div></div>
+            <button type="button" id="ocr-cancel" class="ghost small">Cancel download</button>
           </div>
-          <div id="gpu-error" class="error"></div>
+          <div id="ocr-on" class="magi-part" hidden>
+            <label class="check"><input data-key="ocr_english" type="checkbox"> Read text with the English model</label>
+            <span class="hint">Text already read stays as it is: run Read text with Redo on the chapters you want read again.</span>
+            <button type="button" id="ocr-remove" class="ghost small danger">Remove the English model</button>
+          </div>
+          <div id="ocr-error" class="error"></div>
         </div>
-        <label>Draw video frames in this many processes
-          <select data-key="video_workers"><option value="0">Automatic</option><option value="1">1 (one at a time)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
-        <span class="hint" id="video-status"></span>
-      </fieldset>
-      <fieldset id="bubbles-box">
-        <legend>Cutting webtoons</legend>
-        <span class="hint">The bubble finder keeps a webtoon's cuts out of its speech bubbles, captions and sound effects. Without it a cut can pass between a bubble's outline and its text, leaving a sliver of the bubble at the bottom of one scene and the rest of it on the next (on test chapters, a quarter of the cuts did; with it, 7 in 1,885). It's comic-text-and-bubble-detector, an open model trained on manga, webtoons and western comics (Apache 2.0, by ogkalu): an 11.1 MB download into data\addons\bubbles, not part of the app. Detect panels takes longer with it, on the CPU: 10 to 40 seconds more a chapter.</span>
-        <div id="bubbles-off" class="magi-part"><button type="button" id="bubbles-download">Download the bubble finder (11.1 MB)</button></div>
-        <div id="bubbles-busy" class="magi-part" hidden>
-          <span id="bubbles-stage"></span>
-          <div class="bar"><div id="bubbles-bar"></div></div>
-          <button type="button" id="bubbles-cancel" class="ghost small">Cancel download</button>
+        <div class="gs-part" id="cjk-box">
+          <span class="field-head">Korean, Chinese and Japanese</span>
+          <span class="hint">For comics in Korean, Chinese or Japanese (a project's language): PaddleOCR's PP-OCRv5 text finder and readers (Apache 2.0), 35 MB into data\addons\ocr_cjk, not part of the app. Read text downloads it the first time a project in one of those languages is read; or get it now.</span>
+          <div id="cjk-off" class="magi-part">
+            <button type="button" id="cjk-download">Download the Korean, Chinese and Japanese reader (35 MB)</button>
+          </div>
+          <div id="cjk-busy" class="magi-part" hidden>
+            <span id="cjk-stage"></span>
+            <div class="bar"><div id="cjk-bar"></div></div>
+            <button type="button" id="cjk-cancel" class="ghost small">Cancel download</button>
+          </div>
+          <div id="cjk-on" class="magi-part" hidden>
+            <span class="ok">Downloaded: Korean, Chinese and Japanese comics are read with it.</span>
+            <button type="button" id="cjk-remove" class="ghost small danger">Remove it</button>
+          </div>
+          <div id="cjk-error" class="error"></div>
         </div>
-        <div id="bubbles-on" class="magi-part" hidden>
-          <span class="ok">Downloaded: webtoon chapters are cut around their speech bubbles.</span>
-          <span class="hint">Chapters already cut keep their scenes. Detect panels with Redo cuts a chapter again (its text, script and voice are then made again too).</span>
-          <button type="button" id="bubbles-remove" class="ghost small danger">Remove the bubble finder</button>
+        <div class="gs-part" id="bubbles-box">
+          <span class="field-head">Cutting webtoons around speech bubbles</span>
+          <span class="hint">The bubble finder keeps a webtoon's cuts out of its speech bubbles, captions and sound effects. Without it a cut can pass between a bubble's outline and its text, leaving a sliver of the bubble at the bottom of one scene and the rest of it on the next (on test chapters, a quarter of the cuts did; with it, 7 in 1,885). It's comic-text-and-bubble-detector, an open model trained on manga, webtoons and western comics (Apache 2.0, by ogkalu): an 11.1 MB download into data\addons\bubbles, not part of the app. Detect panels takes longer with it, on the CPU: 10 to 40 seconds more a chapter.</span>
+          <div id="bubbles-off" class="magi-part"><button type="button" id="bubbles-download">Download the bubble finder (11.1 MB)</button></div>
+          <div id="bubbles-busy" class="magi-part" hidden>
+            <span id="bubbles-stage"></span>
+            <div class="bar"><div id="bubbles-bar"></div></div>
+            <button type="button" id="bubbles-cancel" class="ghost small">Cancel download</button>
+          </div>
+          <div id="bubbles-on" class="magi-part" hidden>
+            <span class="ok">Downloaded: webtoon chapters are cut around their speech bubbles.</span>
+            <span class="hint">Chapters already cut keep their scenes. Detect panels with Redo cuts a chapter again (its text, script and voice are then made again too).</span>
+            <button type="button" id="bubbles-remove" class="ghost small danger">Remove the bubble finder</button>
+          </div>
+          <div id="bubbles-error" class="error"></div>
         </div>
-        <div id="bubbles-error" class="error"></div>
+        <div class="gs-part" id="cs-box">
+          <span class="field-head">Character scan models</span>
+          <span class="hint">Used by Find characters (the Characters tab). Downloaded on request into data\addons\charscan, not part of the app.</span>
+          <span id="cs-info" class="hint"></span>
+          <button type="button" id="cs-remove" class="ghost small danger" hidden>Remove models</button>
+        </div>
+        <div class="gs-part" id="magi-box">
+          <span class="field-head">Speaker detection (Magi, an optional add-on)</span>
+          <span class="hint">Magi v2 guesses who says each line while text is read, matching people to the pictures you add to your characters (the Characters tab, once Magi is installed). The script writer is told these are guesses: in testing Magi named the right speaker about 6 times in 10.</span>
+          <div id="magi-off" class="magi-part">
+            <span class="hint" id="magi-license"></span>
+            <label class="check"><input id="magi-accept" type="checkbox"> I'll use Magi only for personal, non-commercial purposes</label>
+            <button type="button" id="magi-install" disabled>Download</button>
+          </div>
+          <div id="magi-busy" class="magi-part" hidden>
+            <span id="magi-stage"></span>
+            <div class="bar"><div id="magi-bar"></div></div>
+            <button type="button" id="magi-cancel" class="ghost small">Cancel download</button>
+          </div>
+          <div id="magi-on" class="magi-part" hidden>
+            <label class="check"><input data-key="use_magi" type="checkbox"> Find speakers with Magi when reading text</label>
+            <span class="hint" id="magi-info"></span>
+            <button type="button" id="magi-remove" class="ghost small danger">Remove Magi</button>
+          </div>
+          <div id="magi-error" class="error"></div>
+        </div>
       </fieldset>
       <fieldset id="plugins-box" data-nav="Manage plugins">
         <legend>Plugins</legend>
@@ -571,64 +717,6 @@
         <label class="check"><input type="checkbox" data-key="check_new_chapters"> Check projects for new chapters when the app starts</label>
         <div id="src-error" class="error"></div>
       </fieldset>
-      <fieldset id="ocr-box" class="adv">
-        <legend>Text reading</legend>
-        <span class="hint">RapidOCR's English model reads English comic lettering far more accurately than the built-in one (on a test chapter: run-together words 46 → 12, misread words 30 → 2). A 9 MB download into data\addons\ocr_en (Apache 2.0), not part of the app.</span>
-        <div id="ocr-off" class="magi-part">
-          <button type="button" id="ocr-download">Download the English model (9 MB)</button>
-        </div>
-        <div id="ocr-busy" class="magi-part" hidden>
-          <span id="ocr-stage"></span>
-          <div class="bar"><div id="ocr-bar"></div></div>
-          <button type="button" id="ocr-cancel" class="ghost small">Cancel download</button>
-        </div>
-        <div id="ocr-on" class="magi-part" hidden>
-          <label class="check"><input data-key="ocr_english" type="checkbox"> Read text with the English model</label>
-          <span class="hint">Text already read stays as it is: run Read text with Redo on the chapters you want read again.</span>
-          <button type="button" id="ocr-remove" class="ghost small danger">Remove the English model</button>
-        </div>
-        <div id="ocr-error" class="error"></div>
-        <span class="hint">For comics in Korean, Chinese or Japanese (a project's language): PaddleOCR's PP-OCRv5 text finder and readers (Apache 2.0), 35 MB into data\addons\ocr_cjk, not part of the app. Read text downloads it the first time a project in one of those languages is read; or get it now.</span>
-        <div id="cjk-off" class="magi-part">
-          <button type="button" id="cjk-download">Download the Korean, Chinese and Japanese reader (35 MB)</button>
-        </div>
-        <div id="cjk-busy" class="magi-part" hidden>
-          <span id="cjk-stage"></span>
-          <div class="bar"><div id="cjk-bar"></div></div>
-          <button type="button" id="cjk-cancel" class="ghost small">Cancel download</button>
-        </div>
-        <div id="cjk-on" class="magi-part" hidden>
-          <span class="ok">Downloaded: Korean, Chinese and Japanese comics are read with it.</span>
-          <button type="button" id="cjk-remove" class="ghost small danger">Remove it</button>
-        </div>
-        <div id="cjk-error" class="error"></div>
-      </fieldset>
-      <fieldset id="cs-box" class="adv">
-        <legend>Character scan models</legend>
-        <span class="hint">Used by Find characters (the Characters tab). Downloaded on request into data\addons\charscan, not part of the app.</span>
-        <span id="cs-info" class="hint"></span>
-        <button type="button" id="cs-remove" class="ghost small danger" hidden>Remove models</button>
-      </fieldset>
-      <fieldset id="magi-box" class="adv" data-nav="Speaker detection">
-        <legend>Speaker detection (optional add-on)</legend>
-        <span class="hint">Magi v2 guesses who says each line while text is read, matching people to the pictures you add to your characters (the Characters tab, advanced mode). The script writer is told these are guesses: in testing Magi named the right speaker about 6 times in 10.</span>
-        <div id="magi-off" class="magi-part">
-          <span class="hint" id="magi-license"></span>
-          <label class="check"><input id="magi-accept" type="checkbox"> I'll use Magi only for personal, non-commercial purposes</label>
-          <button type="button" id="magi-install" disabled>Download</button>
-        </div>
-        <div id="magi-busy" class="magi-part" hidden>
-          <span id="magi-stage"></span>
-          <div class="bar"><div id="magi-bar"></div></div>
-          <button type="button" id="magi-cancel" class="ghost small">Cancel download</button>
-        </div>
-        <div id="magi-on" class="magi-part" hidden>
-          <label class="check"><input data-key="use_magi" type="checkbox"> Find speakers with Magi when reading text</label>
-          <span class="hint" id="magi-info"></span>
-          <button type="button" id="magi-remove" class="ghost small danger">Remove Magi</button>
-        </div>
-        <div id="magi-error" class="error"></div>
-      </fieldset>
       <fieldset id="storage-box">
         <legend>Projects folder</legend>
         <span class="hint">Each project is saved in its own folder, named after it, in:</span>
@@ -642,7 +730,22 @@
           <span id="projects-move-msg"></span>
           <div class="bar"><div id="projects-move-bar"></div></div>
         </div>
-        <span id="storage-other" class="hint adv"></span>
+        <span id="storage-other" class="hint"></span>
+      </fieldset>
+      <fieldset id="phone-box">
+        <legend>Phone</legend>
+        <label class="check"><input id="phone-on" type="checkbox"> Open Recap Studio on my phone (this Wi-Fi only)</label>
+        <span class="hint">See how your recaps are going and why one stopped, pause it, or run it again, from a phone on the same Wi-Fi as this PC while Recap Studio is open here. Only your home network can reach it, not the internet.</span>
+        <div id="phone-pair" class="phone-pair" hidden>
+          <img id="phone-qr" alt="QR code that opens Recap Studio on your phone" width="176" height="176">
+          <div class="phone-steps">
+            <b>Scan it with your phone's camera</b>
+            <span class="hint">It opens <code id="phone-url"></code> with a key the phone keeps as a small cookie, so it only needs scanning once (typing the address in doesn't link a phone).</span>
+            <span id="phone-firewall" class="hint warn">If Windows asks whether to let Recap Studio on networks, allow it on private networks, or your phone can't connect.</span>
+            <div><button type="button" id="phone-forget" class="ghost small" title="A new code: phones that scanned the old one have to scan again">Forget phones</button></div>
+          </div>
+        </div>
+        <div id="phone-error" class="error"></div>
       </fieldset>
       <fieldset id="server-box" hidden>
         <legend>Server</legend>
@@ -667,23 +770,8 @@
         <span id="server-address-note" class="hint"></span>
         <span id="server-error" class="error"></span>
       </fieldset>
-      <fieldset id="phone-box">
-        <legend>Phone</legend>
-        <label class="check"><input id="phone-on" type="checkbox"> Open Recap Studio on my phone (this Wi-Fi only)</label>
-        <span class="hint">See how your recaps are going and why one stopped, pause it, or run it again, from a phone on the same Wi-Fi as this PC while Recap Studio is open here. Only your home network can reach it, not the internet.</span>
-        <div id="phone-pair" class="phone-pair" hidden>
-          <img id="phone-qr" alt="QR code that opens Recap Studio on your phone" width="176" height="176">
-          <div class="phone-steps">
-            <b>Scan it with your phone's camera</b>
-            <span class="hint">It opens <code id="phone-url"></code> with a key the phone keeps as a small cookie, so it only needs scanning once (typing the address in doesn't link a phone).</span>
-            <span id="phone-firewall" class="hint warn">If Windows asks whether to let Recap Studio on networks, allow it on private networks, or your phone can't connect.</span>
-            <div><button type="button" id="phone-forget" class="ghost small" title="A new code: phones that scanned the old one have to scan again">Forget phones</button></div>
-          </div>
-        </div>
-        <div id="phone-error" class="error"></div>
-      </fieldset>
       <fieldset id="update-box">
-        <legend>Updates</legend>
+        <legend>Updates and this PC</legend>
         <span id="update-info" class="hint"></span>
         <span id="update-edition" class="hint" hidden>Full Suite is this app with Recap Studio's plugins built in. To switch, install its file from the release page over this copy: your projects and settings stay.</span>
         <label class="check"><input data-key="check_updates" type="checkbox"> Check GitHub for a new version when the app starts</label>
@@ -691,6 +779,14 @@
           <button type="button" id="update-check" class="ghost small">Check now</button>
           <button type="button" id="update-notes" class="link-btn">Releases on GitHub</button>
         </span>
+        <span class="field-head">This PC</span>
+        <div id="env"></div>
+      </fieldset>
+      <fieldset id="look-box">
+        <legend>Look</legend>
+        <label>Theme
+          <select data-key="theme"><option value="system">Use the system's</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <span class="hint">Use the system's follows Windows' light or dark mode, as it changes. The phone page follows the phone.</span>
       </fieldset>
     </div>
     </div>
@@ -698,7 +794,7 @@
 </dialog>
 
 <dialog id="ask-dialog">
-  <form method="dialog" class="ask-form">
+  <form method="dialog" novalidate class="ask-form">
     <h2 id="ask-title"></h2>
     <p id="ask-message"></p>
     <div class="import-actions" id="ask-actions"></div>
@@ -707,24 +803,30 @@
 
 <!-- first-run setup: shown until finished or skipped; Settings → Run setup again reopens it -->
 <!-- New project: what kind of comic, how its video looks, YouTube-safe; then the project is made -->
-<dialog id="new-dialog" class="wide-dialog">
-  <form method="dialog" class="import-form">
-    <div class="setup-head">
-      <h2 id="new-title"></h2>
-      <span id="new-stepno" class="muted"></span>
+<dialog id="new-dialog" class="wide-dialog np-dialog">
+  <form method="dialog" novalidate class="np-form">
+    <div class="np-main">
+      <div class="setup-head">
+        <h2 id="new-title">New project</h2>
+        <button value="cancel" class="ghost small" aria-label="Close">✕</button>
+      </div>
+      <div id="new-body" class="np-body"></div>
     </div>
-    <div id="new-body" class="setup-body"></div>
-    <div class="import-actions">
-      <button value="cancel" class="ghost">Cancel</button>
-      <span class="grow"></span>
-      <button id="new-back" type="button" class="ghost">Back</button>
-      <button id="new-next" type="button" class="primary">Next</button>
-    </div>
+    <aside class="np-side" aria-label="What you get">
+      <h3 class="inspector-title">What you get</h3>
+      <ul id="new-summary" class="setup-summary np-summary"></ul>
+      <p class="muted np-note">Then one click makes the whole recap, or stage by stage. Any of this can change later: the video and title at Video and Publish, the kind of comic and the characters in the panel beside the stages.</p>
+      <div class="np-actions">
+        <button id="new-next" type="button" class="primary">Create the project</button>
+        <button id="new-create-run" type="button" title="Create it, then Make the recap straight away">Create it and make the recap now</button>
+        <button value="cancel" class="ghost">Cancel</button>
+      </div>
+    </aside>
   </form>
 </dialog>
 
 <dialog id="setup-dialog" class="wide-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <div class="setup-head">
       <h2 id="setup-title"></h2>
       <span id="setup-stepno" class="muted"></span>
@@ -740,7 +842,7 @@
 </dialog>
 
 <dialog id="scan-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Scan for characters</h2>
     <p class="muted">Finds the characters in your chapters, groups each one's appearances and suggests what they look like. You then name each group to add it to the character list, with pictures (used by Magi) and a description (used by the script writer).</p>
     <div id="scan-get" hidden>
@@ -766,7 +868,7 @@
 </dialog>
 
 <dialog id="editors-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Export for video editors</h2>
     <p class="muted">Saves the recap as an OpenTimelineIO timeline (.otioz) to finish in a video editor: a clip for each scene, the narration as a clip for each line, crossfades as transitions and a marker at each chapter. Its subtitles (.srt) are saved next to it, in the output folder.</p>
     <span class="field-head">Made for</span>
@@ -787,7 +889,7 @@
 
 <!-- your own voice-over for a chapter (its 🎙 button): see voiceover.py -->
 <dialog id="voiceover-dialog" class="wide-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Your own voice-over: <span id="vo-chapter"></span></h2>
     <p class="muted">Record yourself reading this chapter's narration below, in order, as one file (WAV, MP3, M4A, FLAC, OGG and others). Speech recognition on this computer (Vosk) splits it into the scenes' lines and checks each line against the script. Lines from your recording are used in the video instead of the generated voice, and Voice leaves them alone. Pauses between lines help it find where each one starts.</p>
     <div class="vo-script-head"><span class="field-head">The script <span id="vo-lines" class="hint"></span></span><button type="button" id="vo-copy" class="ghost small">Copy</button></div>
@@ -811,7 +913,7 @@
 </dialog>
 
 <dialog id="review-dialog" class="wide-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Characters found</h2>
     <p id="review-wait" class="muted" hidden>Make the recap is waiting for this: the script is written once each character is added or ignored (or close this and press Resume).</p>
     <div class="review-head">
@@ -830,13 +932,13 @@
 
 <!-- every piece left out as the scan group's pages, in one place (credits.py) -->
 <dialog id="credits-dialog" class="wide-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>The scan group's pages</h2>
     <p class="muted">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages, found at the start and end of chapters and left out of the video. Each picture is shown once, with how many chapters it's in: <b>Keep</b> puts it back in all of them, <b>Leave out</b> confirms it, and chapters added later follow. Click a picture to see it full size.</p>
     <p id="credits-wait" class="muted" hidden>Make the recap is waiting for this: the script is written once each kind is kept or left out (Leave the rest out does the rest), or close this and press Resume.</p>
     <div class="review-head">
       <span id="credits-summary" class="muted"></span>
-      <label class="check adv"><input type="checkbox" id="credits-every"> <span>Every piece, chapter by chapter</span></label>
+      <label class="check"><input type="checkbox" id="credits-every"> <span>Every piece, chapter by chapter</span></label>
       <label class="check" id="credits-kept-box" hidden><input type="checkbox" id="credits-kept"> <span>Show the ones you put back</span></label>
     </div>
     <div id="credits-kinds" class="credits-list"></div>
@@ -847,7 +949,7 @@
 
 <!-- every piece with black boxes, in one place (cover.py) -->
 <dialog id="boxes-dialog" class="wide-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Black boxes</h2>
     <p class="muted">The pieces the video covers, chapter by chapter. Click one to add, move or remove its boxes. Boxes come from the box finder, the script writer and you.</p>
     <div class="review-head">
@@ -860,7 +962,7 @@
 </dialog>
 
 <dialog id="open-file-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Open a project file</h2>
     <p class="muted">A project saved with Save as file (.recap) opens as a new project, with its chapters, scenes, script, voice lines, characters and recordings. Its video is made again when you render it.</p>
     <div class="import-path">
@@ -876,7 +978,7 @@
 </dialog>
 
 <dialog id="import-dialog">
-  <form method="dialog" class="import-form">
+  <form method="dialog" novalidate class="import-form">
     <h2>Import chapters</h2>
     <div class="import-path">
       <input id="import-path" placeholder="Folder path, e.g. D:\Manga\My Series" spellcheck="false">
@@ -898,7 +1000,7 @@
   </form>
 </dialog>
 <dialog id="sources-dialog" class="wide-dialog">
-  <form method="dialog" class="sources-form">
+  <form method="dialog" novalidate class="sources-form">
     <h2 id="src-title">Get chapters from a site</h2>
     <div id="src-none" class="src-none" hidden>
       <p>No sources yet. Recap Studio comes with no scrapers: add a plugin, gallery-dl or a Suwayomi server in <button type="button" class="link-btn" id="src-open-settings">Settings → Sources</button>.</p>
@@ -914,13 +1016,13 @@
         <button type="button" id="src-link-go">Open</button>
       </div>
       <div class="src-row" data-for="search">
-        <select id="src-search-source" aria-label="Source"></select>
-        <input id="src-query" placeholder="Title" spellcheck="false">
+        <label class="src-sel">Source <select id="src-search-source"></select></label>
+        <input id="src-query" placeholder="The series' title" spellcheck="false">
         <button type="button" id="src-search-go">Search</button>
       </div>
       <div class="src-row" data-for="lists">
-        <select id="src-list-source" aria-label="Source"></select>
-        <select id="src-list" aria-label="List"></select>
+        <label class="src-sel">Source <select id="src-list-source"></select></label>
+        <label class="src-sel">List <select id="src-list"></select></label>
       </div>
       <div id="src-status" class="muted"></div>
       <div id="src-results" class="src-results"></div>

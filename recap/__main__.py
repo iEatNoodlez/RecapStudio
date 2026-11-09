@@ -50,12 +50,17 @@ img { width: 64px; height: 64px; }
 </style></head><body>{body}</body></html>"""
 
 
-def _page(*parts: str) -> str:
+def _page(*parts: str, url: str = "") -> str:
+    """The window's own page: the icon and the parts. With url, the starting page, which goes on to the app when
+    the window comes back to it (the keyboard's Back key: it would otherwise stay on "Starting Recap Studio…")."""
     try:
         icon = '<img alt="" src="data:image/x-icon;base64,' + base64.b64encode(ICON.read_bytes()).decode() + '">'
     except OSError:
         icon = ""
-    return STARTING.replace("{body}", icon + "".join(parts))
+    back = ("<script>(function () { var go = function () { location.replace(" + json.dumps(url) + "); };"
+            " try { var n = performance.getEntriesByType('navigation')[0]; if (n && n.type === 'back_forward') go(); } catch (e) {}"
+            " window.addEventListener('pageshow', function (e) { if (e.persisted) go(); }); })();</script>") if url else ""
+    return STARTING.replace("{body}", icon + "".join(parts) + back)
 
 
 def _dark() -> bool:
@@ -246,7 +251,7 @@ def main():
     gui = _qt_app()  # (Qt named: pywebview doesn't try GTK first, logging that it isn't there)
     # The window opens at once, saying the app is starting, and goes to the app once its server answers
     window = webview.create_window(updates.label(), html=_page("<div>Starting Recap Studio…</div>",
-                                                               '<div class="bar"></div>'),
+                                                               '<div class="bar"></div>', url=url),
                                    width=1440, height=920, min_size=(1000, 650),
                                    background_color="#18181A" if _dark() else "#F6F6F4")
     failed = []

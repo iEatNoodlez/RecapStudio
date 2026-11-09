@@ -4,7 +4,7 @@ Works with either ONNX Runtime build: with the CPU-only build, or when CUDA can'
 be loaded, everything simply runs on the CPU.
 
 The installer and the portable zip carry the CPU-only build in their own Python, which an installed copy can't
-change (Program Files is read-only). GPU support is an optional download instead (Settings → Performance, or
+change (Program Files is read-only). GPU support is an optional download instead (Settings → Video → Performance, or
 first-run setup's first page): the GPU build of ONNX Runtime with NVIDIA's CUDA and cuDNN libraries, the wheels
 setup.ps1 installs from source, unpacked into addons\\gpu. activate() puts that folder first on the import path
 when the app starts, before anything imports onnxruntime, so the GPU build is the one loaded.
@@ -196,7 +196,7 @@ def device_of(session) -> str:
 # ---- GPU support: the add-on --------------------------------------------------------
 
 def addon_status() -> dict:
-    """GPU support for Settings → Performance and first-run setup. offered: there's an NVIDIA card and this copy
+    """GPU support for Settings → Video → Performance and first-run setup. offered: there's an NVIDIA card and this copy
     has only the CPU build (or GPU support is here already). restart: downloaded or removed since the app started,
     which takes effect when it's next started."""
     st = DOWNLOAD.status()

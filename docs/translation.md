@@ -4,11 +4,11 @@ A comic whose text is in Korean, Chinese or Japanese (a raw) is read in that lan
 
 ## Choosing the language
 
-New project asks on its first page: **What language is its text in?** (English unless you choose otherwise). It can be changed later in Project settings → **Language of its text** (advanced mode); it applies the next time the text is read.
+New project asks on its first page: **What language is its text in?** (English unless you choose otherwise). It can be changed later in the Chapters stage's panel → **Its text**; it applies the next time the text is read.
 
 ## Reading the text
 
-- Korean, Chinese (simplified and traditional) and Japanese are read with PaddleOCR's PP-OCRv5 models (Apache 2.0): its text finder, which also finds vertical lines, a reader for Chinese and Japanese, and one for Korean. They're an optional download of 35 MB into the add-ons folder (`ocr_cjk`), not part of the app. **Read text** downloads them the first time a project in one of these languages is read; Settings → Text reading (advanced mode) can get them beforehand, or remove them.
+- Korean, Chinese (simplified and traditional) and Japanese are read with PaddleOCR's PP-OCRv5 models (Apache 2.0): its text finder, which also finds vertical lines, a reader for Chinese and Japanese, and one for Korean. They're an optional download of 35 MB into the add-ons folder (`ocr_cjk`), not part of the app. **Read text** downloads them the first time a project in one of these languages is read; Settings → Reading comics can get them beforehand, or remove them.
 - Each text box is kept with where it is and what it says, for the translation and for the English in the pictures. Vertical Japanese and Chinese is read column by column, right to left; on a right-to-left (manga) page, bubbles side by side are read right first.
 - Lines the reader isn't sure of are kept in their box: on a test page the Korean reader read a clear 시작해요? as "8워", and left out, the line would show under the English. The translator checks every box against the picture.
 - The Korean reader takes every line as upright. RapidOCR's check for upside-down lines turned real ones over and read them as scraps: on three chapters of a real Korean webtoon, 16% of the lines changed or went missing with it on, 마침내 ("finally") as "H기뭐", nearly every one for the worse. The Chinese and Japanese reader keeps the check until it's tried on a real raw.
@@ -16,7 +16,7 @@ New project asks on its first page: **What language is its text in?** (English u
 
 ## Translate
 
-**Translate** is a step of its own, after Read text (in advanced mode its own button; Make the recap runs it). Your script writer translates a chapter at a time:
+**Translate** is a step of its own, after Read text (Make the recap runs it; One step runs it alone). Your script writer translates a chapter at a time:
 
 - It sees each piece with text, its text boxes outlined and numbered on the picture, and the text read from each box, and answers each box's English and what kind of text it is: speech, a thought, a caption, a sign (part of the scene: signs, screens, messages, titles), a sound effect, or not text (a watermark, a site's name).
 - It's asked for natural English that sounds like the character, about as short as the original so it fits the bubble. Names on the character list keep their spelling; others are romanized the usual way (Korean: Revised Romanization; Chinese: pinyin; Japanese: Hepburn). Honorifics become natural English (Mr. Kim, sir, senior) unless they're what a character is called.

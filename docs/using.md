@@ -14,14 +14,15 @@ characters (whether Make the recap finds them, in the first 5 chapters or all, a
 names or trust them: see [Characters](characters.md)); how its video looks (landscape or portrait, automatic, pan and zoom
 or stills, resolution and frame rate, with how long an hour of it takes to make on this computer); and YouTube
 (whether a title and thumbnail are suggested after the script, and whether it's YouTube-safe). The video settings
-are the project's own from then on: its **Video** tab changes them, and its **Project settings** the characters. (Until 0.1.1 they were app-wide; each project made before keeps the
+are the project's own from then on: its **Video** stage changes them, and its **Characters** stage's panel the characters. (Until 0.1.1 they were app-wide; each project made before keeps the
 choices it was made with.) The encoder is the one app-wide video setting (Settings → Video).
 
-**Advanced mode** (the switch at the bottom of the sidebar, remembered) shows everything else: the step buttons,
-ticking chapters to work on just those, each chapter's counts, reordering and your own voice-over, Export for
-editors, the **Prompt** and **Project settings** tabs, the text read from each scene, split and join, re-running
-selected scenes, and the rest of Settings (performance, text reading, the add-ons, Magi, the finer video options).
-In simple mode, long help text shows two lines: hover it for the rest, or click it.
+There's no advanced mode: everything is in reach where it belongs. **One step**, beside the main button, runs a
+single step (Detect panels, Read text, Translate, Characters, Write script, Voice, Render video), each with its own
+estimate; ticking chapters in the table makes the main button and One step work on just those (the box in the
+table's head ticks all or none); a chapter's row shows its reorder and voice-over buttons when you hover it; the
+finer settings sit under **Details** or **More settings** in each panel and in Settings; and long help text shows
+two lines: hover it for the rest, or click it.
 
 1. Create a project (the New project questions above) and click **Add chapters** or **Import folder…**. Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file (and, with the EPUB comics plugin, every `.epub`, split into a volume's chapters). Files that can't be read are listed with why (an EPUB with DRM, say). Review the list, untick anything you don't want, and import.
    - Chapters and pages are sorted naturally (`Chapter 2` before `Chapter 10`, `144.5` after `144`).
@@ -32,20 +33,22 @@ In simple mode, long help text shows two lines: hover it for the rest, or click 
    - You can import while a job runs (a render, say), in this project or another: the job carries on with the chapters it started with.
    - A chapter with the same pages as another (one put in the folder twice, as "34-5" and "34.5") is pointed out once it's imported ("Imported twice?"), so you can delete one before it's narrated twice: pages of the same sizes in the same order, with the first, middle and last nearly the same.
    - You can also drop images or `.cbz`/`.zip` files onto the window; each archive becomes a chapter, loose images become one chapter.
-2. Click **Make the recap** (later **Continue the recap**): it runs every step on every chapter. In advanced mode, tick the chapters you want to work on (none ticked = all), or run the steps one by one. Rename or remove chapters in the Chapters tab (reorder them in advanced mode).
+2. Click **Make the recap** (later **Continue the recap**): it runs every step on every chapter. Tick the chapters you want to work on (none ticked = all), or run the steps one by one with **One step**. Rename or remove chapters in the Chapters stage (reorder them with the arrows that show when you hover a row).
    - The main button picks up where you left off: it only detects panels in chapters that have none, reads text and writes narration only for panels that don't have them yet, and voices only lines without audio, then renders. It never redoes or overwrites finished work, including narration you edited by hand.
    - A single step that's already partly done asks whether to **Continue** (only what's left) or **Redo all**; one that's fully done asks before redoing.
-3. Edit any narration line, untick panels you don't want, or select panels and **Re-run script + voice for selected**. Changing a line clears its audio; run **Voice** again to regenerate it.
+3. Edit any narration line, untick pieces you don't want, or **Rewrite this scene** (the panel beside has **Rewrite the chapter**). Changing a line clears its audio; **Make the voice again** makes it.
 4. Run **Render video**. It renders the ticked chapters, in order, into the project's `output` folder: named after the project, `Solo Leveling.mp4` for the whole project or `Solo Leveling - Chapter 1 to Chapter 10.mp4` for a range (as its folder is named, so a name with `:` or `?` loses them), each with matching `.srt` subtitles, `.wav` narration and a YouTube chapter list (see [Video](video.md)).
 
 ## Scenes
+
+In the Script and voice stage, the rail lists the scenes and the one chosen is open beside it. Reading through, scroll on past the end of the open scene and the next one opens at its top (and up past its top, the one before at its end), so a chapter reads through without a click per scene; the arrow keys walk the list too.
 
 Panel detection cuts webtoon strips finely, at every gap between panels, including gaps crossed by a speech bubble, so it doesn't miss panel boundaries. The pieces of each detected panel start out joined into one **scene**: one narration line, shown in the video as the pieces stacked back together. In the scene list, **✂ split here** makes a piece start its own scene, and **⤒ Join with scene above** merges two scenes (their narration is combined). Claude regroups the pieces itself when it writes a chapter.
 
 ## Settings
 
-- **⚙ Settings** (bottom of the sidebar) holds the app-wide choices shared by every project: the script writer (a local model, Claude Code, Claude, OpenRouter, Google Gemini, DeepSeek, Groq or Mistral, with models, API keys and the Ollama connection), the voice, the video encoder and the thumbnail redraw. **Run setup again** at its top reopens the first-run setup. They're stored in `data\settings.json`. The line under the step buttons shows what's in use.
-- **Project settings** (a tab of each project) holds what differs per series: layout, reading direction, the language of its text, how characters and the scan group's pages are found, and each plugin's choice for the project (smallest panel size in advanced mode). The **Prompt** (advanced mode) and **Characters** tabs are per project too, and so is YouTube-safe (the **YouTube** tab).
+- **⚙ Settings** (bottom of the sidebar) holds the app-wide choices shared by every project: the script writer (a local model, Claude Code, Claude, OpenRouter, Google Gemini, DeepSeek, Groq or Mistral, with models, API keys and the Ollama connection), the voice, the video encoder, the thumbnail redraw and the look (Settings → Look: the system's light or dark mode, or one of them). **Run setup again** at its top reopens the first-run setup. They're stored in `data\settings.json`. The rail's foot says who writes and which voice reads.
+- **The panel beside a project's stages** holds what differs per series, grouped by stage: at Chapters, the kind of comic, reading direction, the language of its text and how the scan group's pages are found; at Characters, how they're found; at Script and voice, YouTube-safe and, under Details, the narrator's persona, rules and style; at Video, the video's settings, music and captions; at Publish, the title and thumbnail. A plugin's choice for the project is there on every stage, in a Plugins section.
 
 ## Pause and resume
 
@@ -62,7 +65,7 @@ A paused job lives in the running app: closing the app ends it. Finished chapter
 
 ## Time estimates
 
-Next to the main button, a line says how long what's left takes; in advanced mode another breaks it down for the ticked chapters, step by step; hover a step button for its own estimate (what's left, and to redo everything), and the Continue / Redo choice shows both. While a job runs, its progress line says about how long is left in the current step (time spent paused doesn't count).
+Next to the main button, a line says how long what's left takes, for the ticked chapters when some are (hover it for the breakdown by step); **One step** lists each step's own estimate (what's left, and to redo everything), and the Continue / Redo choice shows both. While a job runs, its progress line says about how long is left in the current step (time spent paused doesn't count).
 
 Each estimate is the work a step would do (pages, panels, chapters or scenes, narration lines, video frames) times how fast that work goes. The speeds start from measurements on an RTX 5060 Ti with 12 CPU threads and are replaced by your computer's own as steps finish (blended with what was known, and saved in `data\speeds.json`), per device, script writer and model, and video size, style and encoder. The video's length is worked out from the narration (its audio, or before there's a voice, its length at the voice's pace: about 17.5 characters a second). When the main button will write the script first, chapters without narration are counted as getting a typical amount (about one line per three panels).
 
@@ -76,7 +79,7 @@ Each estimate is the work a step would do (pages, panels, chapters or scenes, na
 
 A webtoon strip is cut at its gutters and across the white space inside panels, never through a line of text (see [Limits](#limits)). That still let a cut pass between a bubble's or caption box's outline and its text. The top of the box then ends one scene, and the rest of it, open at the top, starts the next. On 11 test chapters (10 English webtoons, 1 Korean), 467 of 1,885 cuts did that: a quarter.
 
-**Settings → Cutting webtoons → Download the bubble finder** (11.1 MB) fixes that; first-run setup offers it too. It's comic-text-and-bubble-detector by ogkalu, an open model (Apache 2.0) trained on about 11,000 manga, webtoon, manhua and western comic pictures. It finds speech bubbles, the text in them and the text outside them (captions, signs, sound effects). The app uses its small 8-bit version, downloaded into `data\addons\bubbles` (pinned and checksum-checked), not part of the app. With it, **Detect panels** keeps every cut clear of what it finds:
+**Settings → Reading comics → Download the bubble finder** (11.1 MB) fixes that; first-run setup offers it too. It's comic-text-and-bubble-detector by ogkalu, an open model (Apache 2.0) trained on about 11,000 manga, webtoon, manhua and western comic pictures. It finds speech bubbles, the text in them and the text outside them (captions, signs, sound effects). The app uses its small 8-bit version, downloaded into `data\addons\bubbles` (pinned and checksum-checked), not part of the app. With it, **Detect panels** keeps every cut clear of what it finds:
 
 - On the same chapters, 7 cuts went through a bubble's box and none through the text it found. 4 of them run along a row of one colour (the empty edge of a borderless or doubtful bubble, where nothing shows). 3 cut a bubble below its text, in a stretch over 3.3 widths of strip tall with nowhere else to cut: the app cuts through a bubble there rather than make a scene taller than it did before.
 - Scenes are fewer and a little bigger (1,896 → 1,443), since the white space beside a bubble isn't cut any more. Where a bubble sits across the whole gutter between two panels, they stay one scene (44 of 1,122 panel breaks).

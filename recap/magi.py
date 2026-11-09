@@ -276,7 +276,7 @@ class Session:
         global _sessions
         info = installed()
         if not info:
-            raise RuntimeError("Magi isn't installed (Settings → Speaker detection)")
+            raise RuntimeError("Magi isn't installed (Settings → Reading comics)")
         self.check = check
         self.lines: "queue.Queue[str | None]" = queue.Queue()
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)

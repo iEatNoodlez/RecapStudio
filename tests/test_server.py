@@ -106,6 +106,11 @@ try:
 
     # ---- a project, cheaply (what the page polls while a job runs) ----
     pid = make_project(data, "Moon's Tower")
+    panel = sorted((data / "projects" / pid / "panels").iterdir())[0].name
+    h = me.head(f"{base}/files/{pid}/panels/{panel}")
+    check("a file's headers alone (HEAD), as a browser or a NAS asks before getting it", h.status_code == 200
+          and int(h.headers.get("Content-Length", 0)) > 0 and h.content == b"", (h.status_code, dict(h.headers)))
+    check("... and the file itself", me.get(f"{base}/files/{pid}/panels/{panel}").status_code == 200)
     r = me.get(f"{base}/api/projects/{pid}")
     tag = r.headers.get("ETag")
     check("a project comes with an ETag, its job included", r.ok and bool(tag) and r.json()["job"] is None

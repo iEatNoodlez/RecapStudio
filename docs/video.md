@@ -10,7 +10,7 @@ The video is made one chapter at a time. Each chapter is kept as a finished piec
 - The pieces take about as much disk space as the video. Old versions of a chapter are deleted when it's made again, and a deleted chapter's pieces go with it.
 - The time estimate for Render video counts the chapters still to make, plus joining them all into the video (about a minute and a half per hour of video, on one CPU thread; the app learns this computer's own speed). The progress bar gives each its share: it moves with ffmpeg's position while the chapters are joined, instead of waiting at the end.
 
-**Split into parts** (the project's Video tab, advanced mode): one video; a new video every N chapters; or videos of at most N hours (YouTube takes up to 12 hours per video; the default is 11). Parts are cut between chapters, from each chapter's exact length, and named `Solo Leveling - Part 2 (Chapter 21 to Chapter 40).mp4` and so on, each with its own subtitles, narration and chapter list. Changing the split only joins the pieces again, which takes about a minute and a half per hour of video.
+**Split into parts** (the project's Video stage, under More settings): one video; a new video every N chapters; or videos of at most N hours (YouTube takes up to 12 hours per video; the default is 11). Parts are cut between chapters, from each chapter's exact length, and named `Solo Leveling - Part 2 (Chapter 21 to Chapter 40).mp4` and so on, each with its own subtitles, narration and chapter list. Changing the split only joins the pieces again, which takes about a minute and a half per hour of video.
 
 **YouTube chapters**: next to each video is `<name> - YouTube chapters.txt`, one line per chapter with its start time (`0:00 Chapter 1`, `6:12 Chapter 2`, or `1:02:05 …` past an hour). Paste it into the video's description and YouTube shows the chapters on the timeline (it needs at least three, each 10 seconds or longer). Under the player, the app has a button for each part and links to its subtitles and chapter list.
 
@@ -26,7 +26,7 @@ Each project's **Video** tab sets how its video looks:
 
 ## Webtoon video: scrolling
 
-For webtoon chapters, the video can scroll down the whole chapter as one continuous strip instead of showing scenes one at a time (Project settings → **Webtoon video**; scrolling is the default). Each scene's narration plays while the middle of the screen passes through that scene, so the scroll slows down for long lines and moves faster through quiet stretches, with a speed limit so it never races. Scenes left out of the video (such as the scan group's pages) aren't shown at all: the strip is the scenes used, each stretch joined straight onto the next. The cuts between pieces never show, because the video shows the real strip.
+For webtoon chapters, the video can scroll down the whole chapter as one continuous strip instead of showing scenes one at a time (the Chapters stage's panel → **A webtoon's video**; scrolling is the default). Each scene's narration plays while the middle of the screen passes through that scene, so the scroll slows down for long lines and moves faster through quiet stretches, with a speed limit so it never races. Scenes left out of the video (such as the scan group's pages) aren't shown at all: the strip is the scenes used, each stretch joined straight onto the next. The cuts between pieces never show, because the video shows the real strip.
 
 Chapters detected before this feature get their positions in the strip recovered automatically when the video is rendered (detection is re-run and matched to the existing panels; narration and voice are kept). A chapter that can't be matched is shown as scenes, and the job says which ones; detecting its panels again makes it scroll.
 
@@ -65,7 +65,7 @@ Turn on **Background music under the narration** in New project (How its video l
 
 ## Export for video editors
 
-**Export for editors…** (after the step buttons, in advanced mode) saves the ticked chapters (none ticked = all) as an OpenTimelineIO timeline to finish the recap in a video editor: `recap (for DaVinci Resolve).otioz` or `recap (for editors).otioz` in the output folder. An `.otioz` is a zip holding the timeline and all its media, so it can be moved to another computer. The timeline has:
+**Export for video editors…** (the Video stage, beside Open the output folder) saves the ticked chapters (none ticked = all) as an OpenTimelineIO timeline to finish the recap in a video editor: `recap (for DaVinci Resolve).otioz` or `recap (for editors).otioz` in the output folder. An `.otioz` is a zip holding the timeline and all its media, so it can be moved to another computer. The timeline has:
 
 - a clip for each scene, timed like the rendered video (a scrolling chapter is cut into a clip per scene, at points where the cut doesn't show);
 - the narration as a clip for each line, on Audio 1; the subtitles are saved next to the bundle as `<name>.srt`;

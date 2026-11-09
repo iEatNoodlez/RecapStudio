@@ -32,6 +32,17 @@ ALLOWED = [(method, re.compile(path)) for method, path in (
     ("POST", r"/api/projects/[0-9a-f]+/run"),
     ("POST", r"/api/jobs/[0-9a-f]+/(pause|resume|cancel)"),
     ("GET", r"/files/[0-9a-f]+/output/[^/]+"),
+    ("GET", r"/files/[0-9a-f]+/pages/[^/]+"),  # (a row's cover: the first page, until the video has a thumbnail)
+    # a new project (the dialog's starting choices, then the project)
+    ("GET", r"/api/projects/new-settings"), ("POST", r"/api/projects"),
+    # the character scan's groups to name (its snapshots, and the review's actions)
+    ("GET", r"/files/[0-9a-f]+/scan/[^/]+"),
+    ("POST", r"/api/projects/[0-9a-f]+/scan/groups/[A-Za-z0-9_-]+/(add|ignore)"),
+    ("POST", r"/api/projects/[0-9a-f]+/scan/add-named"),
+    # chapters from the sources the PC has (never a source installed from the phone: that's code)
+    ("GET", r"/api/sources"), ("GET", r"/api/sources/new"), ("GET", r"/api/sources/image/[^/]+"),
+    ("POST", r"/api/sources/(search|browse|series)"),
+    ("POST", r"/api/projects/[0-9a-f]+/download"), ("GET", r"/api/projects/[0-9a-f]+/source/new"),
 )]
 
 # home networks (Python's is_private would also take documentation and other special ranges)
@@ -176,6 +187,7 @@ def qr_png() -> bytes:
 # ---- what the phone page shows ------------------------------------------------------------
 
 PHONE_SETTINGS = {"background_music": bool, "typeset": bool}  # what it can change in a project
+SCAN_SMALL = 3  # a group seen fewer times than this is folded away (as the app's review does)
 MAKE = ["panels", "ocr", "translate", "characters", "script", "title", "audio", "video"]  # Make the recap's steps
 
 
@@ -248,8 +260,11 @@ def summary(p: dict, full: bool = False) -> dict:
     else:
         state = {"kind": "todo", "text": f"{counts['done']} of {len(chapters)} chapters voiced"}
     yt = p.get("youtube") or {}
+    pages = p.get("pages") or []
+    first = pages[0].get("file") if pages else None
     data = {"id": p["id"], "name": p["name"], "updated": p.get("updated", 0), "state": state, "job": _job(job),
-            "chapters": len(chapters), "counts": counts,
+            "chapters": len(chapters), "counts": counts, "make": MAKE,
+            "cover": yt.get("file") or (f"pages/{first}" if first else None),  # (the list's rows)
             "video": {"file": out_.get("video"), "seconds": round(seconds), "time": out_.get("time")} if out_.get("video") else None,
             "title": yt.get("title"), "thumbnail": yt.get("file"), "thumbnail_time": yt.get("created")}
     if full:
@@ -257,7 +272,18 @@ def summary(p: dict, full: bool = False) -> dict:
         data["chapter_list"] = chapters
         data["settings"] = {"background_music": bool(s.get("background_music")), "tracks": len(p.get("music") or []),
                             "typeset": bool(s.get("typeset")), "language": ocr.language(s)}
-        data["make"] = MAKE
+        # the character scan's groups still to name (the review, as the phone shows it), and who's named already
+        groups = [g for g in (p.get("scan") or {}).get("groups", []) if g.get("status") == "open"]
+        data["review"] = [{
+            "id": g["id"], "size": g.get("size", 0), "pieces": g.get("pieces", 0), "chapters": g.get("chapters", []),
+            "small": g.get("size", 0) < SCAN_SMALL, "snapshots": [x["file"] for x in g.get("snapshots", [])][:4],
+            "suggestion": {k: (g.get("suggestion") or {}).get(k, "") for k in ("name", "gender", "description", "aliases")}
+            if g.get("suggestion") else None,
+        } for g in sorted(groups, key=lambda g: -g.get("size", 0))]
+        data["characters"] = [{"id": c["id"], "name": c["name"]} for c in p.get("characters", []) if c.get("name")]
+        # where its chapters come from, and the ones it has (to tick only the new ones)
+        data["source"] = p.get("source")
+        data["have_refs"] = [c["source_ref"] for c in p["chapters"] if c.get("source_ref")]
     return data
 
 

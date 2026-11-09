@@ -129,6 +129,8 @@ DEFAULT_SETTINGS = {
     # sources (sources.py): plugin lists added, gallery-dl's program (empty: found on PATH), the Suwayomi server
     "plugin_repos": [], "gallery_dl_path": "", "suwayomi_url": "http://127.0.0.1:4567",
     "check_new_chapters": False,  # look for each project's new chapters when the app starts
+    # the window's look (Settings → Look): "system" (light or dark as the system is), "light" or "dark"
+    "theme": "system",
 }
 
 # App-wide settings, shared by every project (data/settings.json): who writes the
@@ -140,7 +142,7 @@ GLOBAL_KEYS = {
     "openrouter_model", "gemini_model", "deepseek_model", "groq_model", "mistral_model", "setup_done",
     "redraw_provider", "redraw_model",
     "check_updates", "skip_version", "projects_dir",
-    "plugin_repos", "gallery_dl_path", "suwayomi_url", "check_new_chapters",
+    "plugin_repos", "gallery_dl_path", "suwayomi_url", "check_new_chapters", "theme",
 }
 # How each project's video looks: chosen when it's created (the New project dialog), changed in its Video tab.
 # App-wide until 0.1.1 (move_video_settings copies those choices into the projects).
@@ -566,8 +568,49 @@ def list_all() -> list[dict]:
         out.append({
             "id": p["id"], "name": p["name"], "updated": p.get("updated", 0), "folder": str(project_dir(pid)),
             "chapters": len(p["chapters"]), "pages": len(p["pages"]), "panels": len(p["panels"]),
+            **_progress(p),
         })
     return sorted(out, key=lambda x: -x["updated"])
+
+
+def _progress(p: dict) -> dict:
+    """How far a project is, for the library's cards: its kind of comic, the chapters with panels, with every scene
+    narrated and with every line voiced, whether its video is made, and how many characters it names."""
+    s = p.get("settings", {})
+    kind = ("webtoon" if s.get("layout") == "webtoon" else "manga" if s.get("layout") == "pages"
+            and s.get("reading_direction") == "rtl" else "comic" if s.get("layout") == "pages" else "")
+    by_chapter: dict = {}
+    for x in p["panels"]:
+        c = by_chapter.setdefault(x.get("chapter"), {"panels": 0, "scenes": 0, "written": 0, "lines": 0, "voiced": 0})
+        c["panels"] += 1
+        if x.get("joined"):
+            continue
+        c["scenes"] += 1
+        if (x.get("narration") or "").strip():
+            c["written"] += 1
+            c["lines"] += 1
+            if x.get("audio"):
+                c["voiced"] += 1
+    found = written = voiced = 0
+    for ch in p["chapters"]:
+        c = by_chapter.get(ch["id"])
+        if not c or not c["panels"]:
+            continue
+        found += 1
+        if c["scenes"] and c["written"] == c["scenes"]:
+            written += 1
+            if c["voiced"] == c["lines"]:
+                voiced += 1
+    out = p.get("output") or {}
+    seconds = sum(x.get("seconds") or 0 for x in out.get("parts") or []) if out else 0
+    yt = p.get("youtube") or {}
+    first = (p["pages"][0] if p["pages"] and isinstance(p["pages"][0], dict) else {}).get("file")
+    cover = yt.get("file") or (f"pages/{first}" if first else None)  # (the thumbnail, else page one)
+    # where its video has been posted: the services' names, written by the posting plugins (p["posted"]: name → when)
+    posted = sorted(k for k in (p.get("posted") or {}) if isinstance(k, str))
+    return {"kind": kind, "found": found, "written": written, "voiced": voiced, "video": bool(out), "seconds": seconds,
+            "characters": len([c for c in p.get("characters", []) if c.get("name")]),
+            "youtube": bool(yt), "cover": cover, "posted": posted}
 
 
 def delete(pid: str) -> None:

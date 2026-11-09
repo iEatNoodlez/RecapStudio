@@ -104,6 +104,8 @@ def system_prompt(settings: dict, characters: list[dict], output: str = OUTPUT_L
             continue
         line = f"- {name}"
         extra = [x for x in [(c.get("gender") or "").strip()] if x]
+        if c.get("unnamed"):  # the story hasn't given their name: they're listed by their role
+            extra.append(f'their name hasn\'t been given yet: call them "{name}", as the story does, and never make one up')
         aliases = _clean((c.get("aliases") or "").split(","))
         if aliases:
             extra.append("may appear in text as " + ", ".join(aliases))

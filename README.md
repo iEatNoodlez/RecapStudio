@@ -24,10 +24,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/script.png" width="100%" alt="The Script tab of a manga project: each scene's pictures beside its narration, with a player for its voice line and a box to leave it out of the video">
+  <img src="docs/images/script.png" width="100%" alt="The Script stage of a manga project: the scenes down the left, the open scene's pictures beside its narration with a player for its voice line, and the scene's details at the right">
 </p>
 
-<p align="center"><sub>The Script tab, with Episode 1 of <i>Give My Regards to Black Jack</i> by Shuho Sato: 56 pages became 61 narrated scenes and an 11-minute video. Sato lets anyone use the series freely (see <a href="#license-and-credits">credits</a>).</sub></p>
+<p align="center"><sub>The Script stage, with Episode 1 of <i>Give My Regards to Black Jack</i> by Shuho Sato: 56 pages became 61 narrated scenes and an 11-minute video. Sato lets anyone use the series freely (see <a href="#license-and-credits">credits</a>).</sub></p>
 
 Add the chapters, press **Make the recap**, and Recap Studio cuts the pages into panels, reads the text, works out who's who, writes the narration, voices it and renders the video, with subtitles, YouTube chapters and a suggested title and thumbnail. No account, credits or watermark.
 
@@ -55,39 +55,39 @@ Everything it needs is included. The first start downloads the voice model (354 
 
 ### 1. Create a project
 
-Type a name at the top left and press **Create**, then answer a few questions: what kind of comic it is, how to find its characters, how the video looks, and the YouTube options. With the Find the series plugin, search for the series instead and it fills the project in for you, and the Trending finder suggests what to recap next.
+Press **New project** and fill in one page: the series' name, what kind of comic it is, how to find its characters, how the video looks, and the YouTube options, with what you get summed up beside them. With the Find the series plugin, search for the series instead and it fills the project in for you, and the Trending finder suggests what to recap next.
 
 <p align="center">
-  <img src="docs/images/new-project.png" width="80%" alt="The New project dialog asking what kind of comic it is: Webtoon, Manga (picked), Comic or Not sure">
+  <img src="docs/images/new-project.png" width="80%" alt="The New project page: the series' name, Webtoon, Manga (picked), Comic or Not sure, its language, how to find the characters and how the video looks, with what you get listed beside them">
 </p>
 
 ### 2. Add the chapters and press Make the recap
 
-Press **Add chapters** and pick the series folder. Each subfolder of images, and each `.cbz` or `.zip`, becomes a chapter (and each `.epub`, with the EPUB comics plugin). You can also drop files on the window. **Make the recap** then runs every step on every chapter, and next time it carries on where it stopped. **Advanced mode** (bottom of the sidebar) shows every step and setting.
+Press **Import a folder…** and pick the series folder, or get the chapters from a site through a source you bring. Each subfolder of images, and each `.cbz` or `.zip`, becomes a chapter (and each `.epub`, with the EPUB comics plugin). You can also drop files on the window. **Make the recap** then runs every stage on every chapter, and next time it carries on where it stopped. **One step** beside it runs a single step, on the chapters you tick.
 
 ### 3. Check who's who
 
 The character scan groups everyone who appears, and your script writer suggests their names from the story. Add them with a click, or let it add its own suggestions without asking.
 
 <p align="center">
-  <img src="docs/images/characters.png" width="80%" alt="Characters found: a group of 26 appearances of an older man in glasses, with the suggestion Director and a description, and buttons to add him, merge him or ignore him">
+  <img src="docs/images/characters.png" width="80%" alt="Characters found: a group of 26 appearances of an older man in glasses, with no name found but the role Director, a description, a box to add him under his role, and buttons to add him, merge him or ignore him">
 </p>
 
-<p align="center"><sub>The hospital director appears 26 times but is never named in Episode 1, so he's left for you to name.</sub></p>
+<p align="center"><sub>The hospital director appears 26 times but is never named in Episode 1: add him under his role, and the narrator calls him the director until a later chapter gives his name.</sub></p>
 
 ### 4. Read the script
 
-The **Script** tab (at the top of this page) shows each scene's pictures, narration and voice line. Edit any line, play it, or leave a scene out.
+The **Script** stage (at the top of this page) lists the scenes down the left and opens one at a time: its pictures, its narration and its voice line. Edit the line, play it, have the scene rewritten, or leave it out of the video.
 
 ### 5. Watch the video and take the title
 
-The **Video** tab plays the recap. The project's `output` folder has the video, named after the project (`Solo Leveling.mp4`), with its subtitles, the narration and a YouTube chapter list.
+The **Video** stage plays the recap. The project's `output` folder has the video, named after the project (`Solo Leveling.mp4`), with its subtitles, the narration and a YouTube chapter list.
 
 <p align="center">
-  <img src="docs/images/video.png" width="100%" alt="The Video tab playing the finished recap at 2:30 of 11:13, on a page where Saito introduces himself at the hospital">
+  <img src="docs/images/video.png" width="100%" alt="The Video stage playing the finished recap at 2:30 of 11:13, on a page where Saito introduces himself at the hospital">
 </p>
 
-Your script writer also suggests a clickbait title, a few others, and a thumbnail with labels and arrows on the characters, a "?!" and a speech bubble. Change the words or the pictures and it's drawn again, or press **Redraw with AI** to have an image model repaint it.
+At the **Publish** stage, your script writer also suggests a clickbait title, a few others, and a thumbnail with labels and arrows on the characters, a "?!" and a speech bubble. Change the words or the pictures and it's drawn again, or press **Redraw with AI** to have an image model repaint it. With the Post to YouTube or Post to TikTok plugin, the video goes up from there too.
 
 <p align="center">
   <img src="docs/images/thumbnail.jpg" width="80%" alt="A thumbnail of two manga panels side by side: Saito labelled MC with an arrow and a ?!, and the night-shift doctor labelled DRUNK GENIUS with an arrow and the speech bubble SLEEP WHEN YA CAN.">

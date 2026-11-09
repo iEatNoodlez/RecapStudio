@@ -317,7 +317,12 @@ def _project(pid: str) -> dict:
 
 @app.get("/api/projects")
 def list_projects():
-    return store.list_all()
+    """Every project, with how far it is and its latest job's state (for the library's cards and the sidebar)."""
+    out = store.list_all()
+    for p in out:
+        j = pipeline.latest_for(p["id"])
+        p["job"] = {"status": j["status"], "message": j.get("message", ""), "pause_reason": j.get("pause_reason")} if j else None
+    return out
 
 
 @app.post("/api/projects")
@@ -506,6 +511,8 @@ def get_global_settings():
 
 @app.put("/api/settings")
 def update_global_settings(settings: dict = Body(...)):
+    if "theme" in settings and settings["theme"] not in ("system", "light", "dark"):
+        raise HTTPException(400, "theme: system, light or dark")
     return store.update_global(settings)
 
 
@@ -544,6 +551,7 @@ def save_characters(pid: str, characters: list[dict] = Body(..., embed=True)):
         return [n for n in x.get("pictures") or [] if _picture_name(n) and (folder / n).is_file()]
     clean = [
         {"id": str(c.get("id") or uuid.uuid4().hex[:8]), **{f: str(c.get(f) or "") for f in fields},
+         "unnamed": bool(c.get("unnamed")),  # the story hasn't given their name: the name is their role
          "pictures": pictures(c),
          # other looks: an alter ego, disguise, transformation, younger self... (see script.system_prompt)
          "looks": [{"id": str(lk.get("id") or uuid.uuid4().hex[:8]), "label": str(lk.get("label") or ""),
@@ -1179,7 +1187,7 @@ def status(ollama_url: str = "http://localhost:11434"):
         "tts_ready": tts.available(),
         "voices": tts.voices() if tts.available() else [],
         "ffmpeg": video.find_ffmpeg() is not None,
-        # what Automatic means for video export on this computer (Settings → Performance)
+        # what Automatic means for video export on this computer (Settings → Video → Performance)
         "video": {"nvenc": video.hardware_encoder(video.find_ffmpeg()) is not None,  # any GPU encoder
                   "encoder": video.HARDWARE.get(video.hardware_encoder(video.find_ffmpeg()), ("",))[0],
                   "cores": os.cpu_count(),
@@ -1190,7 +1198,7 @@ def status(ollama_url: str = "http://localhost:11434"):
         "gpu": {"available": gpu.available(), "card": gpu.nvidia_card(),
                 "voice": tts.device if tts._engine is not None else "",
                 "ocr": ocr.device if ocr._engine is not None else "",
-                "addon": gpu.addon_status()},  # GPU support, the download (Settings → Performance)
+                "addon": gpu.addon_status()},  # GPU support, the download (Settings → Video → Performance)
         "claude": {**claude.key_status(),
                    "models": [{"id": m, "name": n, "note": claude.MODEL_NOTES.get(m, "")} for m, n in claude.MODELS]},
         "writers": {k: {**cloud.key_status(k), "name": v["name"], "about": v["about"], "keys_url": v["keys_url"],
@@ -1758,11 +1766,14 @@ def _set_group(pid: str, gid: str, **fields) -> dict:
 def scan_add(pid: str, gid: str, name: str = Body("", embed=True), gender: str = Body("", embed=True),
              description: str = Body("", embed=True), character: str | None = Body(None, embed=True),
              look: str | None = Body(None, embed=True), new_look: bool = Body(False, embed=True),
-             aliases: str = Body("", embed=True)):
+             aliases: str = Body("", embed=True), unnamed: bool = Body(False, embed=True),
+             rename: bool = Body(False, embed=True)):
     """Make a scanned group a character, or add it to an existing one: to the character itself, to one
     of its other looks (look), or as a new look (new_look, named `name`, noted with `description`).
-    The group's best views become its pictures."""
-    return _add_group(pid, gid, name, gender, description, character, look, new_look, aliases)
+    The group's best views become its pictures. `unnamed`: the story hasn't given their name yet, so `name`
+    is their role ("the Director"), which the narrator uses as the story does. `rename`, with `character`
+    and a `name`: the story has named them now; the old name (the role) becomes another name."""
+    return _add_group(pid, gid, name, gender, description, character, look, new_look, aliases, unnamed, rename)
 
 
 @app.post("/api/projects/{pid}/scan/add-named")
@@ -1785,11 +1796,12 @@ def scan_add_named(pid: str, items: list[dict] = Body(..., embed=True)):
         named = {(c.get("name") or "").strip().lower(): c["id"] for c in p["characters"]}
         cid = known.get(name.lower()) or next((named[a.lower()] for a in aliases if a.lower() in named), None)
         _add_group(pid, g["id"], name, it.get("gender") or "", it.get("description") or "", cid,
-                   aliases=", ".join(([name] if cid else []) + aliases))
+                   aliases=", ".join(([name] if cid else []) + aliases), unnamed=bool(it.get("unnamed")) and not cid)
     return _project(pid)
 
 
-def _add_group(pid, gid, name="", gender="", description="", character=None, look=None, new_look=False, aliases=""):
+def _add_group(pid, gid, name="", gender="", description="", character=None, look=None, new_look=False, aliases="",
+               unnamed=False, rename=False):
     p = _project(pid)
     g = _scan_group(p, gid)
     lid = None
@@ -1798,6 +1810,17 @@ def _add_group(pid, gid, name="", gender="", description="", character=None, loo
         if c is None:
             raise HTTPException(404, "Character not found")
         cid = character
+        if rename and name.strip():  # the story has named them: the role they went by becomes another name
+            def give_name(q):
+                c = next(c for c in q["characters"] if c["id"] == cid)
+                old = (c.get("name") or "").strip()
+                have = [a.strip() for a in (c.get("aliases") or "").split(",") if a.strip()]
+                if old and old.lower() != name.strip().lower() and old.lower() not in {a.lower() for a in have}:
+                    have.append(old)
+                c["name"] = name.strip()
+                c["aliases"] = ", ".join(a for a in have if a.lower() != name.strip().lower())
+                c["unnamed"] = False
+            store.update(pid, give_name)
         if new_look:
             lid = uuid.uuid4().hex[:8]
 
@@ -1826,7 +1849,7 @@ def _add_group(pid, gid, name="", gender="", description="", character=None, loo
         cid = uuid.uuid4().hex[:8]
         store.update(pid, lambda q: q["characters"].append({
             "id": cid, "name": name.strip(), "gender": gender.strip(), "aliases": aliases.strip(),
-            "description": description.strip(), "pictures": [], "looks": []}))
+            "description": description.strip(), "pictures": [], "looks": [], "unnamed": bool(unnamed)}))
     by_id = {x["id"]: x for x in p["panels"]}
     for snap in g["snapshots"][:4]:  # full-resolution crops of the views shown for review
         x = by_id.get(snap["piece"])
@@ -2133,7 +2156,8 @@ def redraw_models(provider: str):
 
 # ---- files -----------------------------------------------------------------
 
-@app.get("/files/{pid}/{path:path}")
+# (HEAD as well as GET: FastAPI's @get answers GET only, and a HEAD fell through to the page's files, as 404)
+@app.api_route("/files/{pid}/{path:path}", methods=["GET", "HEAD"])
 def project_file(pid: str, path: str):
     _project(pid)
     base = store.project_dir(pid).resolve()

@@ -65,7 +65,8 @@ a name (Manager, Doctor), fake names, online handles. Empty if none.
 job and how they relate to the others. Nothing explicit. When the name is unknown, say what they are (for \
 example: a client of the agency, the team leader at her office).
 - existing: when the group is a character already on the list below (or one of their looks), that character's \
-name exactly as listed; otherwise "".
+name exactly as listed; otherwise "". A listed character "listed by their role" has no name yet: when the text \
+gives it, put the name in name and their role in existing.
 - same_as: when the group is the same character as another group here, that group's number; point to the \
 bigger group (the lower number). Otherwise "".
 - extra: true for background people, crowds and anyone seen only in passing who doesn't matter to the story.
@@ -180,6 +181,8 @@ def _content(project, d, groups, said) -> list[dict]:
     named = [c for c in project["characters"] if (c.get("name") or "").strip()]
     cast = "\n".join(
         f"- {c['name']}" + (f" (also: {c['aliases']})" if (c.get("aliases") or "").strip() else "")
+        + (" (listed by their role: the story hadn't given their name; if the text gives it now, put it in name "
+           "and set existing to this)" if c.get("unnamed") else "")
         + (f": {c['description'].strip()}" if (c.get("description") or "").strip() else "")
         + "".join(f"\n  - another look, {lk.get('label') or 'unnamed'}" for lk in c.get("looks") or [])
         for c in named)
