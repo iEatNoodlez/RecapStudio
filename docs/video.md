@@ -34,7 +34,7 @@ When Claude writes a scrolling chapter, it's told the chapter is one continuous 
 
 ## Background music
 
-Turn on **Background music under the narration** in New project (How its video looks), or in the project's Video tab, and add your own tracks there with **Add music…** (MP3, WAV, M4A, AAC, FLAC, OGG, Opus or WMA). They play in the order listed (↑ and ↓ change it), then again from the first until the video ends; each part of a split video starts the list again. The music fades in at the start and out at the end.
+Turn on **Background music** in New project (The video), or **Play music under the narration** in the Video stage's panel, and add your own tracks there with **Add music…** (MP3, WAV, M4A, AAC, FLAC, OGG, Opus or WMA). They play in the order listed (↑ and ↓ change it), then again from the first until the video ends; each part of a split video starts the list again. The music fades in at the start and out at the end.
 
 - **Even loudness.** Each track is converted once (48 kHz stereo, kept in the project's `render\music` folder) with its loudness evened out to the same level, so a loudly mastered song doesn't drown the narration and a quiet one doesn't vanish, and its ends fade so one track gives way to the next. **Volume** then sets the music against the voice: 25% (the default) puts it about 13 dB under the narration.
 - **Quick to change.** The music is mixed in when the chapters are joined, so turning it on or off, changing the tracks or the volume, then **Make the video again** only joins the video again (about half a minute for an 11-minute video), without drawing anything.
@@ -44,7 +44,7 @@ Turn on **Background music under the narration** in New project (How its video l
 
 ## Captions in the video
 
-**Captions in the video** (New project, How its video looks; or the Video tab → Captions and Shorts) draws the narration into the picture a few words at a time, the way CapCut's auto-captions look on Shorts and TikTok, with the word being said picked out. The subtitles file (`.srt`) is made either way.
+**Captions in the video** (New project, The video; or the Video stage's panel → Captions and Shorts) draws the narration into the picture a few words at a time, the way CapCut's auto-captions look on Shorts and TikTok, with the word being said picked out. The subtitles file (`.srt`) is made either way.
 
 - **CapCut classic**: bold white capitals with a black outline and a soft shadow, up to three words at a time, the word being said in colour and popping up a little; each new set of words rises into place.
 - **Highlight box**: the same capitals, up to four words, with a rounded box in colour behind the word being said.
@@ -56,7 +56,7 @@ Turn on **Background music under the narration** in New project (How its video l
 
 ## Shorts
 
-**Shorts** (New project, How its video looks: **Also cut the video into Shorts**; or the Video tab → Captions and Shorts) cuts the finished video into parts of up to 1 minute, 90 seconds or 3 minutes, saved in the output folder's `shorts` folder (`Solo Leveling - Short 01.mp4` and on); the Video tab lists them under the player to watch.
+**Shorts** (New project, The video: **Also cut it into Shorts**; or the Video stage's panel → Captions and Shorts → **Cut into Shorts**) cuts the finished video into parts of up to 1 minute, 90 seconds or 3 minutes, saved in the output folder's `shorts` folder (`Solo Leveling - Short 01.mp4` and on); the Video tab lists them under the player to watch.
 
 - **Where it's cut**: each Short is as long as it can be and ends in the middle of a pause between two narration lines, never mid-sentence (and never in its first 40%, so none is very short; the last one is what's left). The 11-minute sample made 13 one-minute Shorts: 12 of 48 to 59 seconds, and a last one of 20.
 - **"Part 1", "Part 2"…** in big white capitals at the top of each, unless turned off in the Video tab.

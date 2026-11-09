@@ -29,7 +29,7 @@ New project asks on its first page: **What language is its text in?** (English u
 
 ## The English in the pictures
 
-**Put the English in the pictures** (New project, How its video looks; or the project's Video tab) replaces the original text in the video:
+**Put the English in the pictures** (New project, The video; or the Video stage's panel) replaces the original text in the video:
 
 - **Speech, thoughts and captions** on a plain background (a bubble, a caption box, a see-through bubble) are painted out, as Remove the text does, and the English is lettered in their place, in capitals (Comic Sans MS Bold, which every Windows PC has), in the original's colour. It's fitted to the bubble: its shape is found by filling from where the text was, so each line is as wide as the bubble is at that height, centred where the original text was and kept a little off the bubble's edge, at about the size of the original lettering or smaller to fit.
 - A bubble's lines read as separate boxes are painted out and lettered together, as one. Bubbles drawn touching (a chain) share their inside, so each gets the part of it nearest its own text. Text on open background, like the inside of a burst bubble, is lettered close to where it was, and the spikes around it stay.
