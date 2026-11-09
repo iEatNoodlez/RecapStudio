@@ -1,6 +1,6 @@
 # Terms of use
 
-Recap Studio is free software, published under the [MIT license](../LICENSE). These terms add what the license doesn't say.
+Recap Studio is free software, published under the [MIT license](https://github.com/iEatNoodlez/RecapStudio/blob/main/LICENSE). These terms add what the license doesn't say.
 
 **It's yours to run, at your own risk.** The program is provided as is, without any warranty. It makes videos from comics you provide, using services you choose and keys you own. Check what it makes before you publish it: narration, titles, thumbnails and the YouTube-safe pass can all make mistakes.
 
