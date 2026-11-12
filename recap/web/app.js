@@ -2781,11 +2781,13 @@ function sceneGroups(panels) {
 
 function chapterStats() {
   const stats = {};
-  for (const c of current.chapters) stats[c.id] = { pages: 0, panels: 0, text: 0, untranslated: 0, scenes: 0, script: 0, lines: 0, voice: 0 };
+  for (const c of current.chapters) stats[c.id] = { pages: 0, pieces: 0, panels: 0, text: 0, untranslated: 0, scenes: 0, script: 0, lines: 0, voice: 0 };
   for (const pg of current.pages) if (stats[pg.chapter]) stats[pg.chapter].pages++;
   for (const p of current.panels) {
     const s = stats[p.chapter];
-    if (!s || !p.enabled) continue;
+    if (!s) continue;
+    s.pieces++;  // (left out ones too: a chapter with every piece left out isn't "Not started")
+    if (!p.enabled) continue;
     s.panels++;
     if (p.ocr_done || p.text) s.text++;
     if (!translated(p)) s.untranslated++;
@@ -2849,7 +2851,7 @@ function renderChapters() {
         s.panels ? cell(s.script, s.scenes, `${s.script} of ${s.scenes} scenes written` + (s.text < s.panels ? ` · text read in ${s.text} of ${s.panels} panels` : "")) : el("span", { class: "ch-cell muted" }, "—"),
         s.panels ? cell(s.voice, s.lines, (c.narrator ? `Narrated by ${c.narrator}` : "") + (c.narrator && c.narrator.startsWith("local model (fallback)") ? " (local fallback)" : "")) : el("span", { class: "ch-cell muted" }, "—"),
         el("span", { class: "ch-state" },
-          el("span", { class: `pill ${status.kind}`, title: c.narrator ? `Narrated by ${c.narrator}` : "" }, status.text),
+          el("span", { class: `pill ${status.kind}`, title: status.title || (c.narrator ? `Narrated by ${c.narrator}` : "") }, status.text),
           flags.length ? el("button", { class: "pill warn", disabled: busy && !waitingForWording(), onclick: () => checkWording(c, flags),
             title: `${plural(flags.length, "line")} may go further than YouTube-safe allows` }, "Check wording") : null),
         el("span", { class: "ch-actions" },
@@ -2943,6 +2945,9 @@ $("#job-wording").addEventListener("click", () => {
 
 // One word on how far a chapter is (simple mode's chapter list)
 function chapterStatus(s) {
+  if (!s.panels && s.pieces) return { kind: "warn", text: "All left out", title: `Every piece of it (${s.pieces}) was left out as ` +
+    "the scan group's pages, as if the chapter were only a notice. To use it, put them back: The scan group's pages → " +
+    "Check what was left out…, in this stage's panel." };
   if (!s.panels) return { kind: "new", text: "Not started" };
   if (s.untranslated && !s.script) return { kind: "todo", text: "Needs translation" };
   if (s.script < s.scenes) return { kind: "todo", text: s.script ? `Script ${s.script} of ${s.scenes}` : "Needs script" };

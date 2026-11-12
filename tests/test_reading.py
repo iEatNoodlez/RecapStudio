@@ -84,4 +84,15 @@ check("a second look at the scan group's pages replaces the first's note", notes
     "Added 1 chapter. Left out 40 pieces at the start or end of 1 chapter (the scan group's credits, notices and ads)"],
       notes)
 check("and one that finds none takes it away", notes[2] == "Added 1 chapter", notes[2])
+
+# a chapter that's only a notice is left out whole; a short story chapter whose dialogue says "notice" and "sorry" is not
+P = lambda *texts: [{"text": t} for t in texts]  # noqa: E731
+check("a notice chapter: postponed, notice:, hiatus and readers, a break and an apology",
+      all(credits.notice_only(x) for x in (P("NOTICE: THE NEXT CHAPTER IS POSTPONED", "WE ARE SORRY"),
+                                         P("THE SERIES GOES ON HIATUS", "THANK YOU, READERS"),
+                                         P("WE'LL BE ON A BREAK NEXT WEEK", "SORRY FOR THE WAIT"))))
+check("a short story chapter's \"did you notice\", \"sorry\" and \"I'll be back\" aren't one (My Dress-Up Darling 4 and 5)",
+      not any(credits.notice_only(x) for x in (P("DID YOU NOTICE?", "SORRY!", "LET'S GO."),
+                                             P("I WILL BE BACK SOON", "SORRY"), P("IMPORTANT NOTICE", "SEE YOU THEN"))))
+check("nor a long chapter, whatever it says", not credits.notice_only(P("HIATUS", "READERS", *["..."] * credits.SHORT)))
 done()

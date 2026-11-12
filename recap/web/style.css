@@ -805,6 +805,7 @@ label.button-like:hover { border-color: var(--accent); }
 .ch-cell.done { color: var(--ok); }
 .ch-state { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .ch-state:empty { display: none; }
+.ch-state span.pill.warn { cursor: help; }  /* (All left out: its tooltip says what to do; a warn pill elsewhere is a button) */
 .ch-actions { justify-content: flex-end; }
 @media (max-width: 900px) {
   .ch-row { grid-template-columns: 22px minmax(0, 1fr) auto auto; }
@@ -938,7 +939,9 @@ body.in-project #new-project { display: none; }
 .chapters-box.empty .chapters { display: none; }
 .dropzone.chapters-foot { border: none; border-top: 1px solid var(--line-soft); border-radius: 0; padding: 10px 2px 2px; margin-top: 6px; background: transparent; font-size: 13px; }
 .dropzone.chapters-foot.over { background: var(--accent-soft); }
-.ch-row { grid-template-columns: 22px minmax(0, 1fr) 56px 64px 72px 72px auto auto auto; }
+/* (each row is a grid of its own, so the columns after the counts have fixed widths: sized by what's in them, the head's
+   empty ones came out narrower and pushed its Pages, Scenes, Script and Voice to the right) */
+.ch-row { grid-template-columns: 22px minmax(0, 1fr) 56px 64px 72px 72px 200px 124px 56px; }
 .ch-open { font-size: 13px; }
 .ch-row.ch-head .ch-open { visibility: hidden; }
 @media (max-width: 900px) { .ch-row { grid-template-columns: 22px minmax(0, 1fr) auto auto auto; } }

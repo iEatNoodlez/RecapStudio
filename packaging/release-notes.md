@@ -13,7 +13,5 @@ Copies on 0.1.x update to Lite. To move to Full Suite, install its setup over Li
 
 ## What's new
 
-- **Voice and video start while the script is being written.** With Claude Code, Claude or a cloud service writing the script, Make the recap voices each chapter as soon as it's written, then renders its video, so Voice and Render video only have what's left at the end. The job's line shows what's done ahead ("Working ahead: rendering Chapter 4 (40%); 3 chapters voiced, 2 rendered"). With the local writer (Ollama) the steps still run one after another, since it needs your graphics card itself.
-- **The narrator's persona in New project.** Who the narrator is and how they sound, set as you make the project. It starts from your last project's, with **Use the built-in persona** to go back to the app's own; the rules and style stay at Script and voice.
-- **Fixed:** picking a project or the Library in the rail while Settings was open left Settings on top. Cancelling Voice could lose up to 19 lines it had already made; now every line made is kept.
-- **The plugins:** Overnight queue 1.1.1: its panel on the home page draws the first time (it stayed empty until the library refreshed).
+- **Fixed: whole chapters left out as a notice.** A short chapter whose characters say "notice" and "sorry" could be taken for a "this chapter is only a notice" page (a hiatus, a break) and left out entirely. Now it takes a notice's own words ("hiatus", "postponed", "readers", "sorry for the delay", "no chapter this week"…). A chapter with every piece left out now says **All left out** in the chapter list, not "Not started"; The scan group's pages → **Check what was left out…** puts it back.
+- **Fixed:** the chapter list's headings (Pages, Scenes, Script, Voice) sat to the right of their columns.

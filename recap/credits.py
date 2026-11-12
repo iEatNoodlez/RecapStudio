@@ -72,13 +72,17 @@ SERIES = re.compile(
     r"|all ?rights|discretion|episode ?\d|#\s?\d|season ?\d|next ?(week|episode|season)|will ?r\w?turn"
     r"|thanks? ?(you ?)?for ?reading|hiatus|postpone|^\W*fin\W*$|continuar[aá]", re.I)
 STOP = {"the", "and", "with", "from", "that", "this", "your"}
-# a notice-only chapter: at most this many pieces (story chapters had 55 or more in three series), with
-# a notice's words in its text (and an apology, which story characters make too, only as a second sign)
+# a notice-only chapter: at most this many pieces (webtoon story chapters had 55 or more in three series; a manga's
+# can have fewer), with a notice's own words in its text. NOTICE's words are a notice's (a hiatus, a break, readers);
+# SECOND's come up in story dialogue too ("did you notice", "I'm sorry", "I'll be back"), so they only count beside
+# one of NOTICE's. (A bare "notice" and a "sorry" left My Dress-Up Darling's story chapters 4 and 5, 22 and 27
+# pieces, out whole until 2026-11-11.)
 SHORT = 40
 NOTICE = re.compile(
-    r"postpone|hiatus|on ?(a )?break|season ?\d|will ?(be ?)?(back|return)|notice|announce|circumstances"
-    r"|for ?waiting|maternity|give ?birth|\breaders\b", re.I)
-SORRY = re.compile(r"apologi[sz]e|sorry", re.I)
+    r"postpone|hiatus|on ?(a )?break|season ?\d|announcement|for ?waiting|maternity|give ?birth|\breaders\b"
+    r"|(important|special|short) ?notice|notice ?:|will ?(resume|return)|delayed ?(until|to|by)|for ?the ?(delay|wait)"
+    r"|no ?(new ?)?(chapter|update|episode)|(release|update|upload) ?schedule|will ?be ?(released|uploaded|updated)", re.I)
+SECOND = re.compile(r"notice|announce|circumstances|will ?(be ?)?back|apologi[sz]e|sorry", re.I)
 
 
 def _groups(panels):
@@ -313,8 +317,8 @@ def notice_only(pieces) -> bool:
     if not pieces or len(pieces) > SHORT:
         return False
     said = [_said(x) for x in pieces]
-    strong = sum(bool(NOTICE.search(t)) for t in said)
-    return strong >= 1 and strong + sum(bool(SORRY.search(t)) for t in said) >= 2
+    strong = {re.sub(r"\W", "", m.group(0).lower()) for t in said for m in NOTICE.finditer(t)}
+    return len(strong) >= 2 or (len(strong) == 1 and any(SECOND.search(NOTICE.sub("", t)) for t in said))
 
 
 def same(project: dict, project_dir, piece_id: str) -> list[str]:
