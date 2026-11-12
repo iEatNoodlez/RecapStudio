@@ -972,6 +972,28 @@ def render_reel(segments, lengths, path: Path, settings, encoder_args, workers, 
         tmp.unlink(missing_ok=True)
 
 
+def render_ahead(items, cache_dir: Path, chapter_id: str, settings, progress=None, cancelled=None) -> bool:
+    """Make one chapter's piece before Render video asks for it (pipeline._Ahead: while the script is still being
+    written), named as render_chapters names it, so it's reused there while nothing it shows changes. The GPU
+    encoder that works here, else the CPU's, as render_chapters does. True when it was made, False when it was
+    already there."""
+    first = chapter_encoder(settings)
+    encoders = [first, CPU_ENCODER] if is_hardware(first) else [CPU_ENCODER]
+    for attempt, encoder_args in enumerate(encoders):
+        base = cache_dir / f"{chapter_id}-{piece_signature(items, settings, encoder_args)}"
+        if piece_done(base):
+            return False
+        try:
+            render_piece(items, base, settings, encoder_args, drawing_processes(settings, is_hardware(encoder_args)),
+                         progress, cancelled)
+            return True
+        except _EncoderFailed as e:
+            if attempt + 1 == len(encoders) or e.frames > int(settings["fps"]):
+                raise RuntimeError(str(e)) from None
+            log.warning("GPU video encoding didn't start, using the CPU instead: %s", e)
+    return False
+
+
 def render_chapters(chapters, split, out_dir: Path, cache_dir: Path, settings, progress=None, cancelled=None,
                     status=None, between=None, join_cost=JOIN_COST, music=None) -> dict:
     """chapters: [{"id", "name", "items", "weight"}] in order (weight: about how long its video runs).

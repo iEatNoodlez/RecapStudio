@@ -209,8 +209,15 @@ function drawLibrary() {
 $("#lib-find").addEventListener("input", drawLibrary);
 $("#lib-sort").addEventListener("click", () => { libSort = libSort === "name" ? "updated" : "name"; store("lib-sort", libSort); drawLibrary(); });
 
+// Settings covers the main area while the rail stays in reach: picking a project or the library there closes it,
+// so what was picked shows (not the Settings page, with the project drawn behind it)
+function closeSettings() {
+  if ($("#global-dialog").open) $("#global-dialog").close();
+}
+
 // the brand at the top of the rail, and the Library link under it while a project is open: back to the library
 function goLibrary() {
+  closeSettings();
   if (!current) return;
   clearInterval(polling);
   current = null;
@@ -240,6 +247,7 @@ async function deleteProject(p) {
 }
 
 async function openProject(id) {
+  closeSettings();
   if (!current || current.id !== id) {
     shown = PAGE;
     selectedCh = new Set(JSON.parse(localStorage.getItem(`sel:${id}`) || "[]"));
@@ -256,7 +264,7 @@ async function openProject(id) {
 
 // ---- New project: a few questions first (the kind of comic, its characters, how its video looks, YouTube); the
 // video settings are the project's own from then on (its Video tab), the rest in its Project settings ----
-const NEW_PAGES = ["comic", "characters", "video", "content"];
+const NEW_PAGES = ["comic", "characters", "narrator", "video", "content"];
 const KINDS = [
   ["webtoon", "Webtoon", "One long vertical strip per chapter, read top to bottom.", { layout: "webtoon", reading_direction: "ltr" }],
   ["manga", "Manga", "Pages, read right to left.", { layout: "pages", reading_direction: "rtl" }],
@@ -384,6 +392,21 @@ function newPageBody(page, body) {
       s.characters_review === "trust" ? "trust" : "review", (v) => { s.characters_review = v; renderNew(); }, true)) : null,
       s.find_characters && !scanReady() ? el("span", { class: "np-line warn" }, `Needs the character scan (about ${(env && env.charscan && env.charscan.download_mb) || 586} MB), ` +
         "not downloaded yet: the Characters stage gets it. Until then the recap goes on without it.") : null);
+  } else if (page === "narrator") {  // the persona; its rules and style keep theirs (Script and voice → The narrator)
+    const builtIn = () => !!s.default_persona && (s.persona || "").trim() === s.default_persona.trim();
+    const reset = el("button", { type: "button", class: "ghost small", hidden: builtIn(),
+      onclick: () => { s.persona = s.default_persona; renderNew(); } }, "Use the built-in persona");
+    const box = el("textarea", { class: "np-persona", rows: 4, "aria-label": "The narrator's persona",
+      oninput: (e) => {  // (no redraw while typing: it would take the focus away)
+        s.persona = e.target.value;
+        autosize(e.target);
+        reset.hidden = builtIn();
+        $("#new-summary").replaceChildren(...newSummary());
+      } });
+    box.value = s.persona || "";
+    add(el("span", { class: "np-line" }, "Who the narrator is and how they sound. Its rules and style can be changed later, " +
+      "at Script and voice."), box, reset);
+    requestAnimationFrame(() => autosize(box));
   } else if (page === "video") {
     const on = (s.captions || "off") !== "off";
     add(
@@ -428,6 +451,8 @@ function newSummary() {
       (isRaw(s) ? ` in ${LANGUAGES[s.language]}, translated into English${s.typeset ? " and lettered into the pictures" : ""}` : ""),
     !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
       (s.characters_review === "trust" ? "names added as suggested" : "names checked by you"),
+    !(s.persona || "").trim() ? "Narrator: no persona, only its rules and style"
+      : s.default_persona && s.persona.trim() === s.default_persona.trim() ? "Narrator: the built-in persona" : "Narrator: your own persona",
     `${s.resolution}p ${s.orientation}, ${s.fps} fps, ${STYLES[s.video_style] || s.video_style}` +
       (s.background_music ? ", with background music" : "") +
       ((s.captions || "off") !== "off" ? `, with ${CAPTION_NAMES[s.captions]} captions` : "") +
@@ -438,7 +463,8 @@ function newSummary() {
 
 // The whole dialog on one page: its sections in order (the dialog's own, then the plugins'), the summary beside
 function renderNew() {
-  const titles = { comic: "The series", characters: "Characters", video: "The video", content: null };  // (content joins the video's)
+  const titles = { comic: "The series", characters: "Characters", narrator: "The narrator", video: "The video",
+    content: null };  // (content joins the video's)
   const scroll = $("#new-body").scrollTop;
   const sections = [];
   for (const page of newPages()) {
@@ -3164,7 +3190,8 @@ function renderJob() {
   const left = timeLeft(j);
   const more = j.steps && j.step ? j.steps.length - j.steps.indexOf(j.step) - 1 : 0;
   $("#job-msg").textContent = j.status === "queued" ? "Waiting…"
-    : j.message + (left != null ? ` · ${aboutTime(left)} left${more ? ` in this step (${plural(more, "more step")} after)` : ""}` : "");
+    : j.message + (left != null ? ` · ${aboutTime(left)} left${more ? ` in this step (${plural(more, "more step")} after)` : ""}` : "")
+      + (running && j.ahead ? ` · ${j.ahead}` : "");  // (Make the recap voicing and rendering beside the script)
   $("#job-bar").style.width = `${Math.round((j.progress || 0) * 100)}%`;
   $("#job-error").textContent = j.error || "";
   if (running) liveJobs.add(j.id);

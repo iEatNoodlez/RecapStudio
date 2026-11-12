@@ -11,7 +11,9 @@ project's folder, saving the project as a file, removing all chapters and deleti
 **New project**: type a name at the top left and press **Create**. Four pages of questions follow, starting from your
 last project's answers: what kind of comic it is (webtoon, manga, a left-to-right comic, or not sure); its
 characters (whether Make the recap finds them, in the first 5 chapters or all, and whether you check the suggested
-names or trust them: see [Characters](characters.md)); how its video looks (landscape or portrait, automatic, pan and zoom
+names or trust them: see [Characters](characters.md)); the narrator's persona (who the narrator is and how they
+sound, with **Use the built-in persona** to go back to the app's own; its rules and style are changed later, at Script
+and voice → The narrator); how its video looks (landscape or portrait, automatic, pan and zoom
 or stills, resolution and frame rate, with how long an hour of it takes to make on this computer); and YouTube
 (whether a title and thumbnail are suggested after the script, and whether it's YouTube-safe). The video settings
 are the project's own from then on: its **Video** stage changes them, and its **Characters** stage's panel the characters. (Until 0.1.1 they were app-wide; each project made before keeps the

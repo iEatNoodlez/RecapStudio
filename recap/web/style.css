@@ -897,6 +897,8 @@ label.button-like:hover { border-color: var(--accent); }
 .np-line { font-size: 12px; color: var(--muted); }
 .np-line.warn { color: var(--warn); }
 .np-caption { max-width: 360px; max-height: 120px; object-fit: cover; }
+.np-persona { display: block; max-width: 640px; margin-top: 6px; font-size: 14px; line-height: 1.45; color: var(--text); }
+.np-persona + button { margin-top: 6px; align-self: flex-start; width: auto; }
 .np-side { padding: 24px; gap: 14px; }
 .np-side .np-note { font-size: 13px; }
 .np-actions button { height: 38px; border-radius: 9px; }

@@ -86,9 +86,11 @@ def _worker():
         job["status"] = "running"
         try:
             for step in job["steps"]:
+                _settle_ahead(job, step)
                 speed, amount = _start_step(job, step)
                 RUNNERS[step](job)
                 _learn_speed(job, speed, amount)
+            _end_ahead(job)
             job.update(status="done", progress=1.0,
                        message="Finished" + (f". {job['note']}" if job.get("note") else ""))
         except (Cancelled, InterruptedError):
@@ -97,6 +99,8 @@ def _worker():
             traceback.print_exc()
             job.update(status="error", error=str(e), message=f"{STEP_LABELS.get(job['step'], '')} failed",
                        check=getattr(e, "check", None))  # (a site that asked for its check: sources.SiteCheck)
+        finally:
+            _end_ahead(job, stop=True)  # (a failure or Cancel: what it was doing is stopped)
         plugins.emit("job_done", job=public(job))
 
 
@@ -853,6 +857,7 @@ def _scene_text(group) -> str:
 def run_script(job):
     _credits_hold(job)
     p = store.load(job["project"])
+    _Ahead.begin(job, p)  # (Make the recap: chapters voiced and rendered as the online writer finishes them)
     if p["settings"].get("llm_provider") == "claude_code" or job.get("options", {}).get("agents"):
         from . import claude_code  # Claude Code's agents, on the user's Claude plan
         return claude_code.write_script(job, p)
@@ -1043,6 +1048,7 @@ def _claude_fallback(job, p, chapter, write, reason, who="Claude"):
     targets = [g for g in scenes.groups(p["panels"]) if g[0]["id"] in ids]
     _script_ollama(job, p, targets, label=f"the local model ({chapter['name']}: {who} unavailable)")
     _set_chapter(p["id"], chapter["id"], narrator=f"local model (fallback): {reason[:200]}")
+    _written(job, chapter["id"])
 
 
 def _script_cloud(job, p, provider):
@@ -1214,6 +1220,7 @@ def _api_chapter(job, p, chapter, groups, write, label, narrate, budget=claude.P
             "Most recent narration:\n" + "\n".join(recent) if recent else "")
     _set_chapter(pid, chapter["id"], summary=summary, narrator=label)
     _check_wording(pid, chapter["id"])
+    _written(job, chapter["id"])
 
 
 def _check_wording(pid, cid):
@@ -1310,6 +1317,18 @@ def run_audio(job):
     if not targets:
         return _nothing_to_do(job, "every narration line already has a voice"
                               + (f" ({len(recorded)} from your recording)" if recorded else ""))
+
+    def report(i, n):
+        job["progress"] = i / max(1, n)
+        job["message"] = f"Generating voice: panel {i}/{n}"
+    _voice_lines(job, p, d, targets, report)
+
+
+def _voice_lines(job, p, d, targets, report, give_up=False):
+    """Voice these narration lines, a few at a time, saving every 20 (and what's done when stopped). An online
+    voice's problem (key, plan, voice) pauses the job until it's sorted out, or, with give_up, is raised (the work
+    ahead leaves the line for Voice, which pauses)."""
+    pid, s = p["id"], p["settings"]
     results = {}
     provider = s.get("voice_provider", "kokoro")
     service = online_voices.PROVIDERS.get(provider, provider)
@@ -1323,6 +1342,8 @@ def run_audio(job):
                 samples = tts.speak(text, s)
                 break
             except online_voices.Problem as e:  # pause until the key, plan or voice is sorted out, then try again
+                if give_up:
+                    raise
                 pause_for(job, VOICE_PAUSE[e.kind].format(service=service, error=str(e)[:160]))
                 now = store.load(pid)  # the voice, or this line, may have been changed meanwhile
                 s.update(now["settings"])
@@ -1334,13 +1355,16 @@ def run_audio(job):
         return name, len(samples) / tts.SAMPLE_RATE
 
     workers = online_voices.WORKERS[provider] if provider in online_voices.WORKERS else _workers(s, "voice")
-    for i, (panel, result) in enumerate(_in_parallel(job, targets, speak, workers)):
-        results[panel["id"]] = result
-        job["progress"] = (i + 1) / max(1, len(targets))
-        job["message"] = f"Generating voice: panel {i + 1}/{len(targets)}"
-        if (i + 1) % 20 == 0 or i + 1 == len(targets):
-            _save_audio(pid, dict(results))
-            results.clear()
+    try:
+        for i, (panel, result) in enumerate(_in_parallel(job, targets, speak, workers)):
+            results[panel["id"]] = result
+            report(i + 1, len(targets))
+            if (i + 1) % 20 == 0:
+                _save_audio(pid, dict(results))
+                results.clear()
+    finally:  # (also on Cancel: the lines already voiced are kept)
+        if results:
+            _save_audio(pid, results)
 
 
 def _save_audio(pid, results):
@@ -1352,6 +1376,220 @@ def _save_audio(pid, results):
                 panel.pop("audio_source", None)  # a generated voice, not a recording
                 panel.pop("voice_match", None)
     store.update(pid, apply)
+
+
+# ---- Working ahead: voice and video while the script is written ----------------------------------
+
+class _Side(dict):
+    """A job-like dict for work done beside a job (_Ahead), so the steps' helpers can do it: Pause and Cancel are
+    the job's own (its _check holds or stops with the job, and stopped ends it early); its message is shown(text)."""
+
+    def __init__(self, job, show, stopped: threading.Event):
+        super().__init__(id=job["id"], project=job["project"], steps=[], only=None, chapters=None, mode="missing",
+                         options={}, status="running", step="ahead", progress=0.0, message="")
+        self.job, self.show, self.stopped = job, show, stopped
+
+    def __getitem__(self, key):
+        if key == "cancel":
+            return bool(self.job["cancel"] or self.stopped.is_set())
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key == "cancel":
+            return self["cancel"]
+        if key == "pause":
+            return self.job.get("pause")
+        return super().get(key, default)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if key == "message":
+            self.show(value)
+
+    def update(self, *args, **fields):
+        super().update(*args, **fields)
+        if "message" in fields:
+            self.show(fields["message"])
+
+
+_AHEAD: dict = {}  # job id → its _Ahead (kept apart: jobs go to the page as JSON)
+
+
+class _Ahead:
+    """Make the recap's work ahead. While an online writer (Claude, Claude Code or a cloud service) writes the
+    script, this PC mostly waits; so each chapter it finishes (after the ones already written) is voiced, then its
+    video piece rendered, on a thread beside the job. Voice and Render video then only have what's left: Voice passes
+    over lines that have a voice, and Render video reuses a chapter's piece while nothing it shows has changed
+    (video.piece_signature).
+
+    It's only a head start: what isn't done here (a failure, an online voice's key or plan, a YouTube-safe chapter
+    whose wording waits to be checked, a line changed since) Voice and Render video do as before. When Voice starts,
+    no new chapter is taken and a chapter being voiced is finished first (a render may go on beside Voice); Render
+    video waits for that render. The local writer (Ollama) gets none: it needs this PC's GPU itself."""
+
+    def __init__(self, job, render: bool):
+        self.job, self.render = job, render
+        self.stopped = threading.Event()  # the job failed or ended: stop now
+        self.closing = False              # Voice has started: no new chapters
+        self.todo: deque = deque()
+        self.cv = threading.Condition()
+        self.voicing = threading.Lock()   # held while a chapter is voiced
+        self.voiced, self.rendered = [], []
+        self.side = _Side(job, self._show, self.stopped)
+        self.thread = threading.Thread(target=self._run, daemon=True, name="ahead")
+
+    @classmethod
+    def begin(cls, job, p):
+        """For a script job that voices too (Make the recap, Continue), with an online writer and chapters to write."""
+        s = p["settings"]
+        online = (s.get("llm_provider") in ("claude", "claude_code") or s.get("llm_provider") in cloud.PROVIDERS
+                  or (job.get("options") or {}).get("agents"))
+        if not online or job["only"] or "audio" not in job["steps"] or job["id"] in _AHEAD:
+            return
+        groups, rewrite = scenes.groups(p["panels"]), _rewrite(job)
+        written, writing = [], 0
+        for c in _chapters(job, p):
+            heads = [g[0] for g in groups if g[0]["chapter"] == c["id"]]
+            if job["mode"] == "redo" or c["id"] in rewrite or not all(script_done(h) for h in heads):
+                writing += 1
+            elif heads:
+                written.append(c["id"])
+        if not writing:  # (Voice and Render video follow straight away)
+            return
+        ahead = cls(job, render="video" in job["steps"])
+        ahead.todo.extend(written)
+        job["ahead"] = ""  # (the key made now: the page may be reading the job while it changes)
+        _AHEAD[job["id"]] = ahead
+        ahead.thread.start()
+
+    def written(self, cid):
+        with self.cv:
+            if not self.closing and cid not in self.todo:
+                self.todo.append(cid)
+                self.cv.notify()
+
+    def _next(self):
+        with self.cv:
+            while not self.todo and not self.closing and not self.side["cancel"]:
+                self.cv.wait(1.0)
+            return None if self.closing or self.side["cancel"] else self.todo.popleft()
+
+    def _run(self):
+        try:
+            while (cid := self._next()) is not None:
+                _check(self.side)  # (a paused job holds this too)
+                p = store.load(self.job["project"])
+                chapter = next((c for c in p["chapters"] if c["id"] == cid), None)
+                if chapter is None or not self._ready(p, chapter):
+                    continue
+                with self.voicing:
+                    if self.closing:
+                        break
+                    self._voice(p, chapter)
+                if self.render:
+                    self._render(chapter)
+        except (Cancelled, InterruptedError):
+            pass
+        except Exception:  # noqa: BLE001  (a head start only: Voice and Render video do the rest, and say what's wrong)
+            traceback.print_exc()
+        finally:
+            self._show("")
+
+    def _ready(self, p, chapter) -> bool:
+        """Every scene narrated, and in a YouTube-safe project no line waiting to have its wording checked (Voice
+        holds those for you)."""
+        heads = [g[0] for g in scenes.groups(p["panels"]) if g[0]["chapter"] == chapter["id"]]
+        if not heads or not all(script_done(h) for h in heads):
+            return False
+        return not (p["settings"].get("youtube_safe") and wording_flags(p, chapter))
+
+    def _voice(self, p, chapter):
+        d = store.project_dir(p["id"])
+        self.side["chapters"] = [chapter["id"]]
+        targets, _ = _voice_targets(self.side, p, d)
+        if not targets:
+            return
+        _voice_lines(self.side, p, d, targets, give_up=True,
+                     report=lambda i, n: self._show(f"voicing {chapter['name']} ({i}/{n})"))
+        self.voiced.append(chapter["name"])
+
+    def _render(self, chapter):
+        p = store.load(self.job["project"])  # (with the voice just saved)
+        d = store.project_dir(p["id"])
+        lines = [x for x in p["panels"] if x["chapter"] == chapter["id"] and x.get("enabled", True)
+                 and (x.get("narration") or "").strip()]
+        if not lines or not all(audio_done(x, d) for x in lines):  # (a line without a voice yet: Voice comes first)
+            return
+        self.side["chapters"] = [chapter["id"]]
+        plan, _ = _video_plan(self.side, p, d, [chapter], "rendering")
+        name = chapter["name"]
+        if video.render_ahead(plan[0]["items"], d / "render", chapter["id"], p["settings"],
+                              lambda f: self._show(f"rendering {name} ({int(f * 100)}%)"),
+                              lambda: self.side["cancel"]):
+            self.rendered.append(name)
+
+    def _show(self, doing):
+        """On the job (the page adds it to the job's line): "Working ahead: rendering Chapter 4 (40%); 3 chapters
+        voiced, 2 rendered"."""
+        voiced, rendered = len(self.voiced), len(self.rendered)
+        first = voiced or rendered
+        done = (f"{first} chapter{'s' if first != 1 else ''} "
+                + ("voiced" + (f", {rendered} rendered" if rendered else "") if voiced else "rendered")) if first else ""
+        parts = [x for x in (doing, done) if x]
+        self.job["ahead"] = "Working ahead: " + "; ".join(parts) if parts else ""
+
+    def close(self):
+        """Voice is starting: take no new chapter, and finish voicing the one being voiced."""
+        with self.cv:
+            self.closing = True
+            self.cv.notify()
+        with self.voicing:
+            pass
+
+    def finish(self):
+        """Wait for what's being done (Cancel still stops it)."""
+        self.close()
+        while self.thread.is_alive():
+            self.thread.join(0.5)
+
+
+def _written(job, cid):
+    """A writer finished a chapter's narration (_api_chapter, or its local fallback)."""
+    if ahead := _AHEAD.get(job.get("id")):
+        ahead.written(cid)
+
+
+def _settle_ahead(job, step):
+    """Before Voice, the work ahead takes no new chapter (one being voiced is finished first); before Render video,
+    a chapter being rendered ahead is finished, so it's reused."""
+    ahead = _AHEAD.get(job["id"])
+    if not ahead or step not in ("audio", "video"):
+        return
+    if step == "audio":
+        job["message"] = "Finishing the chapter being voiced ahead"
+        ahead.close()
+    else:
+        job["message"] = "Finishing the chapter being rendered ahead"
+        ahead.finish()
+    _check(job)
+
+
+def _end_ahead(job, stop=False):
+    """The job is ending: wait for the work ahead (stopping it first after a failure or Cancel), and note what it
+    did."""
+    ahead = _AHEAD.pop(job["id"], None)
+    if not ahead:
+        return
+    if stop:
+        ahead.stopped.set()
+    ahead.finish()
+    job["ahead"] = ""  # (emptied, not removed: the page may be reading the job)
+    voiced, rendered = len(ahead.voiced), len(ahead.rendered)
+    if not stop and (voiced or rendered):
+        first = voiced or rendered
+        did = (f"{first} chapter{'s were' if first != 1 else ' was'} "
+               + ("voiced" + (f" and {rendered} rendered" if rendered else "") if voiced else "rendered"))
+        _add_note(job, f"{did} while the script was being written")
 
 
 def run_download(job):

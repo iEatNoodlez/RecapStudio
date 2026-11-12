@@ -154,7 +154,8 @@ VIDEO_KEYS = (
 )
 # what the New project dialog sets, besides those
 NEW_PROJECT_KEYS = set(VIDEO_KEYS) | {"layout", "reading_direction", "language", "webtoon_video", "youtube_safe", "find_characters",
-                                     "characters_chapters", "characters_review", "suggest_title", "redraw_thumbnail"}
+                                     "characters_chapters", "characters_review", "suggest_title", "redraw_thumbnail",
+                                     "persona"}
 GLOBAL_FILE = DATA_ROOT / "settings.json"
 
 DEFAULT_PROMPT = {
@@ -528,6 +529,7 @@ def new_project_settings() -> dict:
     if newest:
         s = load(newest["id"])["settings"]
         out.update({k: s[k] for k in NEW_PROJECT_KEYS if k in s and k != "youtube_safe"})
+    out["default_persona"] = DEFAULT_PROMPT["persona"]  # (for the dialog's "Use the built-in one"; not saved)
     return out
 
 
