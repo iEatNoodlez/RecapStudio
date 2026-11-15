@@ -4,6 +4,8 @@
   and kept in the file's order, among the folders' chapters; the files it can't read are listed with why;
 - importing: the pages extracted, each part remembered as its own source (so it's "already imported" next time);
 - dropping files on a project: the same chapters, and the same reasons for what's left out;
+- dropping folders (each file sent with its folders, as the page does): a chapter per folder, named as Import folder
+  names them ("pages" skipped), placed by number, and loose pictures as one more;
 - the page is told the types (the drop zone's words and the file picker);
 - a plugin can't take .cbz or a type another plugin reads, and what its setup added is taken back then."""
 import io
@@ -131,4 +133,17 @@ check("dropped: a chapter for each part", r["added"] == 6
 check("and what's left out, with why", r["skipped"] == [{"file": "broken.twopart", "reason": "it's broken on purpose."}], r)
 r = app.post(f"/api/projects/{drop}/pages", files=[("files", ("Vol 2.twopart", VOL2))]).json()
 check("a file of one part: named after it", r["added"] == 2 and "Vol 2" in [c["name"] for c in store.load(drop)["chapters"]], r)
+folders = app.post("/api/projects", json={"name": "Folders", "settings": store.new_project_settings()}).json()["id"]
+r = app.post(f"/api/projects/{folders}/pages", files=[
+    ("files", ("Series/Chapter 10/pages/p1.png", picture(110, 300, (1, 2, 3)))),
+    ("files", ("Series/Chapter 10/pages/p2.png", picture(111, 300, (1, 2, 3)))),
+    ("files", ("Series/Chapter 2/p1.png", picture(120, 300, (4, 5, 6)))),
+    ("files", ("loose.png", picture(130, 300, (7, 8, 9))))]).json()
+got = store.load(folders)
+check("dropped folders: a chapter each, named as Import folder names them, in number order; loose pictures one more "
+      "(named as the next chapter, as before)", r["added"] == 4
+      and [c["name"] for c in got["chapters"]] == ["Chapter 2", "Chapter 3", "Chapter 10"], (r, [c["name"] for c in got["chapters"]]))
+ten = next(c["id"] for c in got["chapters"] if c["name"] == "Chapter 10")
+check("each folder's pictures in their chapter, in order", [x["w"] for x in got["pages"] if x["chapter"] == ten] == [110, 111],
+      [(x["name"], x["chapter"]) for x in got["pages"]])
 done()

@@ -611,7 +611,7 @@ def run_translate(job):
             ask.close(ok=ok)
     if missed:
         _add_note(job, f"{missed} text box{'es' if missed != 1 else ''} got no translation, even when asked again "
-                       "(the Script tab shows them)")
+                       "(the scene list at Script and voice shows them)")
 
 
 def _save_translation(pid, found: dict):
@@ -630,7 +630,7 @@ def _save_translation(pid, found: dict):
 # ---- the scan group's pages at the start and end of chapters (see credits.py) ----------
 
 def _leave_out_credits(job, pid, chapter_ids, always=False) -> str:
-    """Leave out the credits, notices and ads at either end of these chapters (Project settings: on by
+    """Leave out the credits, notices and ads at either end of these chapters (the Chapters stage's panel: on by
     default, or always for Find them now). Returns a note on what was left out."""
     p = store.load(pid)
     if not chapter_ids or not (always or p["settings"].get("leave_out_credits", True)):
@@ -687,7 +687,7 @@ def _credits_hold(job):
 
 
 def run_credits(job):
-    """Find them now (Project settings): the credits, notices and ads in the job's chapters."""
+    """Find them now (the Chapters stage's panel): the credits, notices and ads in the job's chapters."""
     pid = job["project"]
     p = store.load(pid)
     chapters = [c["id"] for c in _chapters(job, p) if any(x["chapter"] == c["id"] for x in p["panels"])]
@@ -698,7 +698,7 @@ def run_credits(job):
 
 
 def run_boxes(job):
-    """Find boxes now (the Video tab → YouTube): the box finder looks at the pieces used in the job's chapters
+    """Find boxes now (the Script and voice stage's panel → YouTube-safe): the box finder looks at the pieces used in the job's chapters
     that it hasn't looked at yet, or at all of them again (Find again: its earlier boxes are replaced, yours
     and the writer's stay). See cover.py."""
     pid = job["project"]
@@ -780,7 +780,7 @@ def _run_magi(job, pid, chapters):
     """Ask Magi who says each line; its guesses go on the pieces as "speakers" for the script writers."""
     bank = _magi_bank(store.load(pid))
     if not bank["images"]:
-        job["note"] = ("Magi was skipped: add pictures to your characters (the Characters tab) "
+        job["note"] = ("Magi was skipped: add pictures to your characters (the Characters stage) "
                        "so it can tell who is who.")
         return
     tmp = store.project_dir(pid) / "magi_tmp"
@@ -1252,7 +1252,7 @@ def wording_note(pid, chapter_ids) -> str:
     if not flagged:
         return ""
     return ("Check the wording of " + ", ".join(f"{name} ({n} line{'s' if n != 1 else ''})" for name, n in flagged)
-            + ": it may go further than YouTube-safe allows (Check wording, in the Chapters tab)")
+            + ": it may go further than YouTube-safe allows (Check wording, in the Chapters stage's list)")
 
 
 VOICE_PAUSE = {  # online voices (see online_voices.Problem): what to fix before Resume
@@ -1603,6 +1603,10 @@ def run_download(job):
                            o.get("skip") or [], progress, lambda: _check(job))
     sources.new_counts.pop(job["project"], None)
     job["note"] = f"Added {res['chapters']} chapter{'s' * (res['chapters'] != 1)} ({res['pages']} pages)"
+    if res.get("copies"):
+        n = len(res["copies"])
+        job["note"] += (f". Passed over {n} chapter{'s' * (n != 1)} the site lists twice: " + ", ".join(
+            f"{x['chapter']} (the same pages as {' and '.join(x['same_as'])})" for x in res["copies"]))
     if res["duplicates"]:
         job["note"] += ". Same pages as another chapter: " + ", ".join(
             f"{x['chapter']} and {x['same_as']}" for x in res["duplicates"])
@@ -1927,7 +1931,7 @@ def run_video(job):
     if tracks:
         notes.append(f"With background music ({len(tracks)} track{'s' if len(tracks) != 1 else ''})")
     elif s.get("background_music"):
-        notes.append("Background music is on, but the project has no tracks yet: add them in the Video tab")
+        notes.append("Background music is on, but the project has no tracks yet: add them in the Video stage's panel → Background music")
     if not_scrolling:
         notes.append("Shown as scenes instead of scrolling (detect panels again to scroll): "
                      + ", ".join(not_scrolling[:5]) + (" …" if len(not_scrolling) > 5 else ""))
@@ -2004,7 +2008,7 @@ def run_scan(job):
     record = _scan(job, p, [c["id"] for c in _chapters(job, p)])
     n = sum(1 for g in record["groups"] if g["size"] >= 3)
     job["note"] = (f"Found {n} characters (and {len(record['groups']) - n} small groups). "
-                   "Review them in the Characters tab." if record["groups"] else "No characters were found.")
+                   "Review them at the Characters stage." if record["groups"] else "No characters were found.")
 
 
 def _scan(job, p, chapters) -> dict:
@@ -2040,7 +2044,7 @@ def _to_write(project, chapters, missing=True) -> list[str]:
 def characters_to_scan(project, chapters, missing=True) -> list[str]:
     """What Finding characters scans: in a project never scanned and with no named characters, the chapters
     whose script is about to be written (the first SCAN_FIRST, or all as its settings say). Nothing otherwise
-    (Scan again is in the Characters tab), or when it's turned off. Characters a plugin preloaded (with a source,
+    (Scan again is at the Characters stage), or when it's turned off. Characters a plugin preloaded (with a source,
     such as AniList through Find the series) don't count: the scan's groups are matched to them, by their pictures
     and by the writer's names."""
     s = project["settings"]
@@ -2074,7 +2078,7 @@ def run_characters(job):
         return _nothing_to_do(job, "every chapter has its script")
     chapters = characters_to_scan(p, job["chapters"], missing)
     if chapters and not charscan.installed():
-        _add_note(job, "Characters weren't looked for: download the character scan (the Characters tab) and Make "
+        _add_note(job, "Characters weren't looked for: download the character scan (the Characters stage) and Make "
                        "the recap finds them first")
         return _nothing_to_do(job, "the character scan isn't downloaded")
     trust = p["settings"].get("characters_review") == "trust"
@@ -2094,8 +2098,8 @@ def run_characters(job):
                 _add_note(job, f"Names weren't suggested ({e})")
         if trust:
             added = _trust_names(pid)
-            _add_note(job, f"Added {added} character{'s' if added != 1 else ''} as suggested (check them in the "
-                           "Characters tab)" if added else "No names were suggested to add")
+            _add_note(job, f"Added {added} character{'s' if added != 1 else ''} as suggested (check them at the "
+                           "Characters stage)" if added else "No names were suggested to add")
     if not trust:
         _characters_hold(job)
 
@@ -2154,7 +2158,7 @@ def run_names(job):
     _check(job)
     named, total, label = _suggest_names(job, p)
     job["note"] = (f"{label} suggested names for {named} of {total} groups. "
-                   "Review them in the Characters tab.")
+                   "Review them at the Characters stage.")
 
 
 def _suggest_names(job, p) -> tuple[int, int, str]:
@@ -2185,7 +2189,7 @@ def _suggest_names(job, p) -> tuple[int, int, str]:
 
 
 def run_title(job):
-    """After the script (Make the recap, when the project's settings say so; or Suggest again in the Video tab):
+    """After the script (Make the recap, when the project's settings say so; or Suggest again at Publish):
     the writer suggests a YouTube title and the thumbnail's pictures and marks, the thumbnail is drawn, and then
     redrawn with AI when the project says so (youtube.py). In Make the recap a failure is only noted: the recap
     goes on without one; a failed redraw is only noted either way."""
@@ -2195,7 +2199,7 @@ def run_title(job):
     if not alone and not p["settings"].get("suggest_title", True):
         return _nothing_to_do(job, "turned off in the project's settings")
     if job["mode"] == "missing" and p.get("youtube"):
-        return _nothing_to_do(job, "one was suggested already (Suggest again in the Video tab)")
+        return _nothing_to_do(job, "one was suggested already (Suggest again at Publish)")
     try:
         found = _suggest_title(job, p)
     except (Cancelled, InterruptedError):

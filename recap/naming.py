@@ -251,9 +251,9 @@ def _ask(s, instructions, blocks, schema=SCHEMA, name="recap_names") -> dict:
         info = cloud.PROVIDERS[provider]
         model = s.get(f"{provider}_model") or info["default_model"]
         if not model:
-            raise RuntimeError(f"Choose a {info['name']} model in Settings → Script first.")
+            raise RuntimeError(f"Choose a {info['name']} model in Settings → Script writer first.")
         if not cloud.has_key(provider):
-            raise RuntimeError(f"Add your {info['name']} key in Settings → Script first.")
+            raise RuntimeError(f"Add your {info['name']} key in Settings → Script writer first.")
         return cloud.ask(provider, model, instructions, blocks, schema, name)
     return _ask_ollama(s, instructions, blocks, schema)
 

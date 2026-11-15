@@ -67,7 +67,7 @@ TOOLS = [
           ["project"]),
     _tool("detect_characters", "Find the characters in chapters (the app's character scan) and then have the "
           "script writer suggest names for the groups it finds, for the user to accept in the app (the "
-          "Characters tab). With Claude Code as the writer, a Claude Code agent suggests the names.",
+          "Characters stage). With Claude Code as the writer, a Claude Code agent suggests the names.",
           {"project": _PROJECT, "chapters": _CHAPTERS,
            "suggest_names": {"type": "boolean", "description": "Also suggest names (default true)."}},
           ["project"]),
@@ -255,7 +255,7 @@ def tool_detect_characters(project, chapters=None, suggest_names=True):
     p = _project(project)
     job = _submit(p, ["scan", "names"] if suggest_names else ["scan"], _chapter_ids(p, chapters))
     return (f"Started job {job['id']}: the character scan" + (", then Suggest names" if suggest_names else "")
-            + ". The user reviews the groups in the app (the Characters tab). Follow it with job_status.")
+            + ". The user reviews the groups in the app (the Characters stage). Follow it with job_status.")
 
 
 def tool_job_status(project):

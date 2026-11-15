@@ -1,22 +1,48 @@
 # Using Recap Studio
 
+## The library
+
+The app opens on the library, **Your recaps**: a card for each project, with its cover, a bar for how far its stages
+are and a line saying where it is. **Find a project** narrows them, and **Sort** orders them by when you last worked
+on them or by name. A recap that stopped to ask you something is listed first, with **Answer**. Plugins can add
+panels under the cards (the Overnight queue's list, Autopilot's next flight).
+
+The rail on the left lists the same projects, each with its line (hover one for its trash icon). **＋ New project** is
+at its top, **Open project file…** under the list, the plugins' buttons in an **Automation** section, and **⚙ Settings**
+at its foot, with the edition and who writes and voices. In a project, **‹ Library** at the top goes back.
+
 ## Projects and the main button
 
-A project opens on an overview: four tiles saying how far the chapters, script, voice and video are, and one main
-button that does whatever comes next (**Make the recap**, **Continue the recap**, or **Make the video again**), with
-the time it takes beside it. Below are tabs: **Chapters**, **Script** (the scenes and their narration),
-**Characters** and **Video** (the player, its files, the project's video settings and YouTube-safe). Showing the
-project's folder, saving the project as a file, removing all chapters and deleting the project are in the **⋯** menu.
+<p align="center">
+  <img src="images/project.png" width="100%" alt="A project's Chapters stage: the rail with the library list, the five stages (Chapters, Characters, Script and voice, Video, Publish) each with a tick and its status, the Make the video again button with One step beside it, the chapter table, and the panel at the right with Where they come from, How the pages are read and The scan group's pages">
+</p>
 
-**New project**: type a name at the top left and press **Create**. Four pages of questions follow, starting from your
-last project's answers: what kind of comic it is (webtoon, manga, a left-to-right comic, or not sure); its
-characters (whether Make the recap finds them, in the first 5 chapters or all, and whether you check the suggested
-names or trust them: see [Characters](characters.md)); the narrator's persona (who the narrator is and how they
-sound, with **Use the built-in persona** to go back to the app's own; its rules and style are changed later, at Script
-and voice → The narrator); how its video looks (landscape or portrait, automatic, pan and zoom
-or stills, resolution and frame rate, with how long an hour of it takes to make on this computer); and YouTube
-(whether a title and thumbnail are suggested after the script, and whether it's YouTube-safe). The video settings
-are the project's own from then on: its **Video** stage changes them, and its **Characters** stage's panel the characters. (Until 0.1.1 they were app-wide; each project made before keeps the
+<p align="center"><sub>A project's Chapters stage, with Episode 1 of <i>Give My Regards to Black Jack</i> by Shuho Sato, who lets anyone use the series freely (see the README's <a href="../README.md#license-and-credits">credits</a>).</sub></p>
+
+A project opens with its name, a chip for the kind of comic and a **⋯** menu (**Show in folder**, **Save as file…**,
+**Remove all chapters**, **Delete project**). Under it is a strip of five stages: **Chapters**, **Characters**,
+**Script and voice** (the scenes, their narration and voice), **Video** (the player and the video's files) and
+**Publish** (the title and thumbnail, and the posting plugins' buttons). Each says how far it is; click one to open it.
+Below the strip, one main button does whatever comes next (**Make the recap**, **Continue the recap**, or **Make the
+video again**), with the time it takes beside it. The panel on the right holds the open stage's settings for this
+project.
+
+**New project**: click **＋ New project** at the top of the rail (in a project, go back with **‹ Library** first), or
+the **＋ New project** card in the library. One page opens, filled in from your last project's answers: the series'
+name; what it is (**Webtoon**, **Manga**, **Comic** or **Not sure, tell from the pages**) and the language of its
+text; its characters (whether Make the recap finds them, in the first 5 chapters or all, and whether you check the
+suggested names or trust them: see [Characters](characters.md)); the narrator's persona (who the narrator is and how
+they sound, with **Use the built-in persona** to go back to the app's own; its rules and style are changed later, at
+Script and voice → The narrator); and the video (landscape or portrait, size, automatic, pan and zoom or stills, frame
+rate and captions, with how long an hour of it takes to make on this computer), with background music, Shorts, a
+suggested title and thumbnail (and an AI redraw of it) and YouTube-safe. **What you get**, beside it, sums up your
+choices. **Create the project** makes it; **Create it and make the recap now** also starts Make the recap.
+
+<p align="center">
+  <img src="images/new-project.png" width="80%" alt="The New project page: the series' name, Webtoon, Manga (picked), Comic or Not sure, the language of its text, how to find the characters, the narrator's persona, and how the video looks, with what you get listed beside it and the buttons Create the project, Create it and make the recap now, and Cancel">
+</p>
+
+The video settings are the project's own from then on: its **Video** stage's panel changes them, and its **Characters** stage's panel the characters. (Until 0.1.1 they were app-wide; each project made before keeps the
 choices it was made with.) The encoder is the one app-wide video setting (Settings → Video).
 
 There's no advanced mode: everything is in reach where it belongs. **One step**, beside the main button, runs a
@@ -24,9 +50,14 @@ single step (Detect panels, Read text, Translate, Characters, Write script, Voic
 estimate; ticking chapters in the table makes the main button and One step work on just those (the box in the
 table's head ticks all or none); a chapter's row shows its reorder and voice-over buttons when you hover it; the
 finer settings sit under **Details** or **More settings** in each panel and in Settings; and long help text shows
-two lines: hover it for the rest, or click it.
+two lines and **More**: click it for the rest (**Less** folds it again).
 
-1. Create a project (the New project questions above) and click **Add chapters** or **Import folder…**. Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file (and, with the EPUB comics plugin, every `.epub`, split into a volume's chapters). Files that can't be read are listed with why (an EPUB with DRM, say). Review the list, untick anything you don't want, and import.
+<p align="center">
+  <img src="images/one-step.png" width="60%" alt="One step open beside Make the video again: 1 Detect panels, 2 Read text, 3 Characters, 4 Write script, 5 Voice and 6 Render video, each with what's done and how long redoing it takes">
+</p>
+
+
+1. Create a project (New project, above) and click **Import a folder…** in the Chapters card (the main button says **Add chapters** until there are some, and does the same; **Get chapters from a site…** beside it gets them from a source instead: see [Getting chapters from sites](sources.md)). Pick the series folder; every subfolder (at any depth) that contains images becomes a chapter, and so does every `.cbz`/`.zip` file (and, with the EPUB comics plugin, every `.epub`, split into a volume's chapters). Files that can't be read are listed with why (an EPUB with DRM, say). Review the list, untick anything you don't want, and import.
    - Chapters and pages are sorted naturally (`Chapter 2` before `Chapter 10`, `144.5` after `144`).
    - A chapter is named after its folder. Generic image folders like `pages` or `images` are skipped (`Chapter 3/pages` is named "Chapter 3"), and parent folders are added only when two chapters would otherwise share a name (`Season 1 / Chapter 1`).
    - Images in folders are read where they are, not copied, so keep the source folder in place (re-import if you move it). Pages inside `.cbz`/`.zip` files are extracted into the project.
@@ -34,23 +65,29 @@ two lines: hover it for the rest, or click it.
    - **Put them** says where new chapters go: in order by chapter number (the default: each goes after the last chapter whose number isn't above its own, so a late `Chapter 45.5` lands after `Chapter 45`; a name without a number goes at the end), at the start, at the end, or after a chapter you pick. Files dropped onto the window go by number too.
    - You can import while a job runs (a render, say), in this project or another: the job carries on with the chapters it started with.
    - A chapter with the same pages as another (one put in the folder twice, as "34-5" and "34.5") is pointed out once it's imported ("Imported twice?"), so you can delete one before it's narrated twice: pages of the same sizes in the same order, with the first, middle and last nearly the same.
-   - You can also drop images or `.cbz`/`.zip` files onto the window; each archive becomes a chapter, loose images become one chapter.
+   - You can also drop images, folders or `.cbz`/`.zip` files onto an open project: each archive becomes a chapter, each folder of pictures too (named as Import a folder names them, so a series folder's chapter folders become its chapters), and loose images one chapter. Dropped on the library instead, they open New project, named after what you dropped, and become the new project's chapters once you create it.
 2. Click **Make the recap** (later **Continue the recap**): it runs every step on every chapter. Tick the chapters you want to work on (none ticked = all), or run the steps one by one with **One step**. Rename or remove chapters in the Chapters stage (reorder them with the arrows that show when you hover a row).
    - The main button picks up where you left off: it only detects panels in chapters that have none, reads text and writes narration only for panels that don't have them yet, and voices only lines without audio, then renders. It never redoes or overwrites finished work, including narration you edited by hand.
    - A single step that's already partly done asks whether to **Continue** (only what's left) or **Redo all**; one that's fully done asks before redoing.
-3. Edit any narration line, untick pieces you don't want, or **Rewrite this scene** (the panel beside has **Rewrite the chapter**). Changing a line clears its audio; **Make the voice again** makes it.
+3. At the Script and voice stage, edit any narration line, untick **In the video** on a scene you don't want, or click **Rewrite this scene** (the panel beside, under **The whole chapter**, has **Rewrite the chapter**). Changing a line clears its audio; **▶ Make the voice for this scene** makes it again.
 4. Run **Render video**. It renders the ticked chapters, in order, into the project's `output` folder: named after the project, `Solo Leveling.mp4` for the whole project or `Solo Leveling - Chapter 1 to Chapter 10.mp4` for a range (as its folder is named, so a name with `:` or `?` loses them), each with matching `.srt` subtitles, `.wav` narration and a YouTube chapter list (see [Video](video.md)).
 
 ## Scenes
 
-In the Script and voice stage, the rail lists the scenes and the one chosen is open beside it. Reading through, scroll on past the end of the open scene and the next one opens at its top (and up past its top, the one before at its end), so a chapter reads through without a click per scene; the arrow keys walk the list too.
+In the Script and voice stage, the strip, the main button and One step step aside: the rail becomes the scene list (**‹** with the project's name goes back, with **Find in the script**, a chip per chapter and **To check**), and the scene chosen is open beside it, with **This scene** in the panel. Reading through, scroll on past the end of the open scene and the next one opens at its top (and up past its top, the one before at its end), so a chapter reads through without a click per scene; the arrow keys walk the list too.
 
-Panel detection cuts webtoon strips finely, at every gap between panels, including gaps crossed by a speech bubble, so it doesn't miss panel boundaries. The pieces of each detected panel start out joined into one **scene**: one narration line, shown in the video as the pieces stacked back together. In the scene list, **✂ split here** makes a piece start its own scene, and **⤒ Join with scene above** merges two scenes (their narration is combined). Claude regroups the pieces itself when it writes a chapter.
+Panel detection cuts webtoon strips finely, at every gap between panels, including gaps crossed by a speech bubble, so it doesn't miss panel boundaries. The pieces of each detected panel start out joined into one **scene**: one narration line, shown in the video as the pieces stacked back together. In the open scene, **split here** (between two of its pieces) makes the piece below start its own scene, and **Join with scene 9** (the number of the scene above) merges it into that one (their narration is combined). Claude regroups the pieces itself when it writes a chapter.
+
+<p align="center">
+  <img src="images/script.png" width="100%" alt="The Script and voice stage of a manga project: the scenes down the left, the open scene's pictures beside its narration with a player for its voice line, and the scene's details at the right">
+</p>
+
+<p align="center"><sub>The Script and voice stage, with Episode 1 of <i>Give My Regards to Black Jack</i> by Shuho Sato, who lets anyone use the series freely (see the README's <a href="../README.md#license-and-credits">credits</a>).</sub></p>
 
 ## Settings
 
-- **⚙ Settings** (bottom of the sidebar) holds the app-wide choices shared by every project: the script writer (a local model, Claude Code, Claude, OpenRouter, Google Gemini, DeepSeek, Groq or Mistral, with models, API keys and the Ollama connection), the voice, the video encoder, the thumbnail redraw and the look (Settings → Look: the system's light or dark mode, or one of them). **Run setup again** at its top reopens the first-run setup. They're stored in `data\settings.json`. The rail's foot says who writes and which voice reads.
-- **The panel beside a project's stages** holds what differs per series, grouped by stage: at Chapters, the kind of comic, reading direction, the language of its text and how the scan group's pages are found; at Characters, how they're found; at Script and voice, YouTube-safe and, under Details, the narrator's persona, rules and style; at Video, the video's settings, music and captions; at Publish, the title and thumbnail. A plugin's choice for the project is there on every stage, in a Plugins section.
+- **⚙ Settings** (at the foot of the rail) opens a page beside the rail with the app-wide choices shared by every project, its sections listed on the left: **Script writer** (four cards: **Claude Code**, **Claude API**, **A cloud service** for OpenRouter, Google Gemini, DeepSeek, Groq or Mistral, and **Ollama, on this PC**, each with its models and keys), **Voice**, **Video** (the encoder, and **Performance**), **Thumbnail redraw**, **Reading comics**, **Sources**, **Projects folder**, **Phone**, **Updates and this PC** and **Look** (the system's light or dark mode, or one of them); then, under Plugins, **Manage plugins** and each plugin's own section. **Find a setting** narrows the list, **Run setup again** at its top reopens the first-run setup, and **Close** (or Escape, or a project in the rail) goes back. They're stored in `data\settings.json`. The rail's foot says who writes and which voice reads.
+- **The panel beside a project's stages** holds what differs per series, grouped by stage: at Chapters, the kind of comic, reading direction, the language of its text and how the scan group's pages are found; at Characters, how they're found; at Script and voice, the open scene first (**This scene**), then under **This project** YouTube-safe and **The narrator** (its persona, rules and style, folded); at Video, the video's settings, music and captions; at Publish, the title and thumbnail. A plugin's choice for the project is there on every stage, in a Plugins section.
 
 ## Pause and resume
 
@@ -63,7 +100,7 @@ When writing with Claude or another online service, the job pauses by itself ins
 - **No allowance left on the key's plan** for the model (for example a free key and a bigger model), or **a model the key can't use**: it pauses straight away (waiting wouldn't help), saying so. Choose another model, or check your plan or billing, then Resume. A rate limit that says when to retry is waited out instead.
 - **Service busy or unreachable** (rate limit, overloaded, network, or the connection dropping partway through a reply): it waits and tries again on its own, after 30 seconds, 2 minutes and 5 minutes, with a countdown. If it still fails, it pauses so you can Resume later.
 
-A paused job lives in the running app: closing the app ends it. Finished chapters are kept (hover a chapter's stats in the list to see which model wrote it), so tick the rest and run again.
+A paused job lives in the running app: closing the app ends it. Finished chapters are kept (hover a chapter's **Voice** count or its state in the Chapters table, or look under a scene's narration, to see which model wrote it), so tick the rest and run again.
 
 ## Time estimates
 
@@ -73,9 +110,9 @@ Each estimate is the work a step would do (pages, panels, chapters or scenes, na
 
 ## Saving a project as a file
 
-**Save as file…** (at the top of a project) writes the whole project into one `.recap` file in its output folder, to keep as a backup or move to another computer. It holds the pages (pages imported from a folder are copied in, so the file doesn't need that folder), panels, script, voice lines, character pictures, the character scan, your recordings and the scenes' subjects. The rendered video, its pieces, the videos for editors and the pictures without text are left out, since the app makes them again. Pictures and sound go in as they are, so the file is about the size of those folders (the 3-chapter test series: 90 MB).
+**Save as file…** (in a project's **⋯** menu) writes the whole project into one `.recap` file in its output folder, to keep as a backup or move to another computer. It holds the pages (pages imported from a folder are copied in, so the file doesn't need that folder), panels, script, voice lines, character pictures, the character scan, your recordings and the scenes' subjects. The rendered video, its pieces, the videos for editors and the pictures without text are left out, since the app makes them again. Pictures and sound go in as they are, so the file is about the size of those folders (the 3-chapter test series: 90 MB).
 
-**Open project file…** (in the sidebar) takes the file's path and opens it as a new project (named "… (2)" next to one of the same name), with everything in its own folder. Files that aren't project files, or that hold anything outside the project's folders, are refused, and a file from a newer version of the app asks for an update.
+**Open project file…** (in the rail, under the projects), or dropping the `.recap` on the library, opens it as a new project (named "… (2)" next to one of the same name), with everything in its own folder. Files that aren't project files, or that hold anything outside the project's folders, are refused, and a file from a newer version of the app asks for an update.
 
 ## Cutting webtoons around speech bubbles
 
@@ -87,7 +124,7 @@ A webtoon strip is cut at its gutters and across the white space inside panels, 
 - Scenes are fewer and a little bigger (1,896 → 1,443), since the white space beside a bubble isn't cut any more. Where a bubble sits across the whole gutter between two panels, they stay one scene (44 of 1,122 panel breaks).
 - It takes about 0.13 s for each width of strip on the CPU (0.2 s for strips 1,000 pixels wide or more): 10 to 40 seconds more per test chapter. The 8-bit model runs no faster on an NVIDIA GPU, so it stays on the CPU.
 - Sound effects drawn as part of the art can still be cut through, as before: the model finds lettering, not drawn effects.
-- Chapters already cut keep their scenes; it's used for chapters cut from now on. **Detect panels** with **Redo** cuts a chapter again (its text, script and voice are then made again too). Comic and manga pages are cut at their gutters as before.
+- Chapters already cut keep their scenes; it's used for chapters cut from now on. **Detect panels** with **Redo all** cuts a chapter again (its text, script and voice are then made again too). Comic and manga pages are cut at their gutters as before.
 
 Why not a trained panel cutter, as some apps advertise? None exists for webtoon strips. The AI cutters other apps use are YOLO models trained on manga pages, run on whole pages, and anything trained with Ultralytics' YOLO is under the AGPL; the other open panel models (Magi, Koharu) are for non-commercial use only. The strongest open recap tool also cuts webtoon strips by rules, with models marking only the text, bubbles and faces not to cut through, which is what the bubble finder does here.
 

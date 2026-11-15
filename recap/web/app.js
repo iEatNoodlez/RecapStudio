@@ -135,6 +135,7 @@ const TRASH_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
 function projectState(p) {
   const j = p.job || {};
   if (j.status === "paused" && j.pause_reason) return ["ask", "Stopped to ask"];
+  if (j.status === "queued") return ["on", "Waiting…"];  // (in line behind another project's job: one runs at a time)
   if (ACTIVE.includes(j.status)) return ["on", j.message || "Working"];
   if (!p.chapters) return ["", "No chapters yet"];
   if (p.video) {
@@ -263,7 +264,7 @@ async function openProject(id) {
 }
 
 // ---- New project: a few questions first (the kind of comic, its characters, how its video looks, YouTube); the
-// video settings are the project's own from then on (its Video tab), the rest in its Project settings ----
+// video settings are the project's own from then on (its Video stage's panel), the rest in the other stages' panels ----
 const NEW_PAGES = ["comic", "characters", "narrator", "video", "content"];
 const KINDS = [
   ["webtoon", "Webtoon", "One long vertical strip per chapter, read top to bottom.", { layout: "webtoon", reading_direction: "ltr" }],
@@ -339,6 +340,7 @@ const pluginPages = [];
 const newPages = () => [...NEW_PAGES, ...pluginPages.map((p) => p.id)];
 
 let newFocus = false;  // (the name box takes the focus when the dialog opens)
+let pendingDrop = null;  // what was dropped on the library, {files, label}, waiting for New project's Create
 
 // One section's contents (the dialog's own pages, and a plugin's). The dialog's own are laid out as the mockup:
 // the series, what it is, the characters in a sentence, the video as rows of choices and one row of checks.
@@ -449,6 +451,7 @@ function newSummary() {
   return [
     `${newName.trim() || "Untitled"}: ${kind === "Not sure" ? "the kind of comic told from the pages" : `a ${kind.toLowerCase()}`}` +
       (isRaw(s) ? ` in ${LANGUAGES[s.language]}, translated into English${s.typeset ? " and lettered into the pictures" : ""}` : ""),
+    pendingDrop ? `Chapters: the ${pendingDrop.label}, added once it's made` : null,
     !s.find_characters ? "Characters: not looked for" : `Characters: found in ${s.characters_chapters === "all" ? "every chapter" : "the first 5 chapters"}, ` +
       (s.characters_review === "trust" ? "names added as suggested" : "names checked by you"),
     !(s.persona || "").trim() ? "Narrator: no persona, only its rules and style"
@@ -458,7 +461,7 @@ function newSummary() {
       ((s.captions || "off") !== "off" ? `, with ${CAPTION_NAMES[s.captions]} captions` : "") +
       (Number(s.shorts) ? `, cut into Shorts of up to ${Number(s.shorts) >= 120 ? `${Number(s.shorts) / 60} minutes` : `${s.shorts} seconds`}` : ""),
     s.suggest_title ? `A title and thumbnail suggested after the script${s.redraw_thumbnail ? ", then redrawn with AI" : ""}` : "No title or thumbnail suggested",
-  ].map((x) => el("li", {}, x));
+  ].filter(Boolean).map((x) => el("li", {}, x));
 }
 
 // The whole dialog on one page: its sections in order (the dialog's own, then the plugins'), the summary beside
@@ -483,6 +486,7 @@ function renderNew() {
 async function createProject(run) {
   const buttons = [$("#new-next"), $("#new-create-run")];
   buttons.forEach((b) => { b.disabled = true; });
+  const dropped = pendingDrop;  // (closing the dialog lets go of it)
   try {
     const p = await api("/api/projects", { method: "POST", json: { name: newName.trim() || "Untitled", settings: newSettings } });
     await emitPlugins("project-created", { project: p });
@@ -490,10 +494,12 @@ async function createProject(run) {
     $("#new-name").value = "";
     await openProject(p.id);
     showTab("chapters");
+    if (dropped) await upload(dropped.files);  // (what was dropped on the library, as its chapters)
     if (run) $("#go").click();
   } catch (e) { notify(e.message); }
   buttons.forEach((b) => { b.disabled = false; });
 }
+$("#new-dialog").addEventListener("close", () => { pendingDrop = null; });  // (Cancel: the drop is let go)
 $("#new-next").addEventListener("click", () => createProject(false));
 $("#new-create-run").addEventListener("click", () => createProject(true));
 
@@ -688,7 +694,7 @@ function fillSelects() {
   renderKey(env.claude);
 }
 
-// ---- settings: app-wide (dialog) and per project (the Video and Project settings tabs) ----
+// ---- settings: app-wide (the Settings page) and per project (the stages' panels) ----
 
 document.querySelectorAll(".open-global").forEach((b) => b.addEventListener("click", () => {
   renderGlobal();
@@ -883,7 +889,7 @@ $("#gpu-remove").addEventListener("click", async () => {
 // ---- subject finder for pan and zoom (U2-Net-p): downloaded on request, never shipped ----
 
 let focusPoll = null;
-let focusInstalled = false;  // the subject finder, for a project's "Pan and zoom toward" (its Video tab)
+let focusInstalled = false;  // the subject finder, for a project's "Pan and zoom toward" (its Video stage's panel)
 async function renderFocusSettings(st = null) {
   clearTimeout(focusPoll);
   try { st = st || await api("/api/addons/focus"); } catch { return; }
@@ -1278,7 +1284,7 @@ function renderReview() {
   $("#review-small-label").textContent = `Show small groups (${small.length})`;
   $("#review-names").textContent = suggested.length ? "Suggest names again" : "Suggest names";
   $("#review-names").disabled = $("#review-rescan").disabled = !!(current.job && ACTIVE.includes(current.job.status));
-  $("#review-names").title = `${writerLabel()} (Settings → Script) reads each group's pictures and the lines around it, and suggests who it is.`;
+  $("#review-names").title = `${writerLabel()} (Settings → Script writer) reads each group's pictures and the lines around it, and suggests who it is.`;
   $("#review-add-all").hidden = !suggested.some((g) => !g.suggestion.extra && (g.suggestion.name || g.suggestion.character));
   reviewFields = new Map();
   $("#review-list").replaceChildren(...(shown.length ? shown.map((g) => reviewCard(g, groups))
@@ -1469,13 +1475,13 @@ function readInput(input) {
   return v;
 }
 
-// A Project settings field is saved as soon as it changes (fields plugins add too: RecapStudio.addProjectSetting).
+// A project's panel field is saved as soon as it changes (fields plugins add too: RecapStudio.addProjectSetting).
 function bindProjectInput(input) {
   input.addEventListener("change", async () => {
     const p = await api(`/api/projects/${current.id}/settings`, { method: "PUT", json: { [input.dataset.key]: readInput(input) } });
     current.settings = p.settings;
     if (input.dataset.key === "youtube_safe") renderPanels();
-    if (input.dataset.key === "language") render();  // (the Translate step, the translation in the Script tab)
+    if (input.dataset.key === "language") render();  // (the Translate step, the translation at Script and voice)
     if (input.closest("#music-box")) renderMusic();
     if (input.closest("#captions-box") || input.dataset.key === "orientation") renderCaptionsBox();
     if (input.closest("#video-settings")) {  // (the split rows, the line above the steps, the time left)
@@ -2107,10 +2113,33 @@ function showFileTypes(types) {
   $("#file-input").accept = ["image/*", ...fileKinds()].join(",");
 }
 
+// Files as dropped: [{file, path}], each with the folders it was dropped in ("Series/Chapter 3/001.jpg"), so a dropped
+// folder's subfolders become its chapters, as Import a folder makes them. The entries are taken at once, while the drop
+// lasts (the browser empties them after the event); the folders are then read, however deep.
+function droppedFiles(dt) {
+  const entries = [...(dt.items || [])].map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)).filter(Boolean);
+  if (!entries.length) return Promise.resolve([...dt.files].map((file) => ({ file, path: file.name })));
+  const out = [];
+  const walk = async (entry, dir) => {
+    if (entry.isFile) {
+      const file = await new Promise((ok, no) => entry.file(ok, no));
+      out.push({ file, path: dir + file.name });
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      for (;;) {  // (a folder is read a batch at a time, until a batch comes back empty)
+        const batch = await new Promise((ok, no) => reader.readEntries(ok, no));
+        if (!batch.length) break;
+        for (const e of batch) await walk(e, `${dir}${entry.name}/`);
+      }
+    }
+  };
+  return (async () => { for (const e of entries) await walk(e, ""); return out; })();
+}
+
 async function upload(files) {
   if (!files.length) return;
   const fd = new FormData();
-  for (const f of files) fd.append("files", f, f.name);
+  for (const x of files) fd.append("files", x.file || x, x.path || x.name);  // (Files, or droppedFiles' {file, path})
   $("#page-count").textContent = `Uploading ${files.length} file(s)…`;
   try {
     const r = await api(`/api/projects/${current.id}/pages`, { method: "POST", body: fd });
@@ -2132,12 +2161,38 @@ const dz = $("#dropzone"), dropArea = $("#project");
 const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
 dropArea.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); dz.classList.add("over"); });
 dropArea.addEventListener("dragleave", (e) => { if (!dropArea.contains(e.relatedTarget)) dz.classList.remove("over"); });
-dropArea.addEventListener("drop", (e) => {
+dropArea.addEventListener("drop", async (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault();
   dz.classList.remove("over");
+  const dropped = droppedFiles(e.dataTransfer);
   showTab("chapters");
-  upload([...e.dataTransfer.files]);
+  upload(await dropped);
+});
+
+// The library takes a drop too: a .recap opens as a project (as Open project file does); anything else opens New
+// project named after it, and what was dropped becomes its chapters once it's made.
+const library = $("#empty");
+library.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); library.classList.add("drop-over"); });
+library.addEventListener("dragleave", (e) => { if (!library.contains(e.relatedTarget)) library.classList.remove("drop-over"); });
+library.addEventListener("drop", async (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  library.classList.remove("drop-over");
+  const files = await droppedFiles(e.dataTransfer);
+  const projectFile = files.find((x) => x.path.toLowerCase().endsWith(".recap"));
+  if (projectFile) {
+    $("#open-file-status").textContent = "";
+    $("#open-file-dialog").showModal();
+    return sendProjectFile(projectFile.file);
+  }
+  if (!files.length) return;
+  const tops = [...new Set(files.map((x) => x.path.split("/")[0]))];
+  const name = tops.length !== 1 ? "" : files.length === 1 || files[0].path.includes("/") ? tops[0].replace(/\.[^.]+$/, "") : "";
+  const folders = new Set(files.filter((x) => x.path.includes("/")).map((x) => x.path.slice(0, x.path.lastIndexOf("/"))));
+  pendingDrop = { files, label: `${plural(files.length, "file")} dropped` +
+    (folders.size > 1 ? ` in ${plural(folders.size, "folder")}` : tops.length === 1 && folders.size ? ` from ${tops[0]}` : "") };
+  openNew(name);
 });
 $("#file-input").addEventListener("change", (e) => { upload([...e.target.files]); e.target.value = ""; });
 $("#clear-pages").addEventListener("click", async () => {
@@ -2366,7 +2421,7 @@ async function searchEvery({ titles = [], auto = false }) {
     await getSourceChapters(one[0].key, series, series.chapters.map(({ ref, name, url }) => ({ ref, name, url })), "number", []);
   } catch (e) { showSeries(one[0].key, series, false); $("#src-series-status").textContent = e.message; return; }
   notify(`Getting all ${plural(series.chapters.length, "chapter")} of ${series.title} from ${srcName(one[0].key)}, the one ` +
-    "of your sources that has a series called that. Check it's the right one in the Chapters tab.", "Getting its chapters");
+    "of your sources that has a series called that. Check it's the right one at the Chapters stage.", "Getting its chapters");
 }
 
 function showSourceStep(step) {
@@ -2713,7 +2768,7 @@ async function showRepo(url, box) {
     el("span", { class: "muted" }, [p.summary, p.sites.join(", "), p.language, p.nsfw ? "adult" : "",
       p.elsewhere ? "you have one of your own by this name, so it's left alone" : "",
       p.left_out ? "you removed it" : "",
-      p.kind === "feature" ? "adds to the app: Settings → Plugins" : ""].filter(Boolean).join(" · ")),
+      p.kind === "feature" ? "adds to the app: Settings → Manage plugins" : ""].filter(Boolean).join(" · ")),
     p.kind === "source" && !p.installed && !p.elsewhere
       ? el("button", { type: "button", class: "ghost small", onclick: async (e) => {
         e.target.disabled = true;
@@ -2909,7 +2964,7 @@ async function checkWording(c, flags) {
   const carryOn = job && job.mode === "missing" && !job.only;
   const pick = await choose(`Check the wording of ${c.name}`,
     `A word check found ${plural(flags.length, "line")} that may go further than a YouTube-safe recap can ` +
-    "(they're marked in the Script tab). It's only a word search and can be wrong, so read them:\n\n" +
+    "(they're marked in the scene list at Script and voice). It's only a word search and can be wrong, so read them:\n\n" +
     flags.map((w) => `• ${w.why}, "${w.word}": ${w.line}`).join("\n\n") +
     "\n\nEdit a line and it's no longer flagged. Writing the chapter again replaces all of its narration and voice" +
     (carryOn ? ", then the recap carries on." : job ? " (this job stops first)." : "."),
@@ -2943,11 +2998,11 @@ $("#job-wording").addEventListener("click", () => {
   else showTab("chapters");
 });
 
-// One word on how far a chapter is (simple mode's chapter list)
+// One word on how far a chapter is (the chapter table)
 function chapterStatus(s) {
   if (!s.panels && s.pieces) return { kind: "warn", text: "All left out", title: `Every piece of it (${s.pieces}) was left out as ` +
-    "the scan group's pages, as if the chapter were only a notice. To use it, put them back: The scan group's pages → " +
-    "Check what was left out…, in this stage's panel." };
+    "the scan group's pages, as if the chapter were only a notice. To use it, put them back with the button under The " +
+    "scan group's pages, in this stage's panel (it says how many pieces are left out)." };
   if (!s.panels) return { kind: "new", text: "Not started" };
   if (s.untranslated && !s.script) return { kind: "todo", text: "Needs translation" };
   if (s.script < s.scenes) return { kind: "todo", text: s.script ? `Script ${s.script} of ${s.scenes}` : "Needs script" };
@@ -3212,7 +3267,7 @@ function renderJob() {
   box.classList.toggle("paused", j.status === "paused");
 }
 
-// ---- the YouTube title and thumbnail (the YouTube tab): suggested after the script (youtube.py), or with Suggest ----
+// ---- the YouTube title and thumbnail (the Publish stage): suggested after the script (youtube.py), or with Suggest ----
 const MARK_NAMES = { label: "Label", reaction: "Reaction", line: "Speech bubble" };
 let redrawing = false;  // Redraw with AI is waiting for the image model
 
@@ -3665,7 +3720,7 @@ for (const b of document.querySelectorAll(".boxes-open")) b.addEventListener("cl
 
 async function findBoxes(mode) {
   if (current.job && ACTIVE.includes(current.job.status)) return notify("Wait for the running job to finish first.");
-  if (!youtube()) return notify("Turn on YouTube-safe in the Video tab first: the boxes are only drawn in YouTube-safe projects.", "Not YouTube-safe");
+  if (!youtube()) return notify("Turn on YouTube-safe first (the Script and voice stage's panel): the boxes are only drawn in YouTube-safe projects.", "Not YouTube-safe");
   try {
     if (!(await api("/api/addons/boxes")).installed) {
       return notify("Download the box finder first (Settings → Video → Black boxes). You can also draw boxes yourself: " +
@@ -4464,7 +4519,7 @@ function renderCreditsSummary() {
       `${plural(off.length, "piece")} left out in ${plural(chapters, "chapter")}` +
       (all.length > off.length ? `, ${all.length - off.length} put back` : "") + (selectedCh.size ? " (selected chapters)" : "")
     : "Nothing is left out as the scan group's pages" + (selectedCh.size ? " in the selected chapters" : "") +
-      ". Find them now (Settings for this project) looks for them.";
+      ". Find them now (the Chapters stage's panel) looks for them.";
   $("#credits-rest").hidden = !open;
   $("#credits-wait").hidden = !waitingForCredits();
 }
@@ -4516,7 +4571,10 @@ $("#open-file").addEventListener("click", async () => {
 $("#open-file-path").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#open-file-go").click(); } });
 $("#open-file-upload").addEventListener("change", async () => {
   const file = $("#open-file-upload").files[0];
-  if (!file) return;
+  if (file) await sendProjectFile(file);
+});
+// A .recap from this device (picked in the dialog, or dropped on the library), opened as a new project
+async function sendProjectFile(file) {
   const form = new FormData();
   form.append("file", file);
   $("#open-file-go").disabled = true;
@@ -4531,7 +4589,7 @@ $("#open-file-upload").addEventListener("change", async () => {
   } catch (e) { $("#open-file-status").textContent = e.message; }
   $("#open-file-upload").value = "";
   $("#open-file-go").disabled = false;
-});
+}
 $("#open-file-go").addEventListener("click", async () => {
   const path = $("#open-file-path").value.trim();
   if (!path) return;
@@ -4900,7 +4958,7 @@ async function setupDone(body) {
         : g.offered && g.state === "installing" ? el("li", {}, "GPU support still downloading: once it's done, close Recap " +
           "Studio and open it again to use it") : ""),
     el("p", {}, $("#projects").children.length ? "Open a project from the list to carry on."
-      : "To start, type a name at the top left and press Create: a few questions set up how its video looks."));
+      : "To start, press ＋ New project at the top left: one page sets up its characters, narrator and video."));
 }
 
 async function finishSetup() {
@@ -5075,7 +5133,7 @@ $("#update-check").addEventListener("click", async () => {
 });
 $("#update-notes").addEventListener("click", () => api("/api/update/page", { method: "POST" }));
 
-// ---- feature plugins (plugins.py): Settings → Plugins, and what a plugin's page script is given ----
+// ---- feature plugins (plugins.py): Settings → Manage plugins, and what a plugin's page script is given ----
 
 const pluginHooks = {};      // event: [functions] (RecapStudio.on)
 const pluginSettings = [];   // [{box, render}] (RecapStudio.addSettings), drawn with the rest of Settings
@@ -5118,8 +5176,8 @@ window.RecapStudio = {
   on(event, fn) { (pluginHooks[event] ||= []).push(fn); },
   // where addButton can put a button (a plugin checks for "publish" before asking for it: an older app has no such place)
   places: ["characters", "chapters", "video", "publish", "sidebar"],
-  // a button in the Characters tab ("characters"), beside Get chapters from a site ("chapters"), with the finished
-  // video's buttons in the Video tab ("video"), with the posting services at Publish ("publish": Post to YouTube,
+  // a button at the Characters stage ("characters"), beside Get chapters from a site ("chapters"), with the finished
+  // video's buttons at the Video stage ("video"), with the posting services at Publish ("publish": Post to YouTube,
   // Post to TikTok), or in the rail's Automation section ("sidebar", for what's about every project: its words, and
   // a status chip at its right, `status` now and setStatus(text, tone) later)
   addButton(where, label, onclick, { title = "", status = "" } = {}) {
@@ -5165,7 +5223,7 @@ window.RecapStudio = {
   },
   // a folder on this PC, from the window's folder picker (or typed, in a browser)
   pickFolder: (start) => pickFolder(start),
-  // a choice of its own in Project settings (in a Plugins section), for a setting its Python side registered with
+  // a choice of its own in the project's panel (in a Plugins section), for a setting its Python side registered with
   // plugin.project_setting: options [[value, text]]; saved like the rest as soon as it changes
   addProjectSetting({ key, label, options, hint = "" }) {
     let box = $("#plugin-project-settings");
@@ -5180,7 +5238,7 @@ window.RecapStudio = {
     return input;
   },
   // a language a comic can be in (the plugin's Python side registers how it's read): offered in New project and
-  // Project settings, as a raw translated into English
+  // the Chapters stage's panel, as a raw translated into English
   addLanguage(code, name) {
     LANGUAGES[code] = name;
     document.querySelectorAll('select[data-key="language"]').forEach((sel) => {

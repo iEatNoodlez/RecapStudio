@@ -112,13 +112,18 @@ These webtoons are adult. What the user asked for, and where the line stays:
   stop (including "no aloud, yes in her thoughts"), and anyone drunk, groggy, half-asleep or thinking it's a
   dream. Name it once, then thoughts, words, feelings and aftermath; no description of the acts. Judge each
   stretch by what it shows at that moment; agreed role-play counts as willing.
+- **Nervous isn't unwilling** (the user, 2026-11-11: "it counts a lot of scenes as pressured even though
+  some aren't. They are just nervous"): shy, blushing, trembling, a first time, "are you sure?", "be
+  gentle", asking to slow down and being listened to, then going ahead, is willing, nerves and all.
+  Pressured takes a no, a plea or a protest that's ignored, a threat, or someone who can't agree.
 - **Anyone shown or described as under eighteen in a sexual scene: leave it empty** and report it.
 
 Agents drift on this in predictable ways, so plan to correct them early (see *While it runs*):
 - told to describe "more", some overshoot into explicit, line-per-motion porn; a concrete example line at
   the intended level (the brief has one) helps more than adjectives;
 - they misjudge consent both ways: calling a blackmailed or drunk scene willing (then describing it), or
-  calling a whole encounter pressured because it began with blackmail, when the stretch itself is eager.
+  calling a whole encounter pressured because it began with blackmail, when the stretch itself is eager,
+  or because she's nervous or shy when nobody is saying no.
   The commonest slip: she starts something (flirts, places his hand), he goes much further while she freezes
   or asks what he's doing, and the agent narrates it all as willing because she started it;
 - they leave aftermath and reaction panels blank when told "no physical detail".

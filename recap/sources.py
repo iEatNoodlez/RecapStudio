@@ -41,7 +41,8 @@ from .plugin_host import is_check, on_site
 PLUGINS_DIR = store.DATA_ROOT / "plugins"
 STATE_FILE = PLUGINS_DIR / "plugins.json"
 API = 1                      # RECAP_PLUGIN: the plugin interface this app speaks
-META = {"RECAP_PLUGIN", "NAME", "VERSION", "SITES", "LANGUAGE", "NSFW", "LISTS", "HEADERS", "DELAY", "CHAPTERS"}
+META = {"RECAP_PLUGIN", "NAME", "VERSION", "SITES", "LANGUAGE", "NSFW", "LISTS", "HEADERS", "DELAY", "CHAPTERS",
+        "CHECK_COPIES"}
 CALL_TIMEOUT = 90            # seconds a plugin call may take
 MAX_FILE = 1 << 20           # a plugin file or a plugin list, at most
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -108,6 +109,7 @@ def read_plugin(text: str) -> dict:
         "nsfw": bool(meta.get("NSFW", False)), "lists": [{"id": x["id"], "name": x["name"]} for x in lists],
         "headers": headers, "delay": float(meta.get("DELAY", 0) or 0), "search": "search" in funcs,
         "chapters": chapters, "characters": "characters" in funcs,
+        "copies": meta.get("CHECK_COPIES") is True,  # its site lists some chapters twice (see download())
         "about": doc.strip().split("\n\n")[0].replace("\n", " ")[:300],
     }
 
@@ -324,7 +326,7 @@ def site_check(host: str, url: str, source: str = "") -> SiteCheck:
     message = (f"{host} didn't take the pass you got in its window (it may have run out early, or the site looks at "
                f"more than the pass)" if refused else f"{host} wants to check you're a person first (Cloudflare's check)")
     if not plugins_._handlers.get("site_check"):
-        message += ". The Site check plugin (Settings → Plugins) lets you pass it in a window"
+        message += ". The Site check plugin (Settings → Manage plugins) lets you pass it in a window"
     plugins_.emit("site_check", **check)
     return SiteCheck(message, check)
 
@@ -689,7 +691,9 @@ def _fetch(key: str, ref: str, folder: Path, report, check) -> list[tuple[Path, 
 def download(pid: str, key: str, found: dict, chapters: list[dict], where: str, skip: list[str], progress, check) -> dict:
     """Get the chapters (from series(key, ...): ref, name, url) into the project, one at a time, each placed as
     importer.place says. A chapter the project already has from this source is passed over. The project remembers
-    the series, for Check for new chapters (skip: its chapters not to offer again)."""
+    the series, for Check for new chapters (skip: its chapters not to offer again). For a plugin whose site lists
+    some chapters twice (CHECK_COPIES = True), a new chapter whose pictures are nearly all in another chapter
+    (importer.copies) is taken out again and not offered again ("copies" in the answer)."""
     d = store.project_dir(pid)
     tmp = d / "downloading"
     added, pages_added = [], 0
@@ -729,8 +733,32 @@ def download(pid: str, key: str, found: dict, chapters: list[dict], where: str, 
         store.update(pid, apply)
         pages_added += len(files)
     shutil.rmtree(tmp, ignore_errors=True)
+    kind, rest = _kind(key)
+    copies = []
+    if added and kind == "plugin" and _plugin(rest).get("copies"):
+        check()
+        label = "Looking for chapters the site lists twice"
+        progress(0.99, label)
+        copies = importer.copies(store.load(pid), added, lambda i, total: progress(0.99, f"{label}: page {i} of {total}"))
+        gone = {x["id"] for x in copies}
+        files = []
+
+        def drop(p):  # (nothing but its pages yet: the download is the job's only step on it so far)
+            refs = {c.get("source_ref") for c in p["chapters"] if c["id"] in gone} - {None, ""}
+            files.extend(x["file"] for x in p["pages"] if x["chapter"] in gone and x.get("file"))
+            p["chapters"] = [c for c in p["chapters"] if c["id"] not in gone]
+            p["pages"] = [x for x in p["pages"] if x["chapter"] not in gone]
+            if p.get("source"):
+                p["source"]["skipped"] = sorted(set(p["source"].get("skipped", [])) | refs)
+        if gone:
+            store.update(pid, drop)
+            for f in files:
+                (d / "pages" / f).unlink(missing_ok=True)
+            pages_added -= len(files)
+            added = [c for c in added if c not in gone]
     project = store.load(pid)
-    return {"chapters": len(added), "pages": pages_added, "duplicates": importer.duplicates(project, added)}
+    return {"chapters": len(added), "pages": pages_added, "duplicates": importer.duplicates(project, added),
+            "copies": [{"chapter": x["chapter"], "same_as": x["same_as"]} for x in copies]}
 
 
 def new_chapters(project: dict) -> dict:

@@ -191,6 +191,7 @@ button.danger-solid { background: var(--danger); border-color: var(--danger); co
 .proj-card .card-line.on { color: var(--accent); }
 .proj-card.new-card { border-style: dashed; background: transparent; align-items: center; justify-content: center; gap: 6px; min-height: 240px; color: var(--muted); }
 .proj-card.new-card:hover { color: var(--text); }
+.library.drop-over .proj-card.new-card { border-color: var(--accent); color: var(--text); }  /* (files dragged over the library) */
 
 /* a project: the stage column and the inspector */
 #project { flex: 1; display: flex; align-items: stretch; min-height: 100%; }

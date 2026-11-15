@@ -1,5 +1,5 @@
 """A YouTube title and thumbnail for the recap, once the script is written (Make the recap, when the project's
-settings say so; or Suggest again in the Video tab). The script's writer reads the story as the narrator
+settings say so; or Suggest again at Publish). The script's writer reads the story as the narrator
 summarised it and picks from numbered pictures of it: a clickbait title, a few others, one or two pictures for
 the thumbnail and what goes on them, the way manhwa recap channels make theirs: short yellow labels with arrows
 on the characters (MC, ROOMMATE), a "?!" and a short speech bubble.
@@ -12,7 +12,7 @@ the hook words go across the bottom instead. Pictures with black boxes (cover.py
 YouTube-safe project, nor pictures with swearing in their text, and the writer is told to pick ones without
 nudity in any case.
 
-Redraw with AI (Settings → Thumbnail redraw; Redraw with AI in the Video tab, or after every suggestion when the
+Redraw with AI (Settings → Thumbnail redraw; Redraw with AI at Publish, or after every suggestion when the
 project says so): the drawn thumbnail and its pictures go to an image model, Google's Gemini or one on
 OpenRouter, on the user's own key. It repaints them as one glossy illustration with the same characters and
 words, saved beside it as thumbnail_ai.jpg.

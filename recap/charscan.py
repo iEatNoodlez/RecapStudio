@@ -336,7 +336,7 @@ def scan(project: dict, chapter_ids: list[str], use_gpu: bool, check, report) ->
     report(fraction, message) gives progress. Returns the scan record for project["scan"]."""
     global _in_use
     if not installed():
-        raise RuntimeError("Download the character scan models first (the Characters tab → Find characters)")
+        raise RuntimeError("Download the character scan models first (the Characters stage → Find characters)")
     _in_use += 1
     try:
         return _scan(project, chapter_ids, use_gpu, check, report)

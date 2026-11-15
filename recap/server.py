@@ -379,7 +379,7 @@ def rename_project(pid: str, name: str = Body(..., embed=True)):
 def _show(folder: Path):
     """A folder in File Explorer (Windows) or the desktop's file manager (Linux)."""
     if system.SERVER:
-        raise HTTPException(400, "On a server, there's no folder to show here: download the files from the Video tab.")
+        raise HTTPException(400, "On a server, there's no folder to show here: download the files from the Video stage.")
     try:
         system.open_folder(folder)
     except OSError as e:
@@ -680,16 +680,20 @@ def _save_image(data: bytes, dest: Path) -> tuple[int, int] | None:
 @app.post("/api/projects/{pid}/pages")
 async def upload_pages(pid: str, files: list[UploadFile], place: str = Form("number")):
     """Each dropped .zip/.cbz becomes a chapter, and so does a file of a type a plugin reads (or each part of it,
-    a volume's chapters); loose images together become one chapter. They're placed as importer.place says (by
-    chapter number unless told otherwise). The files a plugin's type couldn't read come back in skipped, with why."""
+    a volume's chapters); loose images together become one chapter, or one per folder they were dropped in (a file
+    named "Series/Chapter 3/001.jpg": the folders are named as Import a folder names them). They're placed as
+    importer.place says (by chapter number unless told otherwise). The files a plugin's type couldn't read come back
+    in skipped, with why."""
     _project(pid)
     pages_dir = store.project_dir(pid) / "pages"
     groups: list[tuple[str | None, list[tuple[str, bytes]]]] = []
-    loose: list[tuple[str, bytes]] = []
+    loose: dict[str, list[tuple[str, bytes]]] = {}  # by the folder they were dropped in ("" for none)
     skipped: list[dict] = []
     for f in files:
         data = await f.read()
-        name = os.path.basename(f.filename or "page")
+        path = (f.filename or "page").replace("\\", "/")
+        name = os.path.basename(path)
+        folder = "/".join(x for x in path.split("/")[:-1] if x not in ("", ".", ".."))
         if name.lower().endswith((".zip", ".cbz")):
             with zipfile.ZipFile(io.BytesIO(data)) as z:
                 imgs = [(i.filename, z.read(i)) for i in z.infolist()
@@ -699,9 +703,12 @@ async def upload_pages(pid: str, files: list[UploadFile], place: str = Form("num
             parts = await asyncio.to_thread(importer.read_file, name, data, skipped)
             groups += [(title or Path(name).stem, imgs) for title, imgs in parts]
         elif Path(name).suffix.lower() in IMAGE_EXT:
-            loose.append((name, data))
-    if loose:
-        groups.append((None, loose))
+            loose.setdefault(folder, []).append((name, data))
+    folders = sorted((k for k in loose if k), key=store.natural_key)
+    titles = dict(zip(folders, importer._names([k.split("/") for k in folders]))) if folders else {}
+    groups += [(titles[k], loose[k]) for k in folders]
+    if "" in loose:
+        groups.append((None, loose[""]))
 
     def apply(p):
         added, new = 0, []
@@ -1577,7 +1584,7 @@ def sources_image(token: str):
     return Response(data, media_type=kind, headers={"Cache-Control": "max-age=86400"})
 
 
-# ---- feature plugins (plugins.py): Settings → Plugins, installed from Recap Studio's own list ----
+# ---- feature plugins (plugins.py): Settings → Manage plugins, installed from Recap Studio's own list ----
 
 @app.post("/api/restart")
 def restart_app(force: bool = Body(False, embed=True)):

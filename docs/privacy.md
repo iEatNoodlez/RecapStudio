@@ -8,7 +8,7 @@ Recap Studio is a program that runs on your own computer. This page says what it
 
 **Posting to TikTok or YouTube.** The Post to TikTok and Post to YouTube plugins sign in to your account through a developer app you create yourself on that platform. The sign-in tokens they're given are stored only on your computer, in the program's data folder, and are used only to post the videos you choose. **Disconnect** in the plugin's settings gives the access back, and you can also remove the app from your account on the platform itself. The plugins post nothing without your say-so: either you press Post, or you've set a project to post its video when it's made.
 
-**Your phone and the server edition.** The phone page and Recap Studio Server are reached over your own network, behind a login you set. They're not reachable from the internet unless you make them so.
+**Your phone and the server edition.** The phone page answers only phones on your own network that scanned the code in Settings → Phone. Recap Studio Server is reached over your own network, behind a login you set. Neither is reachable from the internet unless you make it so.
 
 **Updates.** On start, the program asks GitHub whether a newer release exists. That request carries no information about you beyond what any download does.
 

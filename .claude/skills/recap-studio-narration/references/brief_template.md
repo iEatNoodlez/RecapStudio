@@ -150,6 +150,11 @@ references/youtube_wording.md, and add its Black boxes section after it.>
   detail. It can turn willing once she's clearly awake and sober and says yes.
   Role-play they have both agreed to counts as willing, even when she protests in character; make clear it's
   a game, and keep any threats or roughness in it brief.
+- **Nervous isn't unwilling.** Shyness, blushing, trembling, embarrassment, first-time nerves, hesitating,
+  "are you sure?", "be gentle", or asking to slow down and being listened to: when she then goes ahead, it's
+  a willing scene and gets the fuller description, with the nerves told as part of it. A scene is pressured
+  only when a no, a plea to stop or a protest is ignored, when there's a threat or blackmail, or when someone
+  can't agree (the cases above).
 
 If a character in a sexual scene is shown or described as under eighteen, leave those scenes' narration empty
 and say so in your report. Don't skip a request.

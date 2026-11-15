@@ -4,7 +4,7 @@
 
 Download from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page (Windows 10 or 11, 64-bit). There are two editions, both free, from the same version of the app:
 
-- **Lite**: the whole app, with no plugins. You can install single plugins in Settings → Plugins.
+- **Lite**: the whole app, with no plugins. You can install single plugins in Settings → **Manage plugins**.
 - **Full Suite**: Lite with the [plugins](plugins.md) that add features built in, in the app's own `plugins\` folder.
 
 | | Installer | Portable |
@@ -12,7 +12,7 @@ Download from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases
 | Lite | `Recap-Studio-Lite-<version>-setup.exe` | `Recap-Studio-Lite-<version>-portable.zip` |
 | Full Suite | `Recap-Studio-Full-Setup-<version>.exe` | `Recap-Studio-Full-Portable-<version>.zip` |
 
-The two share their folders and data: installing Full Suite over Lite (or Lite over Full Suite) switches edition and keeps every project and setting. Lite installed over Full Suite takes out the plugins Full Suite came with; plugins you installed from the list stay. Each copy updates to its own edition, and copies of 0.1.x update to Lite. The window's title, the sidebar's foot and Settings → Updates and this PC say which edition and version you have.
+The two share their folders and data: installing Full Suite over Lite (or Lite over Full Suite) switches edition and keeps every project and setting. Lite installed over Full Suite takes out the plugins Full Suite came with; plugins you installed from the list stay. Each copy updates to its own edition, and copies of 0.1.x update to Lite. The window's title, the foot of the rail (under **⚙ Settings**) and Settings → Updates and this PC say which edition and version you have.
 
 - **The installer**: installs into `C:\Program Files\Recap Studio` for everyone on the PC (Windows asks for admin rights, and again for each update), or, if you pick **Install for me only** at the start, into `%LOCALAPPDATA%\Programs\Recap Studio` without them. It adds a Start menu shortcut (and a desktop one if you tick it). Installing a newer version over it keeps the way it was installed, and your projects and settings.
 - **The portable zip**: unzip it anywhere you can write to (not Program Files) whose path is under about 90 characters (Windows' 260-character limit on file paths, with the app's deepest files and room to unpack an update), and run `Recap Studio.exe`.
@@ -26,17 +26,17 @@ Both carry their own Python with every package, so there's nothing else to insta
 
 Copies installed by 0.1.0 kept everything next to the app; the first start after updating moves it to these places. The window uses WebView2, which comes with Windows 11 and current Windows 10. The packaged app carries the CPU build of ONNX Runtime, the engine text reading and the voice run on; with an NVIDIA card, **GPU support** (offered in first-run setup and Settings → Video → Performance) downloads the GPU build, 1.3 GB, so they run on the card instead (see [GPU](performance.md#gpu)).
 
-**Updates**: once per start the app asks GitHub whether a newer release is out (one request to GitHub's API, with nothing about you in it; Settings → Updates and this PC turns it off, or checks now). When there is one, **⬆ Update to x.y.z** appears at the bottom of the sidebar. It shows what's new, then **Update now** downloads the release's file, checks it against the SHA-256 GitHub lists for it, closes the app, installs it and opens it again: an installed copy runs the new setup, and a portable copy swaps in the new program files, putting the old ones back if anything goes wrong. Your projects, settings and models are never touched. It waits while a job is running. **Skip this version** hides the button until the next release. A copy run from source isn't checked: `git pull` updates it.
+**Updates**: once per start the app asks GitHub whether a newer release is out (one request to GitHub's API, with nothing about you in it; Settings → Updates and this PC turns it off, or checks now). When there is one, **⬆ Update to x.y.z** appears at the foot of the rail, above **⚙ Settings**. It shows what's new, then **Update now** downloads the release's file, checks it against the SHA-256 GitHub lists for it, closes the app, installs it and opens it again: an installed copy runs the new setup, and a portable copy swaps in the new program files, putting the old ones back if anything goes wrong. Your projects, settings and models are never touched. It waits while a job is running. **Skip this version** hides the button until the next release. A copy run from source isn't checked: `git pull` updates it.
 
 ## First-run setup
 
 The first time the app opens, a short setup walks through everything you'd otherwise look for in Settings, saving each choice as you make it:
 
-1. **This computer**: where projects are saved (with **Change…**), and whether the voice model, ffmpeg, an NVIDIA GPU and a GPU video encoder (NVIDIA, AMD or Intel) are there. If the voice model is missing (setup.ps1 skipped or failed), it downloads it (354 MB from the kokoro-onnx project's GitHub release, checked against its size and SHA-256). The installed app reads text and voices lines on the CPU even with an NVIDIA card (it carries the CPU build of ONNX Runtime); the card still encodes the videos, and setup says which is which. With a card, the CPU line has a **Download GPU support** button (1.3 GB, see [GPU](performance.md#gpu)), with Cancel; it's used from the next start.
+1. **Welcome to Recap Studio**: where your projects are saved (with **Change…**), and what this computer has: whether the voice model, ffmpeg, an NVIDIA GPU and a GPU video encoder (NVIDIA, AMD or Intel) are there. If the voice model is missing (setup.ps1 skipped or failed), it downloads it (354 MB from the kokoro-onnx project's GitHub release, checked against its size and SHA-256). The installed app reads text and voices lines on the CPU even with an NVIDIA card (it carries the CPU build of ONNX Runtime); the card still encodes the videos, and setup says which is which. With a card, the CPU line has a **Download GPU support** button (1.3 GB, see [GPU](performance.md#gpu)), with Cancel; it's used from the next start.
 2. **Script writer**: Claude, Claude Code (your Claude plan, with its sign-in), OpenRouter, Google Gemini, DeepSeek, Groq, Mistral or a local model, with the API key and model for the one you pick (or how to install Ollama).
 3. **Voice**: pick a Kokoro voice and speed, and play a sample (Settings → Voice also has Microsoft Edge's online voices and ElevenLabs).
 4. **Video encoding**: the GPU's encoder or the CPU, with how long an hour of 1080p video takes on this computer. How each video looks is chosen per project, when it's created.
-5. **Optional downloads**: the English text-reading model (ticked; 9 MB), the character scan models (586 MB) and Magi (4.9 GB, after agreeing to its license). They download in the background.
+5. **Optional downloads**: the English text-reading model (ticked; 9 MB), the bubble finder (ticked; 11.1 MB), the character scan models (586 MB) and Magi (4.9 GB, after agreeing to its license). They download in the background once you press **Next (start the downloads)**.
 6. A summary.
 
 **Skip setup** closes it for good; **Settings → Run setup again** brings it back any time.

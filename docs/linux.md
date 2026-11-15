@@ -31,7 +31,7 @@ An AppImage mounts itself with FUSE, which desktop distributions have. If yours 
 | Projects | `Recap Studio` in your Documents folder (Settings → Projects folder moves them) |
 | The app | The AppImage, wherever you keep it |
 
-**Updates:** the app checks for them when it starts, as on Windows. **Install** downloads the new AppImage beside the old one and checks it against the SHA-256 GitHub lists for it. It then puts it in the old one's place, under the same name, so menu entries and shortcuts keep working, and starts it. Your projects and settings aren't touched. The AppImage's folder has to be yours to change; if it isn't (`/opt`, say), download the new one from the Releases page instead.
+**Updates:** the app checks for them when it starts, as on Windows. **⬆ Update to x.y.z** appears at the foot of the rail; **Update now** downloads the new AppImage beside the old one and checks it against the SHA-256 GitHub lists for it. It then puts it in the old one's place, under the same name, so menu entries and shortcuts keep working, and starts it. Your projects and settings aren't touched. The AppImage's folder has to be yours to change; if it isn't (`/opt`, say), download the new one from the Releases page instead.
 
 **Uninstalling:** delete the AppImage and `~/.local/share/recap-studio`, and, if you added it to the menu, `~/.local/share/applications/recap-studio.desktop`. Your projects stay until you delete them.
 

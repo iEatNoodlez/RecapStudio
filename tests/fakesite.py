@@ -11,6 +11,7 @@ The stand-in check: every page answers 403 with cf-mitigated: challenge and a "J
 goes to /cdn-cgi/pass after a moment (as a browser would, by itself); that gives a pass (a cf_clearance cookie, tied to
 the browser name it was got with, for 30 minutes) and goes back. Nothing here is Cloudflare's."""
 import io
+import random
 import secrets
 import json
 import sys
@@ -31,6 +32,9 @@ SERIES = {
     "red-river": {"title": "Red River Days", "summary": "Two brothers run a ferry.", "chapters": [1, 2]},
     "moonlight-cafe": {"title": "Moonlight Cafe", "summary": "A cafe open only at night.", "chapters": [1]},
 }
+# not in search or lists: a series the site lists a chapter of twice (2.1 is chapter 2 again; 2.2 is a side story)
+UNLISTED = {"twice-told": {"title": "Twice Told", "summary": "Two sisters trade letters.", "chapters": [1, 2, 2.1, 2.2, 3]}}
+SAME_AS = {("twice-told", "2.1"): "2"}
 STATE = {"broken": False, "guard": False, "strict": False}
 PASSES = {}  # cf_clearance: the browser name it was got with
 lock = threading.Lock()
@@ -43,6 +47,20 @@ def picture(text: str, w: int, h: int, fmt: str = "PNG") -> bytes:
     d.text((40, 40), text, fill=(0, 0, 0))
     out = io.BytesIO()
     im.save(out, fmt)
+    return out.getvalue()
+
+
+def scene(seed: str, w: int, h: int) -> bytes:
+    """A page with a drawing of its own (blocks of colour placed by the seed), for comparing pictures."""
+    rnd = random.Random(seed)
+    im = Image.new("RGB", (w, h), tuple(rnd.randrange(256) for _ in range(3)))
+    d = ImageDraw.Draw(im)
+    for _ in range(14):
+        x, y = rnd.randrange(w), rnd.randrange(h)
+        d.rectangle([x, y, x + rnd.randrange(60, w // 2), y + rnd.randrange(60, h // 2)],
+                    fill=tuple(rnd.randrange(256) for _ in range(3)))
+    out = io.BytesIO()
+    im.save(out, "PNG")
     return out.getvalue()
 
 
@@ -80,8 +98,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.challenge()
         parts = [p for p in u.path.split("/") if p]
         referred = (self.headers.get("Referer") or "").startswith(BASE)
-        if parts[:1] == ["series"] and parts[1] in SERIES:
-            s = SERIES[parts[1]]
+        if parts[:1] == ["series"] and (parts[1] in SERIES or parts[1] in UNLISTED):
+            s = SERIES.get(parts[1]) or UNLISTED[parts[1]]
             links = "".join(f'<li><a class="chapter" href="/chapter/{parts[1]}/{n:g}" data-number="{n:g}">Chapter {n:g}'
                             f'</a></li>' for n in reversed(s["chapters"]))  # newest first, as sites list them
             return self.send(200, f'<html><h1>{s["title"]}</h1><img class="cover" src="/cover/{parts[1]}.png">'
@@ -95,6 +113,8 @@ class Handler(BaseHTTPRequestHandler):
             if STATE["broken"]:
                 return self.send(200, "<html>Please log in</html>")
             slug, n, i = parts[1], parts[2], parts[3].split(".")[0]
+            if slug in UNLISTED:
+                return self.send(200, scene(f"{slug} {SAME_AS.get((slug, n), n)} {i}", 720, 1000), "image/png")
             fmt = "GIF" if i == "3" and n == "2" else "PNG"  # a GIF page, saved by the app as PNG
             return self.send(200, picture(f"{slug} ch {n} page {i}", 720, 1200 + 100 * int(i), fmt), f"image/{fmt.lower()}")
         if parts[:1] == ["cover"]:

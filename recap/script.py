@@ -61,7 +61,7 @@ OUTPUT_LINES = (
 )
 
 
-# YouTube-safe (the Video tab): how sex scenes are told in a recap YouTube will age-restrict. As far as such
+# YouTube-safe (the Script and voice stage's panel): how sex scenes are told in a recap YouTube will age-restrict. As far as such
 # a video can go and no further: what YouTube takes down is narration that reads as meant to arouse.
 YOUTUBE = (
     "YouTube-safe narration. This recap goes on YouTube as an age-restricted video, so sex scenes are told the "

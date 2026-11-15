@@ -36,7 +36,7 @@ Add the chapters, press **Make the recap**, and Recap Studio cuts the pages into
 For Windows 10 or 11 and for Linux (64-bit), from the [Releases](https://github.com/iEatNoodlez/RecapStudio/releases) page. It comes in two editions, both free:
 
 - **Lite** is the whole app.
-- **Full Suite** is Lite with [Recap Studio's plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins#readme) built in: finding the series, what's trending to make a project of, automation, posting to YouTube, branding, passing a site's Cloudflare check yourself in a window, and more languages and file types. Lite can add them one at a time, in Settings → Plugins.
+- **Full Suite** is Lite with [Recap Studio's plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins#readme) built in: finding the series, what's trending to make a project of, automation, posting to YouTube, branding, passing a site's Cloudflare check yourself in a window, and more languages and file types. Lite can add them one at a time, in Settings → Manage plugins.
 
 | | Windows installer | Windows portable | Linux |
 |---|---|---|---|
@@ -58,7 +58,7 @@ Everything it needs is included. The first start downloads the voice model (354 
 Press **New project** and fill in one page: the series' name, what kind of comic it is, how to find its characters, how the video looks, and the YouTube options, with what you get summed up beside them. With the Find the series plugin, search for the series instead and it fills the project in for you, and the Trending finder suggests what to recap next.
 
 <p align="center">
-  <img src="docs/images/new-project.png" width="80%" alt="The New project page: the series' name, Webtoon, Manga (picked), Comic or Not sure, its language, how to find the characters and how the video looks, with what you get listed beside them">
+  <img src="docs/images/new-project.png" width="80%" alt="The New project page: the series' name, Webtoon, Manga (picked), Comic or Not sure, its language, how to find the characters, the narrator's persona and how the video looks, with what you get listed beside them">
 </p>
 
 ### 2. Add the chapters and press Make the recap

@@ -258,7 +258,7 @@
         <fieldset data-stage="chapters">
           <legend>The scan group's pages</legend>
           <label class="check"><input data-key="leave_out_credits" type="checkbox"> Leave them out at the start and end of chapters</label>
-          <span class="hint">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages: found after Detect panels, and again after Read text, because they repeat across chapters or their text says so. They're unticked in the scene list (tick one to keep it) and cut out of the video.</span>
+          <span class="hint">Credits, Patreon and Discord notices, "read early" ads, other series and recruiting pages: found after Detect panels, and again after Read text, because they repeat across chapters or their text says so. They say "left out: credits" in the scene list at Script and voice (tick a scene's In the video to keep it) and are cut out of the video.</span>
           <label>Before the script
             <select data-key="credits_review"><option value="review">Let me check them</option><option value="trust">Leave them out as found</option></select></label>
           <span class="hint">Checking shows one of each kind, and Make the recap waits for you; left out as found, it doesn't wait.</span>
@@ -323,7 +323,7 @@
           <label>Style
             <select data-key="video_style"><option value="auto">Automatic</option><option value="motion">Pan and zoom</option><option value="stills">Stills</option></select></label>
           <label id="typeset-row" class="check" hidden><input data-key="typeset" type="checkbox"> Put the English in the pictures (a translated comic)</label>
-          <span id="typeset-hint" class="hint" hidden>The original text in speech bubbles and captions is painted out and the English lettered in its place, sized to fit the bubble; signs get a small English caption over them, and sound effects stay as drawn. Check the translation in the Script tab first: what's in the pictures is what it says there.</span>
+          <span id="typeset-hint" class="hint" hidden>The original text in speech bubbles and captions is painted out and the English lettered in its place, sized to fit the bubble; signs get a small English caption over them, and sound effects stay as drawn. Check the translation at Script and voice first: what's in the pictures is what it says there.</span>
           <details class="details-adv">
             <summary>More settings</summary>
           <label>Frame rate
@@ -366,7 +366,7 @@
             <select data-key="captions_font"><option value="Arial Black">Arial Black</option><option value="Segoe UI Black">Segoe UI Black</option><option value="Impact">Impact</option><option value="Comic Sans">Comic Sans (bold)</option></select></label>
           <span id="captions-font-hint" class="hint" hidden></span>
           <img id="captions-preview" class="caption-preview" alt="How the captions look" hidden>
-          <span class="hint">The narration is drawn into the picture a few words at a time, the way CapCut's captions look, with the word being said picked out. Its timing comes from each line's sound, or from the speech recognizer when it's installed (Settings → Voice, for your own recordings), which is exact. The whole video is drawn again the next time it's made.</span>
+          <span class="hint">The narration is drawn into the picture a few words at a time, the way CapCut's captions look, with the word being said picked out. Its timing comes from each line's sound, or from the speech recognizer when it's installed (it comes with your own voice-over: a chapter's 🎙), which is exact. The whole video is drawn again the next time it's made.</span>
           <label>Cut into Shorts
             <select data-key="shorts" data-type="number"><option value="0">No</option><option value="60">Up to 1 minute each</option><option value="90">Up to 90 seconds each</option><option value="180">Up to 3 minutes each</option></select></label>
           <label id="shorts-label-row" class="check"><input data-key="shorts_label" type="checkbox"> "Part 1", "Part 2"… at the top of each</label>
@@ -519,7 +519,7 @@
       </fieldset>
       <fieldset>
         <legend>Video</legend>
-        <span class="hint">Each project has its own format, size and style, chosen when it's made and changed in its Video tab.</span>
+        <span class="hint">Each project has its own format, size and style, chosen when it's made and changed in its Video stage's panel.</span>
         <label>Encoder
           <select data-key="video_encoder"><option value="auto">Automatic</option><option value="cpu">CPU only</option></select></label>
         <span class="hint">Automatic uses the graphics card's encoder when there is one (NVIDIA, AMD or Intel), else the CPU's.</span>
@@ -553,7 +553,7 @@
           <summary>The subject finder and the box finder</summary>
         <div id="focus-box" class="focus-box">
           <span class="field-head">Subject finder (pan and zoom toward the subject)</span>
-          <span class="hint">A project can pan and zoom toward each scene's main subject (its Video tab) instead of its middle. The main subject (usually the character) is found by U2-Net-p, a small open model (Apache 2.0): a 4.6 MB download into data\addons\focus, not part of the app. Each scene is looked at once (about 0.03 s on an NVIDIA GPU, 0.2 s on the CPU).</span>
+          <span class="hint">A project can pan and zoom toward each scene's main subject (its Video stage's panel → More settings) instead of its middle. The main subject (usually the character) is found by U2-Net-p, a small open model (Apache 2.0): a 4.6 MB download into data\addons\focus, not part of the app. Each scene is looked at once (about 0.03 s on an NVIDIA GPU, 0.2 s on the CPU).</span>
           <div id="focus-off" class="magi-part"><button type="button" id="focus-download">Download the subject finder (4.6 MB)</button></div>
           <div id="focus-busy" class="magi-part" hidden>
             <span id="focus-stage"></span>
@@ -565,7 +565,7 @@
         </div>
         <div id="boxes-box" class="focus-box">
           <span class="field-head">Black boxes (YouTube-safe projects)</span>
-          <span class="hint">The box finder covers exposed nipples and genitals. It's anime_censor_detection, an open model trained on drawn art (MIT, by deepghs): a 44.6 MB download into data\addons\boxes, not part of the app. Turn on YouTube-safe in a project's Video tab; rendering then looks at each piece used once (about 0.05 s on an NVIDIA GPU, 0.3 s on the CPU) before drawing the boxes.</span>
+          <span class="hint">The box finder covers exposed nipples and genitals. It's anime_censor_detection, an open model trained on drawn art (MIT, by deepghs): a 44.6 MB download into data\addons\boxes, not part of the app. Turn on YouTube-safe in a project (its Script and voice stage's panel); rendering then looks at each piece used once (about 0.05 s on an NVIDIA GPU, 0.3 s on the CPU) before drawing the boxes.</span>
           <span class="hint warn">It makes mistakes: boxes on clothed bodies, faces or logos, and now and then a spot it misses. Look over every box before you upload.</span>
           <div id="boxes-off" class="magi-part"><button type="button" id="boxes-download">Download the box finder (44.6 MB)</button></div>
           <div id="boxes-busy" class="magi-part" hidden>
@@ -600,7 +600,7 @@
             <span class="hint" id="redraw-key-hint"></span>
           </div>
         </div>
-        <span class="hint">Redraw with AI (a project's YouTube tab) sends the drawn thumbnail and its pictures to an image model, which repaints them as one glossy illustration like the big recap channels' thumbnails. A few cents a picture, billed by the service. Image models may decline racier scenes; the drawn thumbnail always stays.</span>
+        <span class="hint">Redraw with AI (a project's Publish stage) sends the drawn thumbnail and its pictures to an image model, which repaints them as one glossy illustration like the big recap channels' thumbnails. A few cents a picture, billed by the service. Image models may decline racier scenes; the drawn thumbnail always stays.</span>
       </fieldset>
       <fieldset id="reading-box">
         <legend>Reading comics</legend>
@@ -658,13 +658,13 @@
         </div>
         <div class="gs-part" id="cs-box">
           <span class="field-head">Character scan models</span>
-          <span class="hint">Used by Find characters (the Characters tab). Downloaded on request into data\addons\charscan, not part of the app.</span>
+          <span class="hint">Used by Find characters (the Characters stage). Downloaded on request into data\addons\charscan, not part of the app.</span>
           <span id="cs-info" class="hint"></span>
           <button type="button" id="cs-remove" class="ghost small danger" hidden>Remove models</button>
         </div>
         <div class="gs-part" id="magi-box">
           <span class="field-head">Speaker detection (Magi, an optional add-on)</span>
-          <span class="hint">Magi v2 guesses who says each line while text is read, matching people to the pictures you add to your characters (the Characters tab, once Magi is installed). The script writer is told these are guesses: in testing Magi named the right speaker about 6 times in 10.</span>
+          <span class="hint">Magi v2 guesses who says each line while text is read, matching people to the pictures you add to your characters (the Characters stage, once Magi is installed). The script writer is told these are guesses: in testing Magi named the right speaker about 6 times in 10.</span>
           <div id="magi-off" class="magi-part">
             <span class="hint" id="magi-license"></span>
             <label class="check"><input id="magi-accept" type="checkbox"> I'll use Magi only for personal, non-commercial purposes</label>
@@ -695,7 +695,7 @@
       </fieldset>
       <fieldset id="sources-box" data-nav="Sources">
         <legend>Sources (getting chapters from sites)</legend>
-        <span class="hint">Recap Studio comes with no scrapers and no links to any. Bring your own: a plugin (a Python file for a site, from a file or a plugin list someone shares), gallery-dl, or a Suwayomi server with its extensions. Then a project's Chapters tab has Get chapters from a site.</span>
+        <span class="hint">Recap Studio comes with no scrapers and no links to any. Bring your own: a plugin (a Python file for a site, from a file or a plugin list someone shares), gallery-dl, or a Suwayomi server with its extensions. Then a project's Chapters stage has Get chapters from a site.</span>
         <span class="hint warn">A plugin is a program: it runs on this PC with your permissions. Add only plugins from people you trust, and only get chapters you're allowed to.</span>
         <div id="src-plugins" class="src-plugins"></div>
         <div class="key-row"><label class="button-like ghost small">Add plugin file…<input type="file" id="src-plugin-file" accept=".py" hidden></label></div>

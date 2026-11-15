@@ -1,4 +1,4 @@
-"""Black boxes over nudity, for a project set to YouTube-safe (the Video tab → YouTube).
+"""Black boxes over nudity, for a project set to YouTube-safe (the Script and voice stage's panel).
 
 Each piece keeps its boxes in "cover": [{"box": [left, top, right, bottom], "by": ...}], the sides as
 fractions of the piece's picture, so they hold at any size. "by" says where a box came from:

@@ -4,7 +4,7 @@ A comic whose text is in Korean, Chinese or Japanese (a raw) is read in that lan
 
 ## Choosing the language
 
-New project asks on its first page: **What language is its text in?** (English unless you choose otherwise). It can be changed later in the Chapters stage's panel → **Its text**; it applies the next time the text is read.
+New project asks, under **The series**: **Its text is in** (English unless you choose otherwise). It can be changed later in the Chapters stage's panel → **Its text**; it applies the next time the text is read.
 
 ## Reading the text
 
@@ -25,11 +25,11 @@ New project asks on its first page: **What language is its text in?** (English u
 - Any script writer can translate: Claude Code (one agent translates every chapter, on your Claude plan), Claude, Gemini, OpenRouter, DeepSeek, Groq, Mistral, or a local model (best one that can see pictures). It's one request per chapter, with its pictures, like a script request.
 - On the test pages, Claude Code (Opus) translated every box correctly, including the misread ones, and told the speech, signs and sound effects apart. On three real chapters of a Spanish webtoon (with Reading Spanish comics, from the plugin list: 910 boxes, about 12 minutes a chapter for one agent) it read the misread lines right from the pictures ("IOTA, NO POLDES HACER TU TRABAJO" as "of crap, can't you do your job"), and marked the scan site's watermarks, and the scraps read off drawn sound effects, as sound effects or not text.
 
-**Check it** in the Script tab: each scene has a **Translation** list with every box's kind, the original and the English. Change the English or the kind, and the text the script is written from follows (write the script again for the narration to change). Translate with Redo translates everything again, replacing your corrections.
+**Check it** at the Script and voice stage: the open scene's **The pictures say** has a **Translation** fold with every box's kind, the original and the English. Change the English or the kind, and the text the script is written from follows (write the script again for the narration to change). Translate with Redo (**One step ▾ → Translate → Redo all**) translates everything again, replacing your corrections. A raw chapter not translated yet says **Needs translation** in the Chapters stage's list.
 
 ## The English in the pictures
 
-**Put the English in the pictures** (New project, The video; or the Video stage's panel) replaces the original text in the video:
+**Put the English in the pictures** (the Video stage's panel → **Video settings**; in New project, **Letter the English into the pictures**, under **The series**) replaces the original text in the video:
 
 - **Speech, thoughts and captions** on a plain background (a bubble, a caption box, a see-through bubble) are painted out, as Remove the text does, and the English is lettered in their place, in capitals (Comic Sans MS Bold, which every Windows PC has), in the original's colour. It's fitted to the bubble: its shape is found by filling from where the text was, so each line is as wide as the bubble is at that height, centred where the original text was and kept a little off the bubble's edge, at about the size of the original lettering or smaller to fit.
 - A bubble's lines read as separate boxes are painted out and lettered together, as one. Bubbles drawn touching (a chain) share their inside, so each gets the part of it nearest its own text. Text on open background, like the inside of a burst bubble, is lettered close to where it was, and the spikes around it stay.

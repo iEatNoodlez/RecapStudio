@@ -1,6 +1,6 @@
 # Getting chapters from sites
 
-Recap Studio comes with no scrapers and no links to any site's chapters. Members bring their own source. It can be a plugin (a Python file for one site), [gallery-dl](#gallery-dl), or a [Suwayomi](#suwayomi) server running Mihon/Tachiyomi extensions. With one set up, a project's **Chapters** tab has **Get chapters from a site…**, and a project made that way can **Check for new chapters**.
+Recap Studio comes with no scrapers and no links to any site's chapters. Members bring their own source. It can be a plugin (a Python file for one site), [gallery-dl](#gallery-dl), or a [Suwayomi](#suwayomi) server running Mihon/Tachiyomi extensions. With one set up, a project's **Chapters** stage has **Get chapters from a site…**, and a project made that way can **Check for new chapters**.
 
 > A plugin is a program. It runs on your PC with your permissions, so it can read and change your files. Add only plugins from people you trust, and only get chapters you're allowed to.
 
@@ -10,20 +10,20 @@ Everything is in **Settings → Sources**:
 
 - **Add plugin file…** takes a plugin's `.py` file and copies it into `data\plugins`. The app reads its name, sites and lists from the file without running it, and refuses a file that isn't a plugin, saying why. A plugin with the same file name is replaced. Each plugin can be switched off or removed, and what it prints goes to `data\plugins\<plugin>.log`.
 - **Plugin lists**: paste a link to a list someone shares (an `index.json`, see [below](#plugin-lists)) and **Add list**. Every source plugin on it is installed at once, each checked against the list's checksum first. Adult ones are installed switched off, for you to switch on the ones you use. The list's plugins are grouped under its name, each with its switch, and **All on** / **All off**. The list is kept up to date: each time Recap Studio starts (or with **Check now**), its new plugins are installed and new versions got, each keeping whether it's on. **Plugins…** shows everything on the list. A plugin you remove isn't put back, until you **Install** it again there. A plugin of your own with the same id is left alone. **Remove** on a list asks whether its plugins go with it, or stay as plugins of your own (no longer kept up to date). Recap Studio 0.2.5 or later; before that, each plugin was installed and updated by hand.
-- **Recap Studio's own list** is in **Settings → Plugins** ([Plugins](plugins.md)). It has no scrapers: its sources give series' details and characters from services with public APIs, such as **AniList**, for [Find the series](plugins.md#find-the-series). Those are listed here as "series details, no chapters" and don't appear in Get chapters.
+- **Recap Studio's own list** is in **Settings → Manage plugins** ([Plugins](plugins.md)). It has no scrapers: its sources give series' details and characters from services with public APIs, such as **AniList**, for [Find the series](plugins.md#find-the-series). Those are listed here as "series details, no chapters" and don't appear in Get chapters.
 - **gallery-dl**: found on PATH, or give its program's path.
 - **Suwayomi**: the server's address (`http://127.0.0.1:4567` by default). Its installed sources show up in Get chapters.
-- **Check projects for new chapters when the app starts**: each project made from a source is checked, and the sidebar shows how many new chapters it has.
+- **Check projects for new chapters when the app starts**: each project made from a source is checked, and its line in the rail's Library and its card in the library say "· 3 new", and its **Check for new chapters** button reads "3 new chapters…".
 
 ## Getting chapters
 
-**Get chapters from a site…** (the Chapters tab) finds a series three ways:
+**Get chapters from a site…** (the **Chapters** stage) finds a series three ways:
 
 - **Link**: paste a series' page. The plugin for that site opens it; gallery-dl takes any other link when it's installed.
 - **Search**: search by title, in one source or **All your sources** (when more than one can search): plugins that have search, and Suwayomi's sources in the project's language. The results are grouped by source, each source's shown as soon as it answers (Recap Studio 0.2.6 or later; before, they came all at once).
 - **Lists**: a source's lists, a page at a time with **More**: Popular and Latest for Suwayomi's sources, and whatever lists a plugin offers (trending, new, completed…).
 
-Picking a series shows its chapters, first chapter first, each ticked unless the project already has it. **Get chapters** runs as a job (with progress and **Cancel**, like the other steps). Each chapter's pictures are downloaded into the project's `pages` folder, four at a time and retried when the site is busy. Pictures that aren't JPEG, PNG or WebP are saved as PNG. A chapter is added only once all its pages are in, placed by its number unless you choose otherwise, and the project takes the series' title if it had none. Cancelled or stopped by an error, run it again: chapters already in are passed over.
+Picking a series shows its chapters, first chapter first, each ticked unless the project already has it. **Get chapters** runs as a job (with progress and **Cancel**, like the other steps). Each chapter's pictures are downloaded into the project's `pages` folder, four at a time and retried when the site is busy. Pictures that aren't JPEG, PNG or WebP are saved as PNG. A chapter is added only once all its pages are in, placed by its number unless you choose otherwise, and the project takes the series' title if it had none. Cancelled or stopped by an error, run it again: chapters already in are passed over. Some sites list a chapter twice: uploaded again, or the whole chapter beside its halves. When a site's plugin says so (`CHECK_COPIES`, below), the pictures of the chapters just got are compared with the chapters numbered near them. A new chapter whose pages are nearly all in another one is taken out again and isn't offered again, and the job's note names it. A side story (a .2 or .5 with pages of its own) stays. Other sources are left as they are.
 
 The project remembers the series. **Check for new chapters** (above the chapter list) lists the chapters the site has that the project doesn't, with **Don't offer the unticked chapters again** for ones you don't want.
 
@@ -45,6 +45,7 @@ The settings are plain values at the top of the file, read without running it:
 | `LISTS` | The lists `browse()` gives, like `[{"id": "popular", "name": "Popular"}]`. |
 | `HEADERS` | Sent with every picture the app downloads for it (and covers), like `{"Referer": "https://example.com/"}`. |
 | `DELAY` | Seconds to wait between pictures, for sites that limit how fast you ask: pictures then come one at a time. |
+| `CHECK_COPIES = True` | For a site that lists some chapters twice (uploaded again, or the whole chapter beside its halves): after getting chapters, the app compares their pictures with the chapters numbered near them, and passes over a new one whose pages are nearly all in another (it isn't offered again). Recap Studio 0.5.3 or later. |
 | `CHAPTERS = False` | For a source of series' details only (no chapters): `pages()` isn't needed, it doesn't open links in Get chapters, and Find the series uses its `search()` and `characters()`. |
 
 The functions get and return plain data (dicts, lists, text, numbers). Raise an exception with a readable message when something's wrong: the app shows it.

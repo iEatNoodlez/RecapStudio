@@ -209,6 +209,45 @@ def run():
     check(job["status"] == "done" and len(api(f"/api/projects/{pid}")["chapters"]) == 5, "run again, it's added")
     check(not any((DATA / "projects").glob("*/downloading")), "nothing left in the download folder")
 
+    print("6b. a site that lists a chapter twice: passed over only by a plugin that says so (CHECK_COPIES)")
+    twice = plugin_text().replace('NAME = "Example Comics"', 'NAME = "Twice Comics"') + "\nCHECK_COPIES = True\n"
+    r = api("/api/sources/plugins", "POST", files=("twice.py", twice.encode()))
+    check(r.get("id") == "twice", f"added: {r.get('id')}")
+    told = api("/api/sources/series", "POST", {"key": "plugin:twice", "ref": f"{SITE_URL}/series/twice-told"})
+    check([c["name"] for c in told["chapters"]] == ["Chapter 1", "Chapter 2", "Chapter 2.1", "Chapter 2.2", "Chapter 3"],
+          "the site lists Chapter 2 again as 2.1, beside a side story at 2.2")
+
+    def got(pid, key, series, chapters):
+        api(f"/api/projects/{pid}/download", "POST", {"key": key, "series": series, "chapters": chapters})
+        job = wait_job(pid)
+        p = api(f"/api/projects/{pid}")
+        folder = next(f.parent for f in (DATA / "projects").glob("*/project.json")
+                      if json.loads(f.read_text(encoding="utf-8"))["id"] == pid)
+        return job, p, len(list((folder / "pages").iterdir()))
+
+    tid = api("/api/projects", "POST", {"name": "Untitled"})["id"]
+    job, p, files = got(tid, "plugin:twice", told, told["chapters"][:2])
+    check(job["status"] == "done" and "twice" not in (job.get("note") or ""), f"1 and 2 got: {job.get('note')}")
+    r = api(f"/api/projects/{tid}/source/new")
+    job, p, files = got(tid, r["key"], r["series"], r["series"]["chapters"])
+    names = [c["name"] for c in p["chapters"]]
+    check(job["status"] == "done" and names == ["Chapter 1", "Chapter 2", "Chapter 2.2", "Chapter 3"],
+          f"later, the copy of a chapter the project has is passed over, the side story kept: {names}")
+    check("Passed over 1 chapter the site lists twice: Chapter 2.1 (the same pages as Chapter 2)" in (job.get("note") or ""),
+          f"the job's note says so: {job.get('note')}")
+    check(len(p["pages"]) == 12 and files == 12, f"its pages are gone too: {len(p['pages'])} in the project, {files} files")
+    check(api(f"/api/projects/{tid}/source/new")["series"]["chapters"] == [], "and it isn't offered again")
+    tid = api("/api/projects", "POST", {"name": "Untitled"})["id"]
+    job, p, files = got(tid, "plugin:twice", told, told["chapters"])
+    names = [c["name"] for c in p["chapters"]]
+    check(names == ["Chapter 1", "Chapter 2", "Chapter 2.2", "Chapter 3"] and files == 12,
+          f"all at once, the same: {names}, {files} files")
+    tid = api("/api/projects", "POST", {"name": "Untitled"})["id"]
+    plain = api("/api/sources/series", "POST", {"key": "plugin:example", "ref": f"{SITE_URL}/series/twice-told"})
+    job, p, files = got(tid, "plugin:example", plain, plain["chapters"])
+    check(len(p["chapters"]) == 5 and files == 15 and "twice" not in (job.get("note") or ""),
+          f"through a plugin without the setting, every chapter is kept: {len(p['chapters'])} chapters")
+
     print("7. a plugin list: all its plugins installed, adult ones off, kept up to date")
     good = plugin_text().replace('NAME = "Example Comics"', 'NAME = "Listed Comics"').replace('VERSION = "1.0.0"', 'VERSION = "2.0.0"')
     adult = plugin_text().replace('NAME = "Example Comics"', 'NAME = "Adult Comics"').replace("NSFW = False", "NSFW = True")

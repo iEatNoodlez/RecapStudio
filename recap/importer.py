@@ -15,8 +15,10 @@ import os
 import re
 import tempfile
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 from . import store
@@ -215,6 +217,113 @@ def duplicates(project: dict, chapter_ids) -> list[dict]:
                 out.append({"chapter": names[cid], "same_as": c["name"]})
                 break
     return out
+
+
+# ---- chapters a site lists twice (a source plugin with CHECK_COPIES = True) ---------------------------------------
+
+COPY_BITS = 16    # two pages whose fingerprints are at most this far apart (of 256 bits) are the same page
+COPY_SHARE = 0.7  # a chapter with at least this share of its pages in other chapters is a copy
+_POP = np.array([bin(i).count("1") for i in range(256)], np.uint8)  # the bits set in each byte
+
+
+def _fingerprints(path) -> list | None:
+    """A page's fingerprints, 32 bytes each: the whole page, its top square and its bottom square (a copy with a
+    strip added below or above still matches one), each None when it's one flat colour. None if unreadable."""
+    try:
+        with Image.open(path) as im:
+            im.draft("L", (im.width // 4, im.height // 4))
+            im = im.convert("L")
+            w, h = im.size
+            s = min(w, h)
+            out = []
+            for k, box in enumerate(((0, 0, w, h), (0, 0, w, s), (0, h - s, w, h))):
+                if k and h > 2 * w:  # (a webtoon's strip: its ends are the group's banners, not the story)
+                    out.append(None)
+                    continue
+                part = im.crop(box)
+                a = np.asarray(part.resize((17, 16), Image.BILINEAR), np.int16)
+                flat = np.asarray(part.resize((32, 32), Image.BILINEAR), np.float32).std() < 6
+                out.append(None if flat else np.packbits((a[:, 1:] > a[:, :-1]).ravel()))
+            return out
+    except Exception:
+        return None
+
+
+def copies(project: dict, chapter_ids, report=None) -> list[dict]:
+    """Chapters among chapter_ids whose pages are nearly all in other chapters numbered near them (at most 1 apart):
+    a site listing a chapter twice (uploaded again, another group's scan, the whole chapter beside its halves, a half
+    under the next number). Pictures are compared, not names, so a side story (a .2 or .5 with pages of its own) is
+    never one. Pages in 3 or more other chapters (a group's credits) and blank ones don't count. The smallest go
+    first, and of two the same size the later one, so the whole chapter and the first copy stay; the project's other
+    chapters are only compared with. report(i, total) as pages are read. [{"id", "chapter", "same_as": [names]}]"""
+    wanted_ids = set(chapter_ids)
+    num = {c["id"]: _number(c["name"]) for c in project["chapters"]}
+    names = {c["id"]: c["name"] for c in project["chapters"]}
+    wanted_n = [num[c] for c in wanted_ids if c in num]
+
+    def near(a, b):
+        return a is None or b is None or abs(a - b) <= 1
+    chapters = [c["id"] for c in project["chapters"]
+                if c["id"] in wanted_ids or any(near(num[c["id"]], x) for x in wanted_n)]
+    order = {cid: i for i, cid in enumerate(chapters)}
+    pages = [x for x in project["pages"] if x["chapter"] in order]
+    done = [0]
+
+    def read(x):
+        f = _fingerprints(store.page_path(project, x))
+        done[0] += 1
+        if report:
+            report(done[0], len(pages))
+        return f
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="copies") as pool:
+        prints = list(pool.map(read, pages))
+    rows = [(x["chapter"], f) for x, f in zip(pages, prints) if f is not None]
+    if not rows:
+        return []
+    n = len(rows)
+    chap = np.array([order[c] for c, _ in rows])
+    F = np.zeros((3, n, 32), np.uint8)
+    ok = np.zeros((3, n), bool)
+    for i, (_, f) in enumerate(rows):
+        for k in range(3):
+            if f[k] is not None:
+                F[k, i], ok[k, i] = f[k], True
+    blank = ~ok[0]
+    same = [set() for _ in range(n)]  # each page: the other chapters (near its own) with the same page
+    for i0 in range(0, n, 64):
+        close = np.zeros((min(64, n - i0), n), bool)
+        for k in range(3):
+            d = _POP[F[k, i0:i0 + 64, None, :] ^ F[k, None, :, :]].sum(2, dtype=np.int32)
+            close |= (d <= COPY_BITS) & ok[k, i0:i0 + 64, None] & ok[k, None, :]
+        for r, row in enumerate(close):
+            me = num[chapters[chap[i0 + r]]]
+            same[i0 + r] = {k for k in set(chap[row].tolist()) - {chap[i0 + r]} if near(num[chapters[k]], me)}
+    by_chapter: dict[int, list[int]] = {}
+    for i in range(n):
+        by_chapter.setdefault(int(chap[i]), []).append(i)
+    wanted = [order[c] for c in chapters if c in wanted_ids and order[c] in by_chapter]
+    dropped, found_copies = set(), []
+    for c in sorted(wanted, key=lambda c: (len(by_chapter[c]), -c)):
+        mine = [i for i in by_chapter[c] if not blank[i]]
+        counted = [i for i in mine if len(same[i]) < 3]
+        share = COPY_SHARE
+        if len(counted) < 3:
+            counted, share = mine, 1.0
+        if counted and sum(1 for i in counted if same[i] - dropped) >= share * len(counted):
+            dropped.add(c)
+            found_copies.append((c, counted, share))
+    out = []
+    for c, counted, share in found_copies:  # (again, as a chapter it was found in may have gone after it)
+        where: dict[int, int] = {}
+        for i in counted:
+            for k in same[i] - dropped:
+                where[k] = where.get(k, 0) + 1
+        found = sum(1 for i in counted if same[i] - dropped)
+        if found < share * len(counted):
+            continue  # kept after all: what it repeated went too
+        top = [k for k in where if where[k] * 4 >= found] or sorted(where, key=lambda k: -where[k])[:1]
+        out.append({"id": chapters[c], "chapter": names[chapters[c]], "same_as": [names[chapters[k]] for k in sorted(top)]})
+    return sorted(out, key=lambda x: order[x["id"]])
 
 
 def _number(name: str) -> float | None:

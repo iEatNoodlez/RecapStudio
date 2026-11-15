@@ -144,7 +144,7 @@ GLOBAL_KEYS = {
     "check_updates", "skip_version", "projects_dir",
     "plugin_repos", "gallery_dl_path", "suwayomi_url", "check_new_chapters", "theme",
 }
-# How each project's video looks: chosen when it's created (the New project dialog), changed in its Video tab.
+# How each project's video looks: chosen when it's created (New project), changed in its Video stage's panel.
 # App-wide until 0.1.1 (move_video_settings copies those choices into the projects).
 VIDEO_KEYS = (
     "orientation", "resolution", "fps", "video_style", "motion", "motion_focus", "remove_text", "min_panel_seconds",

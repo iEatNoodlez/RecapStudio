@@ -83,7 +83,7 @@ def edition() -> str:
 
 
 def label() -> str:
-    """The app's name as the window, the sidebar and Settings show it: "Recap Studio Full Suite 0.2.0"."""
+    """The app's name as the window, the rail's foot and Settings show it: "Recap Studio Full Suite 0.2.0"."""
     v = version()
     return f"Recap Studio {'Server ' if server_build() else ''}{EDITIONS[edition()]}" + (f" {v}" if v else "")
 

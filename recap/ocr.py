@@ -26,7 +26,7 @@ ENGLISH = addon.Download(store.ADDONS_DIR / "ocr_en", {
                     "ef7abd8bd3629ae57ea2c28b425c1bd258a871b93fd2fe7c433946ade9b5d9ea"),
 })
 
-# The languages a comic can be in (Project settings → Language), and PaddleOCR's PP-OCRv5 models for the three
+# The languages a comic can be in (the Chapters stage's panel → Its text), and PaddleOCR's PP-OCRv5 models for the three
 # that aren't English (Apache 2.0, from PaddlePaddle's own repositories): downloaded into data\addons\ocr_cjk the
 # first time a project in one of them is read (about 35 MB), never shipped. Each reader's character list is in
 # its inference.yml; a keys file is written from it when the reader is first loaded.

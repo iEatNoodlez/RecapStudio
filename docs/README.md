@@ -6,7 +6,7 @@ The full guide, one page per topic. For a quick start, see the [main README](../
 |---|---|
 | [Linux](linux.md) | The AppImages, where files go, fonts, video encoding, Ubuntu 24.04's sandbox, Claude Code's MCP server and running from source on Linux. As a server: [RecapStudio-Cloud](https://github.com/iEatNoodlez/RecapStudio-Cloud) |
 | [Install, files and updates](install.md) | Lite and Full Suite, the installer and the portable zip, first-run setup, where your files go, updates, running from source and building the installer |
-| [Using Recap Studio](using.md) | Projects, adding chapters, the main button, one step at a time, scenes, settings, pause and resume, time estimates, project files, cutting webtoons around speech bubbles, limits |
+| [Using Recap Studio](using.md) | The library, projects, adding chapters, the main button, one step at a time, scenes, settings, pause and resume, time estimates, project files, cutting webtoons around speech bubbles, limits |
 | [Script writers and the prompt](script-writers.md) | The local model, Claude Code, Claude, OpenRouter, Gemini, DeepSeek, Groq and Mistral; the prompt; text reading; the MCP server for Claude Code |
 | [Korean, Chinese and Japanese comics](translation.md) | Reading raws, the Translate step, checking the translation, and the English in the pictures |
 | [Characters](characters.md) | Scanning for characters, suggested names, other looks, speaker detection with Magi |
@@ -18,3 +18,5 @@ The full guide, one page per topic. For a quick start, see the [main README](../
 | [Getting chapters from sites](sources.md) | Plugins members bring, plugin lists, gallery-dl and Suwayomi; finding a series by link, search or list; new chapters; writing a plugin |
 | [The scan group's pages](scan-group-pages.md) | How credits, Patreon and Discord pages are left out, and checking them |
 | [Performance and the GPU](performance.md) | GPU support, video encoders, measured speeds |
+| [Privacy](privacy.md) | What Recap Studio collects (nothing), the services you choose, the posting plugins' sign-ins, your phone and the server |
+| [Terms](terms.md) | Running it at your own risk, the comics' owners, posting to other platforms, plugins and sources |

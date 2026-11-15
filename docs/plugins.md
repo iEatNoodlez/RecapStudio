@@ -1,12 +1,12 @@
 # Plugins
 
-Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Autopilot**, **Site check**, **When a video is done**, **Post to YouTube**, **Post to TikTok**, **Branding**, **Advanced Cutting**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
+Plugins need Recap Studio 0.2.0 or later; their current versions are drawn with 0.5.0's look, so use 0.5.0 or later. They add features to Recap Studio: so far **Find the series**, the **Trending finder**, the **Overnight queue**, the **Watched folder**, **New chapters on a schedule**, **Autopilot**, **Site check**, **When a video is done**, **Post to YouTube**, **Post to TikTok**, **Branding**, **Advanced Cutting**, **Recaps in Spanish**, **Reading Spanish comics** and **EPUB comics**. They come from Recap Studio's own plugin list, [RecapStudio-Plugins](https://github.com/iEatNoodlez/RecapStudio-Plugins), made alongside the app. The list also has sources for series' details: AniList, Kitsu and MangaUpdates. Getting chapters from sites is a different kind of plugin that members bring themselves: see [Getting chapters from sites](sources.md).
 
 ## Installing
 
-**Settings → Plugins → Show the plugins** shows Recap Studio's list, with **Install** and, when the list has a newer version, **Update**. Each file is checked against the list's SHA-256 before it's installed.
+**Settings → Manage plugins → Show the plugins** shows Recap Studio's list, with **Install** and, when the list has a newer version, **Update**. Each file is checked against the list's SHA-256 before it's installed.
 
-- **When it starts working:** a plugin that adds features starts the next time Recap Studio starts. Settings → Plugins says so, with **Restart now**: the app closes and opens again (a running job stops where it is, as when the app is closed, and **Continue** picks it up; it asks first). Sources from the list, such as AniList, work at once and show up in Settings → Sources.
+- **When it starts working:** a plugin that adds features starts the next time Recap Studio starts. Settings → Manage plugins says so, with **Restart now**: the app closes and opens again (a running job stops where it is, as when the app is closed, and **Continue** picks it up; it asks first). Sources from the list, such as AniList, work at once and show up in Settings → Sources.
 - **Switching off or removing:** each plugin can be switched off. Plugins installed from the list can also be removed. Both take effect from the next start.
 - **Where they go:** plugins that add features go in `data\plugins\<id>\`, and the files they keep in `data\plugin-data\<id>\`.
 - **Why only this list:** a plugin that adds features runs inside the app, with all its access. So only Recap Studio's own list can install one, and another list's are never shown. Lists members share install sources only.
@@ -17,18 +17,18 @@ Plugins need Recap Studio 0.2.0 or later. They add features to Recap Studio: so 
 Search for a series instead of typing its name. It names the project, sets its kind and fills in its characters. It searches every source that can search: AniList, Kitsu and MangaUpdates from the list, and any source plugins of your own.
 
 **A new project**
-1. With the plugin on, the box at the top left says **Search term** and its button **Search** (in place of New project name and Create). Type the series' name and press **Search**: the New project dialog opens and searches for it straight away. Type something else there and press **Search** to try again.
+1. **＋ New project** (in the rail, or the card in the library) opens New project. With the plugin on, its first section, **The series**, starts with a search box and **Search**: type the series' name and press **Search** (or Enter). Type something else and press **Search** to try again.
 2. Results are grouped by source, with sources that list characters first. Each source's results show as soon as it answers, so you can pick one while slower sites are still being asked (Find the series 1.2.0; on Recap Studio 0.2.6 and later the search is also quicker).
 3. Picking a series names the project after it and picks what kind of comic it is: manga for a series from Japan; webtoon for one from Korea, China or Taiwan; comic for any other. Check it: a Korean series printed as pages exists too. **Pick another** goes back to the results.
-4. The dialog's **Characters** page lists the series' characters, with their pictures and roles (main, supporting, background). The main characters are ticked, and supporting ones up to 15 in all. **Main and supporting**, **All** and **None** change the ticks.
+4. New project's **Characters** section (**Characters from AniList**, say) lists the series' characters, with their pictures and roles (main, supporting, background). The main characters are ticked, and supporting ones up to 15 in all. **Main and supporting**, **All** and **None** change the ticks.
 5. The ticked characters are added when the project is created, each with:
    - its name
    - its other names (as aliases)
    - its gender
    - a short description
    - its picture
-   - a mark saying where it came from ("From AniList" in the Characters tab)
-6. **The character scan still runs**, if it's ticked on the same page. Characters marked as preloaded don't stop Make the recap's scan, as names typed in by hand do. The review then matches what the scan found to them:
+   - a mark saying where it came from ("From AniList" at the Characters stage)
+6. **The character scan still runs**, if **Find the characters** is ticked in that section. Characters marked as preloaded don't stop Make the recap's scan, as names typed in by hand do. The review then matches what the scan found to them:
    - **By picture:** a group that looks like a preloaded character's picture says "Looks like …: add to them".
    - **By name:** Suggest names gets the preloaded cast as the character list, so the writer can say a group is one of them ("The writer says …: add to them").
 
@@ -38,12 +38,12 @@ Search for a series instead of typing its name. It names the project, sets its k
 
 **From the Trending finder:** its **Make a project** opens New project with the series already picked, from the same site, when that site is one of your sources (AniList or MangaUpdates). Without it, the series is searched for by its name.
 
-**A project that already exists:** the Characters tab → **Find the series…** searches for the project's name.
+**A project that already exists:** at the **Characters** stage, **Find the series…** (beside Find characters…) searches for the project's name.
 - Characters already in the list (by name) are marked and left as they are.
 - **Add N characters** adds the ticked ones.
 
 **Good to know**
-- **The descriptions are the site's, and the narrator goes by them.** Look them over in the Characters tab. AniList's marked spoilers are left out, but unmarked ones can slip through.
+- **The descriptions are the site's, and the narrator goes by them.** Look them over at the Characters stage. AniList's marked spoilers are left out, but unmarked ones can slip through.
 - **The pictures do two jobs.** They let the [character scan](characters.md) match the groups it finds to these characters, and they're what [Magi's speaker detection](characters.md#speaker-detection-with-magi-optional-add-on) compares against.
 - **How well a site's picture matches:** tried once so far, on the Black Jack sample's scan.
   - AniList's one picture of Saito came out as the same character as his group from the chapters (122 appearances), at a difference of 0.172. Under 0.21 counts as the same character, and under 0.26 is suggested.
@@ -53,7 +53,7 @@ Search for a series instead of typing its name. It names the project, sets its k
 
 ## Trending finder
 
-The series trending now, to pick the next one to recap. **Trending…** in the sidebar opens them, from two public APIs (no account or key):
+The series trending now, to pick the next one to recap. **Trending…** in the rail's **Automation** section opens them, from two public APIs (no account or key):
 
 - **AniList:** what its members are reading and adding to their lists most these days (**Trending now**), the ones among them that started in the past year (**New and trending**), and the **Most popular** and **Best rated** of all.
 - **MangaUpdates:** the series whose pages its readers looked at most this week, this month, these three months or this year. They mostly read scanlations, so it leans to manhwa and to what's being translated now.
@@ -64,11 +64,11 @@ The series trending now, to pick the next one to recap. **Trending…** in the s
 
 **Series you already have:** a series a project is named after (by any of its titles, without case or punctuation) is marked **Your project**.
 
-**Make a project** opens New project, named after the series and set to its kind. With Find the series installed, the series is already picked there, from the same site, so its characters are on the Characters page. Needs Recap Studio 0.2.2 or later; on an older one, the button copies the title to paste into the box at the top left.
+**Make a project** opens New project, named after the series and set to its kind. With Find the series installed, the series is already picked there, from the same site, so its characters are in New project's **Characters** section. Needs Recap Studio 0.2.2 or later.
 
-**Its chapters:** once the project is made, **Get chapters from a site** opens and searches all your own sources for the series: its title, then its other titles, until a search finds something. These are the chapter sources you added in Settings → Sources (a plugin of yours, or a Suwayomi server): AniList and MangaUpdates have no chapters, and the plugin list has no scrapers. What happens next, set in **Settings → Trending finder**:
-- **Look for them, and show what's found** (the default): a series called exactly that, in one of your sources only, opens straight to its chapters, all ticked, for **Get chapters**. Otherwise the results are shown, grouped by source, to pick from.
-- **Get them all straight away:** when one of your sources has a series called exactly that, every chapter is got without asking, and a message says from where. Otherwise the results are shown, as above.
+**Its chapters:** once the project is made, **Get chapters from a site** opens and searches all your own sources for the series: its title, then its other titles, until a search finds something. These are the chapter sources you added in Settings → Sources (a plugin of yours, or a Suwayomi server): AniList and MangaUpdates have no chapters, and the plugin list has no scrapers. What happens next, set in **Settings → Trending finder → After Make a project → Its chapters**:
+- **Look for them in my sources, and show what's found** (the default): a series called exactly that, in one of your sources only, opens straight to its chapters, all ticked, for **Get chapters**. Otherwise the results are shown, grouped by source, to pick from.
+- **Get them all straight away, when one of my sources has a series called that:** when one of your sources has a series called exactly that, every chapter is got without asking, and a message says from where. Otherwise the results are shown, as above.
 - **Don't look for them.**
 
 With no source that can search, nothing opens, and the series' panel says so. Needs Recap Studio 0.2.3 or later.
@@ -79,7 +79,7 @@ With no source that can search, nothing opens, and the series' panel says so. Ne
 
 ## Overnight queue
 
-Make the recap for several projects, one after another, while you're away. **Overnight queue…** is in the sidebar, under Open project file.
+Make the recap for several projects, one after another, while you're away. **Overnight queue** is in the rail's **Automation** section, and its panel is under the projects in the library.
 
 1. **Pick the projects:** tick them (projects with chapters are listed) and put them in order with ↑ and ↓. Each gets Make the recap: whatever isn't done yet, as its own button does.
 2. **When it starts:** now, or **Start at** a time. It waits until then, and the app has to stay open.
@@ -88,7 +88,7 @@ Make the recap for several projects, one after another, while you're away. **Ove
    - **Leave it for the morning** (the default): its job is cancelled where it waited, and the next project starts. Nothing it did is lost; answer it, then **Continue the recap**.
    - **Wait for me:** the queue waits until you answer.
 
-While it runs, the sidebar button shows how far it is ("Queue: 2 of 5"). The dialog shows each project's state: waiting, running (with its step), done, left for you (with what it asked), or failed (with why). **Stop the queue** starts no other project and lets the running one finish its job.
+While it runs, the rail button's chip shows how far it is ("2 of 5"; "3 waiting" before it starts, "done ✓" after). The dialog shows each project's state: waiting, running (with its step), done, left for you (with what it asked), or failed (with why). **Stop the queue** starts no other project and lets the running one finish its job.
 
 The queue is kept in `data\plugin-data\overnight-queue\queue.json`. If the app closes, the queue carries on when it opens again, and the project that was running starts again where it stopped.
 
@@ -109,7 +109,7 @@ Drop chapters into a folder, and they're added to their project and, if you like
 Projects made from a site (Get chapters from a site) are checked for new chapters on the days and at the time you choose. It gets nothing by itself: it checks, and gets chapters, through the source the project's chapters came from (your own plugin, gallery-dl or Suwayomi), as **Check for new chapters** and **Get chapters** do.
 
 1. **When:** Settings → New chapters on a schedule: the days (all by default, or the day a series comes out) and the time. Recap Studio has to be open then; if it isn't, it checks when it next opens. **Check now** checks straight away.
-2. **What each project does with its new chapters,** in that same section or in its Project settings:
+2. **What each project does with its new chapters,** in that same section or in the project's panel beside the stages (its Plugins section):
    - **Don't check.**
    - **Check, and tell me:** the count shows, as with the check when the app starts.
    - **Get them** (the default): a "Getting chapters" job, placed by their numbers.
@@ -121,7 +121,7 @@ A new project starts from the last project's choice, as it does for the kind of 
 
 ## Autopilot
 
-Sit back. On the days and at the time you choose, Autopilot reads a chart of your own sources (Popular, Trending, Hot: whatever lists they offer), takes the series still coming out, gets their newest chapters into projects and makes the recaps, one series after another. With Post to YouTube connected, the videos it makes go up by themselves. **Autopilot…** is in the rail's Automation section (its chip: the next flight's day and time, or where a flight is); the home page's Autopilot panel and Settings → Autopilot say the same (the next flight, the last one) with Dry run, Fly now and the way into the cockpit. It gets nothing by itself: the charts, the series and the chapters come through the sources you added (Settings → Sources), as Get chapters does.
+Sit back. On the days and at the time you choose, Autopilot reads a chart of your own sources (Popular, Trending, Hot: whatever lists they offer), takes the series still coming out, gets their newest chapters into projects and makes the recaps, one series after another. With Post to YouTube connected, the videos it makes go up by themselves. **Autopilot** is in the rail's Automation section (its chip: the next flight's day and time, or where a flight is); the home page's Autopilot panel and Settings → Autopilot say the same (the next flight, the last one) with Dry run, Fly now and the way into the cockpit. It gets nothing by itself: the charts, the series and the chapters come through the sources you added (Settings → Sources), as Get chapters does.
 
 1. **Settings** (the cockpit's Settings view):
    - **On**, and **when**: the days and the time. Recap Studio has to be open then (a server is always open); a time missed while it was closed is made up for when it next opens. Off, it still runs when you say **Run now**.
@@ -157,10 +157,10 @@ Needs Recap Studio 0.2.4 or later. Some sites answer programs with **Cloudflare'
 What happens each time a project's video is made (by Make the recap or Render video), set in **Settings → When a video is done**:
 - **Copy it to a folder:** each part of the video, in a folder named after the project if you like, with its subtitles, its thumbnail and its Shorts when ticked. A file is copied under a passing name and renamed when it's complete, so a program watching that folder never takes a half-copied file.
 - **Run a command:** run in the project's output folder, with these filled in, each in quotes: `{video}` (the first part), `{videos}` (every part), `{srt}`, `{thumbnail}`, `{folder}`, `{project}`, `{title}` (the suggested YouTube title) and `{copy}` (the copied video). They're also in the variables `RECAP_VIDEO`, `RECAP_PROJECT` and so on. Nothing in a value can break out of its quotes (from 1.1.0): on Linux they're the shell's single quotes, so a title with `$(…)` in it runs nothing, and on Windows a `"` in one is left out. The last line it prints is shown in Settings. It can only be set in the app's own window, never by a web page. On a server, its own page sets it, behind its login (from 1.1.1).
-- **Tell your phone:** through [ntfy](https://ntfy.sh), a free app for Android and iPhone: install it, subscribe to the topic Settings makes up, and this PC posts to it. Anyone who knows a topic's name can read it, so keep the made-up one (or run your own ntfy server and give its address). And/or a webhook: Discord's and Slack's get a message; any other gets the details as JSON (the project's and files' names, never this PC's paths). **Send a test** checks it.
-- **Also tell me** when a recap stops to ask you something (names to check, the scan group's pages, a problem with your script writer or voice), once each time, and when a recap fails.
+- **Tell your phone:** through [ntfy](https://ntfy.sh), a free app for Android and iPhone: install it, press **Make one up** in Settings for a topic nobody could guess, subscribe to it in ntfy, and this PC posts to it. Anyone who knows a topic's name can read it, so keep the made-up one (or run your own ntfy server and give its address). And/or a webhook: Discord's and Slack's get a message; any other gets the details as JSON (the project's and files' names, never this PC's paths). **Send a test** checks it.
+- **What it tells:** **When a video is done**, **When a recap stops to ask you something** (names to check, the scan group's pages, a problem with your script writer or voice; once each time) and **When a recap fails**. All three are ticked at first.
 
-The copying and the command run on their own, one video after another, so the next job doesn't wait for them. A project can be left out in its settings panel (Plugins, shown on every stage). **Copy, run and tell now** with the finished video's buttons (the Video tab) does it for that video straight away.
+The copying and the command run on their own, one video after another, so the next job doesn't wait for them. A project can be left out in its settings panel (Plugins, shown on every stage). **Copy, run and tell now** with the finished video's buttons (the Video stage) does it for that video straight away.
 
 ## Branding
 
@@ -181,10 +181,10 @@ Cuts a finished video into pieces, each starting where a chapter starts, with it
   - **By chapters:** so many chapters in each piece.
   - **By length:** each piece up to so many hours.
 - **A chapter too big for a piece** (by size or by length) is cut inside it, and the next piece says "continued" (`Solo Leveling - Part 4 (Ch.012 continued to Ch.015).mp4`).
-- **When:** the Video tab → **Cut the video…** (choose how, then **Cut**), or each time a project's video is made, when its settings panel says so ("Cut its video into pieces when it's made"). Both use the choices in Settings → Advanced Cutting; the dialog changes them there.
+- **When:** the Video stage → **Cut the video…** (choose how, then **Cut**), or each time a project's video is made, when its settings panel says so ("Cut its video into pieces when it's made"). Both use the choices in Settings → Advanced Cutting; the dialog changes them there.
 - **Where the pieces go:** the project's output folder, in `Pieces`, or a folder of yours, in a folder named after the project if you like (a NAS, say: each piece is copied under a passing name and renamed once it's complete). A folder of yours has to be there already: one on a drive or share that isn't connected is refused, rather than made again on the computer's own disk. They're named as the app names its parts: `Solo Leveling - Part 2 (Ch.040 to Ch.074).mp4`, with `.srt` and ` - YouTube chapters.txt` beside it. A cut made again replaces the pieces the one before made in that folder. A cut that's stopped keeps what it had made.
 - **On a server** ([Recap Studio Server](https://github.com/iEatNoodlez/RecapStudio-Cloud)): the folder is one on the server (a mounted share, say), which the user the server runs as (`recap-studio`, with its install script) must be allowed to write in. Cut the video… lists the last cut's pieces with links to save each one, its subtitles and its chapter list on the device you're on.
-- **With the app's own parts** (Settings → Video → Split into parts), each part is cut, and the pieces are numbered on across them.
+- **With the app's own parts** (the Video stage's panel → **Video settings** → **More settings** → **Split into parts**), each part is cut, and the pieces are numbered on across them.
 - **Each piece is checked** once it's cut: its size, its length, and that it plays at both ends. One that came out over its size is cut again with less in it.
 - **How it finds the cuts:** the app draws each chapter on its own, so each starts on a keyframe (a frame a video can start on): the plugin finds it from the chapter's mark in the YouTube chapter list, and adds up each frame's and each bit of sound's size to know how big a piece will be.
 - **How it cuts:** the picture is cut at those keyframes, then each piece gets its sound from the same moment to the same length, read on its own. Cut together, the end of a piece's sound would go to the next piece: a keyframe is stored a moment ahead of the time it's shown, and the sound stored after it would go with it. Tried with ffmpeg 4.2 (older than any Linux the server supports, which uses its Linux's own ffmpeg when it has one) and 5.1.
@@ -205,7 +205,7 @@ Posts a project's video to your YouTube channel, and its Shorts if you like: whe
 - **About 6 uploads a day.** A Google project gets a daily quota, and an upload uses most of it. When it runs out, posting stops with a note and the rest go up after it resets, the next day. A project's Shorts can take a few days.
 
 **Choosing, per project**
-- **In New project:** a last step, **Posting to YouTube**: don't post it, or post it as soon as Make the recap (or Render video) finishes it; who sees it; and its Shorts.
+- **In New project:** a section at its end, **Posting to YouTube**: **Don't post it**, or **Post it to YouTube** as soon as Make the recap (or Render video) finishes it; who sees it; and its Shorts.
 - **Later:** Publish → Where it goes → **Post to YouTube…** shows what the project posts and where each stands: not posted yet, posted (with its link), made again since it was posted, or the day a Short goes up. Beside that, the title (the suggested one by default) and the description; who sees it, a time to make it public (Private only), the Shorts, the subtitles and playlist, and whether it posts by itself. **Post now** posts what isn't posted yet. **Also post again what was made again** re-posts a video rendered since.
 
 **What's posted**
@@ -248,7 +248,7 @@ Posts a project's video to your TikTok account: when the video is made, or when 
 - **Post to TikTok…** (Publish → Where it goes) asks TikTok what your account can post now, then shows: the account it posts to; what it posts (the whole video or its parts, its Shorts, Advanced Cutting's pieces) and where each one stands (not posted yet, posted and who sees it, sent and still processing, made again since it was posted); the first video, to look at; the caption (the title: Post to YouTube's for the project, else the suggested YouTube title; a description; the series' hashtag); who sees it, with comments, duets and stitches; and whether it posts by itself. **Post now** posts what isn't posted yet. **Also post what was made again** re-posts a video rendered since.
 
 **What it posts.** You pick one of these, in Settings (for every project) or in Post to TikTok… (for one):
-- **The whole video**, or **its parts** when the app splits it (Settings → Video → Split into parts).
+- **The whole video**, or **its parts** when the app splits it (the Video stage's panel → **Video settings** → **More settings** → **Split into parts**).
 - **Its Shorts**, the ones the app cuts into the output folder's `shorts` folder.
 - **Advanced Cutting's pieces**, from its last cut of the video (in the folder its Settings name).
 
@@ -280,14 +280,14 @@ A project's recap narrated in Spanish, Latin American or from Spain, whatever la
 
 A comic in Spanish (a raw) is read in Spanish, then your script writer translates it into English before the narration is written, as Korean, Chinese and Japanese ones are (the Translate step). The English can be lettered into the pictures too.
 
-- **Choosing it:** the comic's language, **Spanish**, in New project or Project settings.
+- **Choosing it:** New project's **Its text is in** → **Spanish**, or later the Chapters stage's panel → **Its text**.
 - **Its text reader:** PaddleOCR's PP-OCRv5 (Apache 2.0): the text finder the Korean, Chinese and Japanese reader uses, and the recognizer for Latin-alphabet languages, which reads accents, ñ and ¿. Its alphabet has no ¡: on lettering in capitals it reads one as a small "i", which is turned back into ¡ ("iSI NO QUIERES" becomes "¡SI NO QUIERES"); elsewhere it's left out ("¡Ay, no!" is read as "Ay, no!"), and the translator, who sees the picture too, isn't misled by it. It's downloaded the first time a Spanish project's text is read (about 13 MB, into `data\addons\reading-spanish`, pinned and checked against its checksums), or from Settings → Reading Spanish comics, which can remove it too.
 - **Tried on a real Spanish webtoon:** three chapters of a Spanish scanlation (698 pieces, 910 bubbles, read in under a minute on the CPU). Dialogue reads well, accents and ñ included. Two mistakes it made every time are put right: RapidOCR's check for upside-down words is off, since it turned "NO" into "ON" (both letters look the same upside down) and "ESTAMOS" into "SOROSS"; and in capitals, a small letter read in place of a capital ("AH, sí.") is made a capital. Sound effects drawn into the art come out as scraps ("J 7 1"). The scan group's pages are left out by their Spanish words too (traducción, "estamos reclutando", "lee antes en"). Then the rest of the recap, with Claude Code (Opus) writing: Translate (about 12 minutes a chapter) read the misread lines right from the pictures and marked the scraps and the scan site's watermarks as sound effects or not text; the English lettered in fitted the bubbles in their colours, with the signs and the series' title logo in caption boxes; then the script (173 scenes), the voice and a 26-minute video. Speech on dark, textured bubbles stays in Spanish: the lettering paints out plain backgrounds only.
 - **Together with Recaps in Spanish**, a Spanish comic can be recapped in Spanish: it's still read, translated into English for the script writer to understand, and narrated in Spanish.
 
 ## EPUB comics
 
-Chapters imported from a comic's `.epub` as from a `.cbz`: with Import folder, by dropping the file on a project, and by the Watched folder.
+Chapters imported from a comic's `.epub` as from a `.cbz`: with **Import a folder…**, by dropping the file on a project, and by the Watched folder.
 
 - **A volume is split into its chapters** when its table of contents names two or more. Each becomes a chapter of the project, named as the contents name it ("Chapter 3"), in the book's order; an entry for the volume above its chapters gives way to them.
 - **Pages that aren't the story:** the cover, title and colour pages before the first chapter go with it. The contents, copyright, newsletter and advertisement pages, and a preview of another volume, are left out, and so is a picture the book shows three times or more (the divider pages between episodes, say).
@@ -345,7 +345,7 @@ This part is for people adding to Recap Studio's plugin list. A plugin that adds
 | `plugin.make_recap(project_id)` | Starts Make the recap for a project (what isn't done yet) and gives its job. |
 | `plugin.run(project_id, name)` | Starts one of its own steps for a project, as a job of its own, and gives the job. |
 | `plugin.job(project_id)` | The project's latest job (`id`, `status`, `step`, `message`, `progress`, `pause_reason`), or `None`. |
-| `plugin.project_setting(name, default)` | A setting each project keeps, `<id>.<name>`: offered to New project (its page script sets it in `state.settings`), saved by Project settings, carried in project files. |
+| `plugin.project_setting(name, default)` | A setting each project keeps, `<id>.<name>`: offered to New project (its page script sets it in `state.settings`), shown in the project's panel (`addProjectSetting`), carried in project files. |
 | `plugin.settings_filter(function)` | `function(settings)` gives what it changes in a project's settings (`{key: value}`, or `None`), app-wide ones too, such as the voice. Applied each time a project is loaded, and never saved into it. |
 | `plugin.script_instructions(function)` | `function(settings)` gives more instructions for the narration's writer (`""` for none), added before the answer's format. |
 | `plugin.title_instructions(function)` | The same for the YouTube title and thumbnail's writer. |
@@ -367,15 +367,15 @@ Anything else a plugin needs, it imports from the app (`from recap import store,
 | `searchSources(keys, query, got, {signal})` | One search in several sources (their `key`s from `/api/sources`), `got` called with each one's answer as soon as it comes: `{key, items, more}`, or `{key, error}` (a site that wants its check is offered to Site check, as `api` does). It's one request for them all; it's done when every source has answered, and an `AbortController`'s `signal` stops it. Recap Studio 0.2.6 or later. |
 | `current()`, `reload()` | The open project, and opening it again after the plugin changed it. |
 | `on(event, function)` | `new-project-open` (`{name, series}`: `series` is the one `newProject` was given, or `null`), `new-project-page` (`{page, body, state}`: add to `body`; `state.name`, `state.kind`, `state.setName()`, `state.setKind()`, `state.redraw()`), `project-created` (`{project}`, awaited before the project opens), `project-opened` (`{project}`), `site-check` (`{host, url, source, refused, message}`: a site answered a source with its check for a person instead of its page, from a call the page made or a Getting chapters job; Recap Studio 0.2.4 or later). |
-| `addButton(where, label, onclick, {title, status})` | A button in the Characters tab (`"characters"`), beside Get chapters from a site (`"chapters"`), with the finished video's buttons in the Video tab (`"video"`), with the posting services at Publish (`"publish"`: Post to YouTube and Post to TikTok go there; Recap Studio 0.4.3 or later, so check `RecapStudio.places.includes("publish")` first and fall back to `"video"`), or in the rail's Automation section (`"sidebar"`, for what's about every project). A rail button has a status chip at its right: `status` to start with, and the button's `setStatus(text, tone)` later (`tone`: `""`, `"ok"`, `"warn"` or `"on"`; Recap Studio 0.4.3 or later, so check `button.setStatus` first). |
+| `addButton(where, label, onclick, {title, status})` | A button at the Characters stage (`"characters"`), beside Get chapters from a site (`"chapters"`), with the finished video's buttons at the Video stage (`"video"`), with the posting services at Publish (`"publish"`: Post to YouTube and Post to TikTok go there; Recap Studio 0.5.0 or later, so check `RecapStudio.places.includes("publish")` first and fall back to `"video"`), or in the rail's Automation section (`"sidebar"`, for what's about every project). A rail button has a status chip at its right: `status` to start with, and the button's `setStatus(text, tone)` later (`tone`: `""`, `"ok"`, `"warn"` or `"on"`; Recap Studio 0.5.0 or later, so check `button.setStatus` first). |
 | `addNewProjectPage({id, title, render})` | A section of its own at the end of the New project page (the dialog shows every section at once, with what you get and Create the project beside them). `render({body, state})` draws it; the plugin keeps the choices and applies them on `project-created`. |
 | `pickFolder(start)` | A folder from the window's folder picker (typed, in a browser). |
-| `newProject({name, kind, series})` | New project, as the sidebar's box opens it: named, set to a kind of comic (`"manga"`, `"webtoon"`, `"comic"`), and for a series a site lists (`{url, title, cover, summary, kind, year}`; Find the series picks it when one of your sources is for that site). Recap Studio 0.2.2 or later. |
+| `newProject({name, kind, series})` | New project, as the rail's **＋ New project** opens it: named, set to a kind of comic (`"manga"`, `"webtoon"`, `"comic"`), and for a series a site lists (`{url, title, cover, summary, kind, year}`; Find the series picks it when one of your sources is for that site). Recap Studio 0.2.2 or later. |
 | `getChapters({titles, auto})` | Get chapters from a site, for the open project, searching all the member's sources that can for a series: by its first titles in turn (up to three) until a search finds something. A series called exactly the title searched (else another of `titles`), in one source only, opens to choose its chapters; with `auto`, they're all got without asking. Recap Studio 0.2.3 or later. |
 | `setNewProjectBox({placeholder, button, title, label})` | Kept for older plugins: the rail has one New project button now, and `title` is its tooltip; `placeholder`, `button` and `label` are taken but not shown (a plugin that searches draws its search in the New project dialog, `new-project-page`). |
 | `addSettings(title, render)` | A section of its own in Settings; `render(box)` runs each time Settings is drawn. |
-| `addLibraryPanel(title, render, {status})` | A panel of its own on the home page, in a row under the projects (for what's about every project: Autopilot's next flight, the Overnight queue's list). `render(box)` draws into it now and each time the library's projects are loaded again, and the plugin can draw into `box` whenever its own state changes. It returns `{box, setStatus}`; `setStatus(text, tone)` is the chip at the title's right. Recap Studio 0.4.3 or later (check `RecapStudio.addLibraryPanel` first). |
-| `openSettings(name)` | Settings, open at a section: one of the app's own by its name (`"Sources"`) or a plugin's (its `addSettings` title). Recap Studio 0.4.3 or later. |
+| `addLibraryPanel(title, render, {status})` | A panel of its own on the home page, in a row under the projects (for what's about every project: Autopilot's next flight, the Overnight queue's list). `render(box)` draws into it now and each time the library's projects are loaded again, and the plugin can draw into `box` whenever its own state changes. It returns `{box, setStatus}`; `setStatus(text, tone)` is the chip at the title's right. Recap Studio 0.5.0 or later (check `RecapStudio.addLibraryPanel` first). |
+| `openSettings(name)` | Settings, open at a section: one of the app's own by its name (`"Sources"`) or a plugin's (its `addSettings` title). Recap Studio 0.5.0 or later. |
 | `addProjectSetting({key, label, options, hint})` | A choice in the project's settings panel (a Plugins section, shown on every stage) for a setting registered with `plugin.project_setting`: `options` is `[[value, text]]`. Saved as soon as it changes, like the rest. |
 | `addLanguage(code, name)` | A comic language registered with `plugin.language`, offered in New project and the Chapters stage's panel. |
 
@@ -401,10 +401,10 @@ A window is a `dialog.wide-dialog` holding a `form.import-form` (`novalidate`, s
 - The app's own `plugins\` folder: Full Suite's.
 - `data\plugins\<id>\`: those installed from the list.
 - When both places have one, the newer version is used.
-- A plugin that fails to start is listed in Settings → Plugins with its error, and the app runs without it.
+- A plugin that fails to start is listed in Settings → Manage plugins with its error, and the app runs without it.
 
 **In the list:** a plugin that adds features goes in as `{"id", "kind": "feature", "name", "version", "api", "file", "sha256", "summary"}`, where `file` is a zip of the plugin's folder (its files at the zip's top). The plugin list's `tools/build.py` zips each one and writes `index.json` with the checksums.
 
-**If its setup fails partway**, everything it registered is taken back (its steps, hooks, settings and languages), and it's listed in Settings → Plugins with its error.
+**If its setup fails partway**, everything it registered is taken back (its steps, hooks, settings and languages), and it's listed in Settings → Manage plugins with its error.
 
 **Tests:** the plugin list's own (`tests/run.py` in its repository) run each plugin against a Recap Studio checkout, on scratch data. The app's tests (`tests/run.py` here) cover the hooks themselves, with a test plugin.
